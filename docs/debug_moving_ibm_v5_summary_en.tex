@@ -1,0 +1,242 @@
+% =============================================================================
+% Overleaf-ready appendix: Moving-body IBM debugging in cerisse
+% Drop this file into an appendix/ directory and \input{} from the main text.
+% Adjust section level (\section -> \chapter) to match host document.
+% =============================================================================
+
+\section{Debugging the moving-body IBM pipeline: a phased case study}
+\label{sec:appendix-ibm-moving-v5}
+
+\subsection{Problem statement}
+
+A 2D diamond-wedge airfoil is immersed in a Mach-2 Euler freestream. After a
+quiescent $720\,\mu\mathrm{s}$ settle period, a constant pitch rate
+$\omega = 2330~\mathrm{rad\,s^{-1}}$ is prescribed about the quarter-chord,
+$(x_p,y_p)=(-0.025,\,0)~\mathrm{m}$. The simulation exercises all three
+moving-body components simultaneously: the sharp-interface immersed boundary
+method (IBM), the AMReX block-structured adaptive mesh refinement (AMR), and
+the rigid-body kinematic update.
+
+The observed symptoms before any modification were:
+\begin{itemize}
+  \item Static IBM (\texttt{ib.move=0}) ran indefinitely without anomaly.
+  \item With \texttt{ib.move=1}, the simulation failed shortly after pitch
+        onset.
+  \item On \texttt{max\_level=0}, dt collapsed at step $\sim$1933
+        ($\sim$1\textdegree{} pitch).
+  \item On \texttt{max\_level=1} AMR, dt collapsed at step $\sim$2107
+        ($\sim$6--9\textdegree{} pitch).
+\end{itemize}
+
+\subsection{Debug timeline}
+
+\subsubsection{Phase 1: AMR/\texttt{post\_regrid} hypothesis --- falsified}
+
+An initial hypothesis attributed the failure to inter-level state
+contamination via \texttt{FillPatch} during \texttt{post\_regrid}. A cross-level
+fresh-cell repair pass was implemented inside
+\texttt{CNS::post\_regrid}. It triggered too early, corrupting the otherwise
+healthy settle phase, and was reverted.
+
+The decisive experiment was a \texttt{max\_level=0} isolation run. Level-0 still
+crashed at step $\sim$1933, proving that AMR was not the sole (nor the
+dominant) failure mechanism for the \emph{first} instability.
+
+\subsubsection{Phase 2 (v3): exposed-cell fix via single-donor selection}
+
+The legacy \texttt{fixExposedCells} path averaged the four (2D) or six (3D)
+immediate conservative-variable neighbours of a freshly exposed fluid cell.
+In supersonic flow across an airfoil leading edge, this blends pre-shock and
+post-shock states and routinely produces non-physical (negative-pressure)
+initial values.
+
+The fix replaces Pass~1 with a \emph{single-donor} selection using a
+directional flow score
+\begin{equation}
+  \mathcal{S}_j \;=\; -\bigl(u_j\,\delta i + v_j\,\delta j\bigr),
+  \label{eq:score}
+\end{equation}
+where $(\delta i, \delta j)$ is the donor offset from the fresh cell and
+$(u_j,v_j)$ is the donor's velocity. Positive $\mathcal{S}_j$ denotes a
+donor whose flow advects \emph{into} the fresh cell and is therefore
+causally upstream. Ties and negative-score cases fall back to the candidate
+whose pressure is closest to the candidate-set mean.
+
+\textbf{Outcome.} On \texttt{max\_level=0}, the simulation ran the full
+5000 steps, reaching a cumulative pitch of $\sim$153\textdegree{} with a
+stable time-step. Schlieren fields show a coherent detached bow shock and
+physically plausible wake shedding. On \texttt{max\_level=1}, the original
+step-2107 crash persisted, indicating a second, distinct failure mode.
+
+\subsubsection{Phase 3 (v5): donor validity and near-wall reconstruction}
+
+Three further modifications were applied:
+\begin{enumerate}
+  \item Pass~1 of \texttt{fixExposedCells} rejects any donor with
+        $p \le 0$ or non-finite components.
+  \item Passes~2 and 3 of \texttt{fixExposedCells} (ring search and
+        nearest-valid-fluid fallback) are also converted to single-donor
+        selection with the same score~\eqref{eq:score}.
+  \item \texttt{Weno.h}, in the \texttt{eflux\_ibm} path, detects when the
+        five-point stencil has been narrowed by a solid/ghost marker
+        ($\text{gl}<\text{ng}$ or $\text{gr}<\text{ng}$) and falls back to
+        a first-order piecewise-constant Lax--Friedrichs flux at those
+        faces.
+\end{enumerate}
+
+\textbf{Outcome.} The \texttt{max\_level=1} first-failure at step 2107 was
+eliminated. A secondary instability now appears at step $\sim$2397, a net
+delay of $\sim$290 advancement steps over the pre-patch baseline. The min
+density at the new first-BAD step was $\rho_{\min}\approx 1.61$ (far from
+vacuum), confirming that the low-density amplification pathway had been
+effectively suppressed.
+
+\subsubsection{Phase 4 (v6): widened band + positivity check --- regression}
+
+A further patch attempted to dilate the IB-aware low-order region and to
+add a face-level positivity fallback (reject a reconstruction if the
+reconstructed LLF$^{\pm}$ density component is below a floor). The v6 run
+\emph{regressed}: the first BAD event moved from step 2397 to step 2325
+(72 steps earlier). The minimum density at the failure returned to
+$\rho_{\min}\sim 10^{-13}$, matching the low-density amplification pattern
+seen in v3.
+
+The likely cause is that the widened low-order band introduced excessive
+near-wall dissipation that altered the wake dynamics, triggering a
+distinct failure mode earlier. We did not pursue further heuristic
+patching; v5 was frozen as the best-verified baseline.
+
+\subsection{Frozen baseline}
+
+\begin{itemize}
+  \item \textbf{Repository}: \texttt{melampous/cerisse}.
+  \item \textbf{Branch}: \texttt{baseline/ibm-v5-clean}.
+  \item \textbf{Tag}: \texttt{v5-frozen-debug} (commit
+        \texttt{dc70f8a4}) --- preserves the full debug-instrumented state.
+\end{itemize}
+
+\textbf{Scope note.} The \texttt{near\_ib} first-order fallback in
+\texttt{Weno.h} is active on \emph{all} IBM cases on this branch, not only
+moving-body cases. The branch is therefore intentionally dedicated to
+moving-FSI debugging, \emph{not} a general-purpose IBM baseline. Merging
+into \texttt{ibm\_fsi} should be gated behind either a static-IBM
+regression sweep or a runtime switch.
+
+\subsection{Current capability and limitations}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+Configuration & Status & Note \\
+\midrule
+Static IBM (\texttt{ib.move=0})              & OK          & Unchanged \\
+Moving, \texttt{max\_level=0}                & OK          & 5000 steps, $\sim$153\textdegree{} \\
+Moving, \texttt{max\_level=1} AMR            & Partial     & First-failure fixed; long-time not fully reliable \\
+Moving, \texttt{max\_level}$\ge 2$           & Untested    & --- \\
+Moving, viscous (Navier--Stokes)             & Untested    & --- \\
+\bottomrule
+\end{tabular}
+\caption{Verified capabilities of the \texttt{baseline/ibm-v5-clean} branch.}
+\end{table}
+
+\textbf{On the physical status of the current solution.}
+\begin{description}
+  \item[Level 0:] Physically acceptable and engineering-usable. Suitable for
+    visualisation, trend analysis, and method-development baselines. It is
+    \emph{not} a fully converged or publication-verified result.
+  \item[Level 1:] Substantially improved over the pre-patch baseline, but
+    long-time AMR solutions remain not fully reliable. The result
+    demonstrates that the first-failure donor-contamination mechanism has
+    been eliminated and provides direction for subsequent method work. It
+    is \emph{not} suitable as a final physical solution, quantitative
+    conclusion, or production result.
+\end{description}
+
+\subsection{Secondary root cause: localised to module, not to face}
+
+The pipeline tripwires (stages T1 through T4; see
+\texttt{src/ibm/ibm\_tripwire.h}) showed that, at the first BAD step
+$\sim$2373 on level=1, the values reported at T1 (step entry), T2 (post
+\texttt{rebuildIBM}), and T3 (post \texttt{fixExposedCells}) are
+\emph{numerically identical}. This implies that the bad state was already
+present at the start of the step and therefore born during the
+\emph{previous} step's advance, i.e.\ in the
+\texttt{compute\_rhs}/reconstruction/update path rather than in
+\texttt{rebuildIBM} or \texttt{fixExposedCells}.
+
+\textbf{Evidence bound.} The present evidence suffices to localise the
+secondary instability to the \texttt{compute\_rhs} path, but does \emph{not}
+suffice to establish a single formula, a single face, or a single
+coarse-fine exchange as the sole responsible sub-mechanism.
+
+The observed behaviour is consistent with the following qualitative
+picture:
+\begin{itemize}
+  \item At larger angles of attack the suction side of the airfoil develops
+        a strong expansion region.
+  \item High-order WENO-Z5 reconstruction in the vicinity of the IBM ghost
+        layer or at a coarse-fine interface can overshoot there.
+  \item An overshoot produces a negative-pressure or ill-conditioned
+        high-momentum cell.
+  \item Subsequent AMR synchronisation propagates the bad state across
+        levels.
+\end{itemize}
+
+\subsection{Next-phase technical directions (prioritised)}
+
+\begin{enumerate}
+  \item \textbf{Primitive-space MUSCL with limiter in the IB neighbourhood.}
+    Retain WENO-Z5 away from the wall. In the IB-adjacent band, replace
+    characteristic WENO with a primitive-space MUSCL reconstruction using a
+    TVD limiter (e.g.\ minmod or MC). This removes the ill-conditioned
+    characteristic / Roe transform in a region where the assumptions behind
+    it are weak.
+  \item \textbf{Face-local positivity-preserving fallback.}
+    Not a post-RK clip of cell averages. Check the reconstructed left/right
+    primitive states at each face; if $\rho$ or $p$ is unphysical, revert
+    that face to a plain Lax--Friedrichs or Rusanov flux.
+  \item \textbf{Systematic IBM/ghost consistency.} Primitive-variable
+    reconstruction in the ghost-adjacent stencil; explicit handling of
+    moving-wall velocity in the ghost-point image; a coarse-fine exchange
+    that is aware of the IB band.
+  \item \textbf{Backup options (not recommended as first attempt):}
+    Riemann-based ghost-fluid method after Sambasivan--Udaykumar (2009);
+    geometry-rebuild scheduling by accumulated rotation threshold rather
+    than every step; cut-cell IBM (Seo--Mittal, 2011), which would amount to
+    a full rewrite of the IBM module and is not presently justified.
+\end{enumerate}
+
+\subsection{Engineering lessons}
+
+\begin{itemize}
+  \item The single most productive experiment was the \texttt{max\_level=0}
+        isolation run, which removed AMR from the suspect list early.
+  \item Pipeline tripwires (a handful of inline min/max scans at
+        well-chosen stages) outperformed log inspection for locating the
+        origin of a corrupted state.
+  \item Heuristic patches showed rapidly diminishing returns: v3 to v5
+        bought $\sim$290 steps; v5 to v6 regressed by 72 steps. Knowing when
+        to stop was as important as the fixes themselves.
+  \item Every version, including regressions, was kept in the debug record.
+        Without this, later readers could have mistaken the regressed v6 for
+        an improvement over v5.
+  \item External peer review --- even asynchronous and not tool-integrated
+        --- corrected multiple conceptual errors (notably, conflating a
+        ghost-cell wall trace with a freshly-opened cell's volume average)
+        and was decisive in avoiding over-aggressive patching.
+\end{itemize}
+
+\subsection{Repository artefacts}
+
+\begin{itemize}
+  \item \texttt{src/ibm/ibm\_solver.h} --- \texttt{fixExposedCells} rewrite.
+  \item \texttt{src/rhs/Weno.h} --- \texttt{eflux\_ibm} near\_ib fallback.
+  \item \texttt{src/ibm/ibm\_tripwire.h} --- four-stage pipeline scanner,
+        disabled by default.
+  \item \texttt{exm/fsi/airfoil\_pitchup\_euler/} --- test case.
+  \item \texttt{docs/debug\_moving\_ibm\_v5\_summary.md} --- Chinese-language
+        debug narrative with commit/tag references and test-data paths.
+  \item \texttt{docs/BRANCH\_NOTES\_baseline-ibm-v5-clean.md} --- branch
+        README.
+\end{itemize}
