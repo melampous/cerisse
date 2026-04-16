@@ -340,14 +340,29 @@ class weno_t {
           cls->cons2char(roe_avg, fm[m]);
         }
 
+        // IB-band low-order fallback (v5 baseline).
+        //
+        // When the WENO stencil is narrowed by a solid/ghost marker in either
+        // direction (gl<ng or gr<ng), skip high-order reconstruction and fall
+        // back to first-order piecewise-constant LLF. This prevents WENO-Z5
+        // from amplifying near-wall low-density expansion regions as a
+        // rotating body changes orientation. Cost is higher numerical
+        // diffusion in a ~ng-cell band around the IB; outside this band, full
+        // WENO-Z5 is retained.
+#if AMREX_USE_GPIBM
+        const bool near_ib = (gl < ng) || (gr < ng);
+#else
+        constexpr bool near_ib = false;
+#endif
+
         // Reconstruct with upwind stencils
         Real fpL[cls_t::NCONS], fmR[cls_t::NCONS], s[2 * ng];
         for (int n = 0; n < cls_t::NCONS; ++n) {
           Scheme::left_stencil(n, fp, s);
-          fpL[n] = Scheme::recon(s, gr, gl);
+          fpL[n] = near_ib ? s[2] : Scheme::recon(s, gr, gl);
 
           Scheme::right_stencil(n, fm, s);
-          fmR[n] = Scheme::recon(s, gl, gr);
+          fmR[n] = near_ib ? s[2] : Scheme::recon(s, gl, gr);
         }
 
         // Convert back to conservative variables
@@ -355,7 +370,7 @@ class weno_t {
         cls->char2cons(roe_avg, fmR);
 
         for (int n = 0; n < cls_t::NCONS; ++n) {
-                
+
           flx(iv, n) = alpha * (fpL[n] - fmR[n]);
 
         }

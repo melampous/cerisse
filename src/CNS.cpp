@@ -4,6 +4,9 @@
 #include <CNS.h>
 #include <CNS_K.h>
 #include <prob.h>
+#ifdef AMREX_USE_GPIBM
+#include <ibm_tripwire.h>
+#endif
 
 #ifdef CNS_USE_FSI
 #include <fsi/Kinematics.h>
@@ -822,6 +825,9 @@ void CNS::post_regrid(int lbase, int new_finest) {
         state(i,j,k, PC::UET) -= ke;
       });
     }
+
+    ib_tripwire(get_new_data(State_Type), *IBM::ib.bmf_a[level],
+                "T4_post_regrid", level, parent->levelSteps(0), 2200, 2420);
   }  // end if (ib_move)
 #endif  // AMREX_USE_GPIBM
 

@@ -1,0 +1,57 @@
+#------------------------------------------------------------------------------#
+#  2D Pitch-up Diamond Wedge — M=2 freestream (Euler)
+#  Stationary 720μs, then constant ω=2330 rad/s pitch-up about quarter-chord
+#------------------------------------------------------------------------------#
+max_step  = 5000
+stop_time = 1.0
+cfl = 0.2
+
+cns.order_rk  = 3
+cns.stages_rk = 3
+cns.lo_bc = 1 2          # x-low: supersonic inflow (ext_dir);  y-low: outflow
+cns.hi_bc = 2 2          # x-hi/y-hi: outflow
+cns.nstep_screen_output = 100
+cns.verbose = 1
+
+#-------------------------------- IMMERSED BOUNDARY ---------------------------#
+ib.filename = diamond_wedge_2d.dat
+ib.move = 1
+ib.plot_surf = 1
+ib.surf_file = ./plot/surf
+ib.surf_int  = 100
+
+#---------------------- PITCH-UP (constant ω after settle) -------------------#
+motion.amp_x       = 0.0
+motion.amp_y       = 0.0
+motion.amp_theta   = 0.0
+motion.pitch_center_x = -0.025      # quarter-chord (LE at -0.05)
+motion.pitch_center_y = 0.0
+
+#-------------------------------- COMPUTATIONAL DOMAIN ------------------------#
+geometry.is_periodic = 0 0
+geometry.coord_sys   = 0
+geometry.prob_lo     = -0.3  -0.2
+geometry.prob_hi     =  0.7   0.2
+amr.n_cell           = 512   256       # dx = dy ~ 1.95 mm = c/51
+
+#---------------------- REFINEMENT (1 extra level near solid) -----------------#
+amr.max_level       = 0                # level=0 only: isolate IBM moving bug from AMR
+amr.ref_ratio       = 2 2 2
+amr.regrid_int      = 2       # body moves fast, retag frequently
+amr.blocking_factor = 16
+amr.max_grid_size   = 64 128 128 128
+amr.n_error_buf     = 2 2 2 2
+amr.grid_eff        = 0.75
+
+#-------------------------------- PLOTFILES -----------------------------------#
+amr.plot_files_output = 1
+amr.plot_file         = ./plot/plt
+amr.plot_int          = 100
+amr.derive_plot_vars  = pressure velocity temperature
+amr.v = 1
+
+amr.checkpoint_files_output = 0
+amrex.the_arena_is_managed = 0
+
+#-------------------------------- FSI -----------------------------------------#
+fsi.rho_solid = 2700.0

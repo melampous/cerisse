@@ -11,6 +11,19 @@
 //===================================================================================
 ///-------------------------------- main class --------------------------------------
 ///
+// Diagnostic record for fixExposedCells single-donor pass.
+// Defined at namespace scope so GPU lambdas can capture pointers to it.
+struct FixExposedDiagRec {
+  int         i, j, k;          // fresh cell index
+  int         di, dj, dk;       // chosen donor offset
+  int         n_donors;         // number of valid donor candidates
+  int         used_fallback;    // 0 = score>0 path, 1 = fallback (median-p or max-p)
+  int         pass_id;          // which pass wrote this record: 1, 2, or 3
+  amrex::Real rho_d, u_d, v_d, p_d, score;
+  amrex::Real p_ratio;          // p_max / p_min across candidates (pass 1 only)
+  amrex::Real rho_ratio;        // rho_max / rho_min across candidates (pass 1 only)
+};
+
 /// \brief ibm_solver_t is explicit geometry (triangulation based) immersed boundary method
 /// class. It holds an array of IBMultiFab, one for each AMR level; and it also holds
 /// the geometry
@@ -1176,11 +1189,27 @@ public:
    */
   void fixExposedCells(const FabArray<BaseFab<uint8_t>>& old_markers,
                        MultiFab& state_mf,
-                       int lev)
+                       int lev,
+                       int step = -1)
   {
     BL_PROFILE("IBM::fixExposedCells");
     auto& mfab = *bmf_a[lev];
     const int ncons = cls_t::NCONS;
+
+    // Diagnostic capture: only active in step window [DIAG_LO, DIAG_HI]
+    constexpr int DIAG_LO = 2200;
+    constexpr int DIAG_HI = 2420;
+    constexpr int DIAG_MAX = 50;        // at most 50 cells captured per call
+    const bool diag_on = (step >= DIAG_LO && step <= DIAG_HI);
+
+    Gpu::ManagedVector<FixExposedDiagRec> diag_buf;
+    Gpu::ManagedVector<int>               diag_count;
+    if (diag_on) {
+      diag_buf.resize(DIAG_MAX);
+      diag_count.resize(1, 0);
+    }
+    FixExposedDiagRec* p_diag = diag_on ? diag_buf.dataPtr() : nullptr;
+    int*               p_cnt  = diag_on ? diag_count.dataPtr() : nullptr;
 
     // Pass 0: zero-initialise freshly-exposed cells so that pass 2 can
     // distinguish "fixed by pass 1" (URHO > 0) from "still needs fixing."
@@ -1203,112 +1232,348 @@ public:
 
     for (MFIter mfi(mfab, false); mfi.isValid(); ++mfi) {
       const Box& bx = mfi.tilebox();
-      auto const& old_mk = old_markers.const_array(mfi);   // old comp-0 markers
-      auto const& new_mk = mfab.const_array(mfi);          // new markers (comp 0)
+      auto const& old_mk = old_markers.const_array(mfi);
+      auto const& new_mk = mfab.const_array(mfi);
       auto const& state  = state_mf.array(mfi);
 
-      // Pass 1: fill freshly-exposed cells from valid fluid neighbours
+      // ----------------------------------------------------------------------
+      // Pass 1' (Step 1 — directional single-donor):
+      //
+      // For each freshly-exposed fluid cell, pick a single donor among the
+      // 4-conn (2D) / 6-conn (3D) neighbours instead of averaging them.
+      //
+      // Donor score ordering:
+      //   score_j = -(u_j*di + v_j*dj [+ w_j*dk])
+      // where (di,dj,dk) is the donor's offset from the fresh cell.
+      //   score > 0  ⇔  donor's velocity points toward fresh cell
+      //               (donor is causally upstream w.r.t. info transport)
+      //
+      // Selection:
+      //   1. Among donors with score > 0, take the one with maximum score.
+      //   2. If no donor has score > 0, fall back to the donor whose
+      //      pressure is closest to the candidate-set mean — avoids picking
+      //      a hard outlier on either side of a shock.
+      //
+      // Rationale: simple averaging blends pre-shock and post-shock data
+      // (Rankine–Hugoniot violation), producing non-physical state that
+      // crashes WENO. A single causally-correct donor is far safer for
+      // supersonic flow with strong shocks.
+      // ----------------------------------------------------------------------
       ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
       {
-        // Only process cells that changed from solid → fluid
-        if (old_mk(i,j,k,0) == 0) return;   // was already fluid
-        if (new_mk(i,j,k,0) != 0) return;   // still solid
+        if (old_mk(i,j,k,0) == 0) return;
+        if (new_mk(i,j,k,0) != 0) return;
 
-        // Average conservative state from immediate fluid neighbours
-        // (cells that are fluid in BOTH old and new markers → reliable data)
-        Real sum[cls_t::NCONS] = {};
-        int count = 0;
-
-        // 6-connected (2D: 4-connected) neighbourhood
-        constexpr int offsets[][3] = {
+        constexpr int OFFS[][3] = {
           {-1,0,0},{1,0,0},{0,-1,0},{0,1,0}
 #if (AMREX_SPACEDIM == 3)
           ,{0,0,-1},{0,0,1}
 #endif
         };
+        constexpr int NCAND = (AMREX_SPACEDIM == 3) ? 6 : 4;
+        constexpr Real GAMMA_M1 = Real(0.4);   // air, used only for diagnostic ratio
 
-        for (const auto& off : offsets) {
-          int ii = i + off[0], jj = j + off[1];
-          AMREX_D_TERM(;, ;, int kk = k + off[2];)
-#if (AMREX_SPACEDIM == 2)
-          int kk = 0;
+        bool valid[NCAND]    = {};
+        Real cand_score[NCAND] = {};
+        Real cand_p[NCAND]   = {};
+        Real cand_rho[NCAND] = {};
+
+        Real p_min = Real(1.0e300), p_max = Real(-1.0e300);
+        Real rho_min = Real(1.0e300), rho_max = Real(-1.0e300);
+        int  n_valid = 0;
+
+        Real best_score = Real(-1.0e300);
+        int  best_idx_score = -1;
+
+        for (int c = 0; c < NCAND; ++c) {
+          const int di = OFFS[c][0], dj = OFFS[c][1], dk = OFFS[c][2];
+          const int ii = i + di, jj = j + dj;
+#if (AMREX_SPACEDIM == 3)
+          const int kk = k + dk;
+#else
+          const int kk = 0;
 #endif
-          // Donor must be fluid in old state (has valid conservative data)
-          // and also fluid in new state (not about to be covered)
-          if (old_mk(ii,jj,kk,0) == 0 && new_mk(ii,jj,kk,0) == 0) {
-            for (int n = 0; n < ncons; ++n)
-              sum[n] += state(ii,jj,kk,n);
-            count++;
+          if (old_mk(ii,jj,kk,0) != 0) continue;
+          if (new_mk(ii,jj,kk,0) != 0) continue;
+
+          const Real rho = state(ii,jj,kk, cls_t::URHO);
+          if (rho <= Real(0)) continue;
+
+          const Real mx = state(ii,jj,kk, cls_t::UMX);
+          const Real my = state(ii,jj,kk, cls_t::UMY);
+#if (AMREX_SPACEDIM == 3)
+          const Real mz = state(ii,jj,kk, cls_t::UMZ);
+          const Real ke = Real(0.5) * (mx*mx + my*my + mz*mz) / rho;
+#else
+          const Real ke = Real(0.5) * (mx*mx + my*my) / rho;
+#endif
+          const Real et = state(ii,jj,kk, cls_t::UET);
+          const Real p  = GAMMA_M1 * (et - ke);
+          // Reject non-physical donors: p<=0, NaN
+          if (!(p > Real(0))) continue;
+          if (!(rho == rho) || !(p == p)) continue;
+
+          const Real u = mx / rho;
+          const Real v = my / rho;
+          Real score = -(u * di + v * dj);
+#if (AMREX_SPACEDIM == 3)
+          const Real w = mz / rho;
+          score += -(w * dk);
+#endif
+          valid[c]      = true;
+          cand_score[c] = score;
+          cand_p[c]     = p;
+          cand_rho[c]   = rho;
+          n_valid++;
+
+          if (p   < p_min)   p_min = p;
+          if (p   > p_max)   p_max = p;
+          if (rho < rho_min) rho_min = rho;
+          if (rho > rho_max) rho_max = rho;
+
+          if (score > best_score) {
+            best_score = score;
+            best_idx_score = c;
           }
         }
 
-        if (count > 0) {
-          Real inv = Real(1.0) / count;
-          for (int n = 0; n < ncons; ++n)
-            state(i,j,k,n) = sum[n] * inv;
+        if (n_valid == 0) return;     // leave for Pass 2 (wider ring)
+
+        int chosen = -1;
+        int used_fallback = 0;
+        if (best_score > Real(0) && best_idx_score >= 0) {
+          chosen = best_idx_score;
+        } else {
+          // Fallback: pressure closest to mean of valid candidates.
+          // Mean is a robust median proxy for n_valid <= 6.
+          Real p_sum = Real(0);
+          for (int c = 0; c < NCAND; ++c) if (valid[c]) p_sum += cand_p[c];
+          const Real p_target = p_sum / Real(n_valid);
+          Real best_diff = Real(1.0e300);
+          for (int c = 0; c < NCAND; ++c) {
+            if (!valid[c]) continue;
+            const Real diff = amrex::Math::abs(cand_p[c] - p_target);
+            if (diff < best_diff) { best_diff = diff; chosen = c; }
+          }
+          used_fallback = 1;
         }
-        // If count==0, all neighbours are also newly exposed or solid.
-        // Leave for Pass 2 (wider stencil) below.
+        if (chosen < 0) return;       // safety; shouldn't happen if n_valid>0
+
+        // Copy chosen donor's conservative state verbatim.
+        const int di = OFFS[chosen][0], dj = OFFS[chosen][1], dk = OFFS[chosen][2];
+        const int ii = i + di, jj = j + dj;
+#if (AMREX_SPACEDIM == 3)
+        const int kk = k + dk;
+#else
+        const int kk = 0;
+#endif
+        for (int n = 0; n < ncons; ++n)
+          state(i,j,k,n) = state(ii,jj,kk,n);
+
+        // -------------------- Diagnostic capture --------------------------
+        if (p_diag != nullptr) {
+          const int slot = Gpu::Atomic::Add(p_cnt, 1);
+          if (slot < DIAG_MAX) {
+            FixExposedDiagRec& r = p_diag[slot];
+            r.i = i; r.j = j; r.k = k;
+            r.di = di; r.dj = dj; r.dk = dk;
+            r.n_donors = n_valid;
+            r.used_fallback = used_fallback;
+            r.pass_id = 1;
+            r.rho_d = cand_rho[chosen];
+            r.u_d   = state(ii,jj,kk, cls_t::UMX) / cand_rho[chosen];
+            r.v_d   = state(ii,jj,kk, cls_t::UMY) / cand_rho[chosen];
+            r.p_d   = cand_p[chosen];
+            r.score = cand_score[chosen];
+            r.p_ratio   = (p_min > Real(0)) ? p_max / p_min : Real(-1);
+            r.rho_ratio = (rho_min > Real(0)) ? rho_max / rho_min : Real(-1);
+          }
+        }
       });
     }
 
-    // Pass 2: sweep again for any remaining unfixed cells (all neighbours were also exposed).
-    // Use progressively wider search rings (2, 4, 8) to handle large motion per step.
-    for (int ring = 2; ring <= 8; ring *= 2) {
+    // Print captured diagnostics on host (only when diagnostic window active)
+    if (diag_on) {
+      Gpu::streamSynchronize();
+      const int n_total = *p_cnt;
+      const int n = std::min(n_total, DIAG_MAX);
+      amrex::Print() << "[fixExposedCells DIAG step=" << step
+                     << " lev=" << lev << "] called, n_fresh_total=" << n_total << "\n";
+      if (n > 0) {
+        amrex::Print() << "  showing " << n << " of " << n_total << " (max " << DIAG_MAX << "):\n";
+        for (int s = 0; s < n; ++s) {
+          const FixExposedDiagRec& r = p_diag[s];
+          amrex::Print() << "  cell(" << r.i << "," << r.j;
+#if (AMREX_SPACEDIM == 3)
+          amrex::Print() << "," << r.k;
+#endif
+          amrex::Print() << ") n_don=" << r.n_donors
+                         << " donor_off=(" << r.di << "," << r.dj;
+#if (AMREX_SPACEDIM == 3)
+          amrex::Print() << "," << r.dk;
+#endif
+          amrex::Print() << ") pass=" << r.pass_id << " "
+                         << (r.used_fallback ? "FALLBACK" : "SCORE>0")
+                         << " score=" << r.score
+                         << " donor(rho=" << r.rho_d
+                         << ", u=" << r.u_d << ", v=" << r.v_d
+                         << ", p=" << r.p_d << ")";
+          if (r.pass_id == 1) {
+            amrex::Print() << " p_ratio=" << r.p_ratio
+                           << " rho_ratio=" << r.rho_ratio
+                           << ((r.p_ratio > Real(2.0) || r.rho_ratio > Real(2.0))
+                               ? " [VIOLENT]" : "");
+          } else {
+            amrex::Print() << " max_p=" << r.p_ratio
+                           << " ring=" << int(r.rho_ratio);
+          }
+          amrex::Print() << "\n";
+        }
+      }
+    }
+
+    // ----------------------------------------------------------------------
+    // Pass 2 (single-donor ring search, replaces legacy ring-average):
+    //
+    // For cells NOT fixed by Pass 1 (all 4/6 immediate neighbours were also
+    // newly-exposed or solid), search ring shells R=2,4,8. At each ring:
+    //   - Scan only the shell (|di|==R || |dj|==R || |dk|==R).
+    //   - A donor is valid iff: new_mk==0, URHO>1e-10, p>0, not NaN.
+    //   - Score donors by -(u*di + v*dj [+ w*dk]) (same as Pass 1).
+    //   - Prefer a score>0 donor (flow into fresh cell).
+    //   - Fallback: donor with maximum pressure (favours post-shock side
+    //     which is physically more reasonable than averaging across a shock).
+    //
+    // Averaging is completely removed; no pass ever blends multiple donors.
+    // ----------------------------------------------------------------------
+    constexpr int P23_RINGS[] = {2, 4, 8};
+    for (int ring_idx = 0; ring_idx < 3; ++ring_idx) {
+      const int R = P23_RINGS[ring_idx];
       for (MFIter mfi(mfab, false); mfi.isValid(); ++mfi) {
         const Box& bx  = mfi.tilebox();
-        const Box& bxg = mfi.growntilebox(ring); // ensure we can read ring-width neighbours
+        const Box& bxg = mfi.growntilebox(R);
         auto const& old_mk = old_markers.const_array(mfi);
         auto const& new_mk = mfab.const_array(mfi);
         auto const& state  = state_mf.array(mfi);
-        const int R = ring;
 
         ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
-          if (old_mk(i,j,k,0) == 0) return;   // was already fluid
-          if (new_mk(i,j,k,0) != 0) return;   // still solid
+          if (old_mk(i,j,k,0) == 0) return;
+          if (new_mk(i,j,k,0) != 0) return;
           if (state(i,j,k, cls_t::URHO) > Real(1.0e-10)) return; // already fixed
 
-          Real sum[cls_t::NCONS] = {};
-          int count = 0;
+          constexpr Real GAMMA_M1 = Real(0.4);
+          Real best_score = Real(-1.0e300);
+          int  best_di = 0, best_dj = 0, best_dk = 0;
+          bool found_positive = false;
+          Real max_p_seen = Real(-1.0e300);
+          int  maxp_di = 0, maxp_dj = 0, maxp_dk = 0;
+          bool found_any = false;
+
           for (int dj = -R; dj <= R; ++dj) {
             for (int di = -R; di <= R; ++di) {
 #if (AMREX_SPACEDIM == 3)
               for (int dk = -R; dk <= R; ++dk) {
+                if (amrex::Math::abs(di) != R && amrex::Math::abs(dj) != R
+                    && amrex::Math::abs(dk) != R) continue;
 #else
               { int dk = 0;
+                if (amrex::Math::abs(di) != R && amrex::Math::abs(dj) != R) continue;
 #endif
-                if (di == 0 && dj == 0 && dk == 0) continue;
-                int ii = i+di, jj = j+dj, kk = k+dk;
+                const int ii = i+di, jj = j+dj, kk = k+dk;
                 if (!bxg.contains(IntVect(AMREX_D_DECL(ii,jj,kk)))) continue;
-                if (new_mk(ii,jj,kk,0) == 0 && state(ii,jj,kk, cls_t::URHO) > Real(1.0e-10)) {
-                  for (int n = 0; n < ncons; ++n)
-                    sum[n] += state(ii,jj,kk,n);
-                  count++;
+                if (new_mk(ii,jj,kk,0) != 0) continue;
+                const Real rho = state(ii,jj,kk, cls_t::URHO);
+                if (!(rho > Real(1.0e-10))) continue;
+                const Real mx = state(ii,jj,kk, cls_t::UMX);
+                const Real my = state(ii,jj,kk, cls_t::UMY);
+#if (AMREX_SPACEDIM == 3)
+                const Real mz = state(ii,jj,kk, cls_t::UMZ);
+                const Real ke = Real(0.5) * (mx*mx + my*my + mz*mz) / rho;
+#else
+                const Real ke = Real(0.5) * (mx*mx + my*my) / rho;
+#endif
+                const Real et = state(ii,jj,kk, cls_t::UET);
+                const Real p  = GAMMA_M1 * (et - ke);
+                if (!(p > Real(0))) continue;                 // non-physical
+                if (!(rho == rho) || !(p == p)) continue;     // NaN guard
+
+                found_any = true;
+                const Real u = mx / rho;
+                const Real v = my / rho;
+                Real score = -(u * di + v * dj);
+#if (AMREX_SPACEDIM == 3)
+                const Real w = mz / rho;
+                score += -(w * dk);
+#endif
+                if (score > best_score) {
+                  best_score = score;
+                  best_di = di; best_dj = dj; best_dk = dk;
+                  if (score > Real(0)) found_positive = true;
+                }
+                if (p > max_p_seen) {
+                  max_p_seen = p;
+                  maxp_di = di; maxp_dj = dj; maxp_dk = dk;
                 }
               }
             }
           }
-          if (count > 0) {
-            Real inv = Real(1.0) / count;
-            for (int n = 0; n < ncons; ++n)
-              state(i,j,k,n) = sum[n] * inv;
+
+          if (!found_any) return;    // try a wider ring
+
+          int chosen_di, chosen_dj, chosen_dk;
+          if (found_positive) {
+            chosen_di = best_di;  chosen_dj = best_dj;  chosen_dk = best_dk;
+          } else {
+            chosen_di = maxp_di;  chosen_dj = maxp_dj;  chosen_dk = maxp_dk;
+          }
+          const int ii = i + chosen_di, jj = j + chosen_dj;
+#if (AMREX_SPACEDIM == 3)
+          const int kk = k + chosen_dk;
+#else
+          const int kk = 0;
+#endif
+
+          for (int n = 0; n < ncons; ++n)
+            state(i,j,k,n) = state(ii,jj,kk,n);
+
+          if (p_diag != nullptr) {
+            const int slot = Gpu::Atomic::Add(p_cnt, 1);
+            if (slot < DIAG_MAX) {
+              FixExposedDiagRec& r = p_diag[slot];
+              r.i = i; r.j = j; r.k = k;
+              r.di = chosen_di; r.dj = chosen_dj; r.dk = chosen_dk;
+              r.n_donors = 1;
+              r.used_fallback = found_positive ? 0 : 1;
+              r.pass_id = 2;
+              r.rho_d = state(ii,jj,kk, cls_t::URHO);
+              r.u_d   = state(ii,jj,kk, cls_t::UMX) / r.rho_d;
+              r.v_d   = state(ii,jj,kk, cls_t::UMY) / r.rho_d;
+              const Real ke_d = Real(0.5) * (r.u_d*r.u_d + r.v_d*r.v_d) * r.rho_d;
+              r.p_d   = GAMMA_M1 * (state(ii,jj,kk, cls_t::UET) - ke_d);
+              r.score = best_score;
+              r.p_ratio   = max_p_seen;
+              r.rho_ratio = Real(R);  // record which ring succeeded
+            }
           }
         });
       }
-    } // end ring loop
+    } // end Pass 2
 
-    // Pass 3 (fallback): any cell still unfixed gets freestream-like state
-    // derived from the nearest valid fluid cell in the entire FAB.
-    // This is a last resort — should only trigger for extremely large motions.
+    // ----------------------------------------------------------------------
+    // Pass 3 (last-resort single-donor, replaces legacy brute-force-average):
+    //
+    // Any cell still unfixed after Pass 2 gets a single donor from expanding
+    // ring shells r=1..16. Same scoring + max-pressure fallback as Pass 2.
+    // No averaging. Cell-by-cell, stop at the first ring with a valid donor.
+    // ----------------------------------------------------------------------
     for (MFIter mfi(mfab, false); mfi.isValid(); ++mfi) {
-      const Box& bx = mfi.tilebox();
+      const Box& bx  = mfi.tilebox();
+      const Box& bxg = mfi.growntilebox(cls_t::NGHOST);
       auto const& old_mk = old_markers.const_array(mfi);
       auto const& new_mk = mfab.const_array(mfi);
       auto const& state  = state_mf.array(mfi);
 
-      // First find ANY valid fluid cell in this FAB to use as reference
-      const Box& bxg = mfi.growntilebox(cls_t::NGHOST);
       ReduceOps<ReduceOpSum> reduce_op;
       ReduceData<int> reduce_data(reduce_op);
       using ReduceTuple = typename decltype(reduce_data)::Type;
@@ -1319,55 +1584,121 @@ public:
         if (old_mk(i,j,k,0) == 0) return {0};
         if (new_mk(i,j,k,0) != 0) return {0};
         if (state(i,j,k, cls_t::URHO) > Real(1.0e-10)) return {0};
-        return {1}; // still unfixed
+        return {1};
       });
       int n_unfixed = amrex::get<0>(reduce_data.value(reduce_op));
 
-      if (n_unfixed > 0) {
-        amrex::Print() << "[fixExposedCells] WARNING: " << n_unfixed
-                       << " cells still unfixed after 8-ring search. "
-                       << "Using nearest-valid-fluid fallback.\n";
+      if (n_unfixed == 0) continue;
 
-        // Brute-force: for each unfixed cell, scan the FAB for the nearest valid cell
-        ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-        {
-          if (old_mk(i,j,k,0) == 0) return;
-          if (new_mk(i,j,k,0) != 0) return;
-          if (state(i,j,k, cls_t::URHO) > Real(1.0e-10)) return;
+      amrex::Print() << "[fixExposedCells] WARNING: " << n_unfixed
+                     << " cells still unfixed after Pass 2 (ring<=8). "
+                     << "Entering Pass 3 expanding single-donor search.\n";
 
-          // Expanding ring search until we find something
-          for (int r = 1; r <= 16; ++r) {
-            Real sum[cls_t::NCONS] = {};
-            int count = 0;
-            // Only check the shell at distance r (not the interior)
-            for (int dj = -r; dj <= r; ++dj) {
-              for (int di = -r; di <= r; ++di) {
+      ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+      {
+        if (old_mk(i,j,k,0) == 0) return;
+        if (new_mk(i,j,k,0) != 0) return;
+        if (state(i,j,k, cls_t::URHO) > Real(1.0e-10)) return;
+
+        constexpr Real GAMMA_M1 = Real(0.4);
+
+        for (int R = 1; R <= 16; ++R) {
+          Real best_score = Real(-1.0e300);
+          int  best_di = 0, best_dj = 0, best_dk = 0;
+          bool found_positive = false;
+          Real max_p_seen = Real(-1.0e300);
+          int  maxp_di = 0, maxp_dj = 0, maxp_dk = 0;
+          bool found_any = false;
+
+          for (int dj = -R; dj <= R; ++dj) {
+            for (int di = -R; di <= R; ++di) {
 #if (AMREX_SPACEDIM == 3)
-                for (int dk = -r; dk <= r; ++dk) {
-                  if (amrex::Math::abs(di) != r && amrex::Math::abs(dj) != r && amrex::Math::abs(dk) != r) continue;
+              for (int dk = -R; dk <= R; ++dk) {
+                if (amrex::Math::abs(di) != R && amrex::Math::abs(dj) != R
+                    && amrex::Math::abs(dk) != R) continue;
 #else
-                { int dk = 0;
-                  if (amrex::Math::abs(di) != r && amrex::Math::abs(dj) != r) continue;
+              { int dk = 0;
+                if (amrex::Math::abs(di) != R && amrex::Math::abs(dj) != R) continue;
 #endif
-                  int ii = i+di, jj = j+dj, kk = k+dk;
-                  if (!bxg.contains(IntVect(AMREX_D_DECL(ii,jj,kk)))) continue;
-                  if (new_mk(ii,jj,kk,0) == 0 && state(ii,jj,kk, cls_t::URHO) > Real(1.0e-10)) {
-                    for (int n = 0; n < ncons; ++n)
-                      sum[n] += state(ii,jj,kk,n);
-                    count++;
-                  }
+                const int ii = i+di, jj = j+dj, kk = k+dk;
+                if (!bxg.contains(IntVect(AMREX_D_DECL(ii,jj,kk)))) continue;
+                if (new_mk(ii,jj,kk,0) != 0) continue;
+                const Real rho = state(ii,jj,kk, cls_t::URHO);
+                if (!(rho > Real(1.0e-10))) continue;
+                const Real mx = state(ii,jj,kk, cls_t::UMX);
+                const Real my = state(ii,jj,kk, cls_t::UMY);
+#if (AMREX_SPACEDIM == 3)
+                const Real mz = state(ii,jj,kk, cls_t::UMZ);
+                const Real ke = Real(0.5) * (mx*mx + my*my + mz*mz) / rho;
+#else
+                const Real ke = Real(0.5) * (mx*mx + my*my) / rho;
+#endif
+                const Real et = state(ii,jj,kk, cls_t::UET);
+                const Real p  = GAMMA_M1 * (et - ke);
+                if (!(p > Real(0))) continue;
+                if (!(rho == rho) || !(p == p)) continue;
+
+                found_any = true;
+                const Real u = mx / rho;
+                const Real v = my / rho;
+                Real score = -(u * di + v * dj);
+#if (AMREX_SPACEDIM == 3)
+                const Real w = mz / rho;
+                score += -(w * dk);
+#endif
+                if (score > best_score) {
+                  best_score = score;
+                  best_di = di; best_dj = dj; best_dk = dk;
+                  if (score > Real(0)) found_positive = true;
+                }
+                if (p > max_p_seen) {
+                  max_p_seen = p;
+                  maxp_di = di; maxp_dj = dj; maxp_dk = dk;
                 }
               }
             }
-            if (count > 0) {
-              Real inv = Real(1.0) / count;
-              for (int n = 0; n < ncons; ++n)
-                state(i,j,k,n) = sum[n] * inv;
-              break;
+          }
+
+          if (!found_any) continue;  // try next ring
+
+          int chosen_di, chosen_dj, chosen_dk;
+          if (found_positive) {
+            chosen_di = best_di;  chosen_dj = best_dj;  chosen_dk = best_dk;
+          } else {
+            chosen_di = maxp_di;  chosen_dj = maxp_dj;  chosen_dk = maxp_dk;
+          }
+          const int ii = i + chosen_di, jj = j + chosen_dj;
+#if (AMREX_SPACEDIM == 3)
+          const int kk = k + chosen_dk;
+#else
+          const int kk = 0;
+#endif
+
+          for (int n = 0; n < ncons; ++n)
+            state(i,j,k,n) = state(ii,jj,kk,n);
+
+          if (p_diag != nullptr) {
+            const int slot = Gpu::Atomic::Add(p_cnt, 1);
+            if (slot < DIAG_MAX) {
+              FixExposedDiagRec& r = p_diag[slot];
+              r.i = i; r.j = j; r.k = k;
+              r.di = chosen_di; r.dj = chosen_dj; r.dk = chosen_dk;
+              r.n_donors = 1;
+              r.used_fallback = found_positive ? 0 : 1;
+              r.pass_id = 3;
+              r.rho_d = state(ii,jj,kk, cls_t::URHO);
+              r.u_d   = state(ii,jj,kk, cls_t::UMX) / r.rho_d;
+              r.v_d   = state(ii,jj,kk, cls_t::UMY) / r.rho_d;
+              const Real ke_d = Real(0.5) * (r.u_d*r.u_d + r.v_d*r.v_d) * r.rho_d;
+              r.p_d   = GAMMA_M1 * (state(ii,jj,kk, cls_t::UET) - ke_d);
+              r.score = best_score;
+              r.p_ratio   = max_p_seen;
+              r.rho_ratio = Real(R);
             }
           }
-        });
-      }
+          break;  // done with this cell — don't expand further
+        }
+      });
     }
   }
 

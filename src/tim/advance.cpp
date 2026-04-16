@@ -4,8 +4,14 @@
 
 #ifdef AMREX_USE_GPIBM
 #include <ibm_solver.h>
+#include <ibm_tripwire.h>
 #endif
 using namespace amrex;
+
+#ifdef AMREX_USE_GPIBM
+static constexpr int TRIPWIRE_LO = 2200;
+static constexpr int TRIPWIRE_HI = 2420;
+#endif
 
 Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
   BL_PROFILE("CNS::advance()");
@@ -42,6 +48,10 @@ Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
   // This prevents fine-level sub-steps from advancing the geometry to
   // inconsistent times and avoids redundant transform updates.
   if (CNS::ib_move) {
+    const int cur_step = parent->levelSteps(0);
+    ib_tripwire(S1, *IBM::ib.bmf_a[level], "T1_step_entry",
+                level, cur_step, TRIPWIRE_LO, TRIPWIRE_HI);
+
     // Snapshot pre-move markers at THIS level
     auto& mfab_pre = *IBM::ib.bmf_a[level];
     FabArray<BaseFab<uint8_t>> old_markers(
@@ -75,8 +85,14 @@ Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
     // Rebuild markers and GPs at THIS level only (geometry is already at t^{n+1})
     rebuildIBM();
 
+    ib_tripwire(S1, *IBM::ib.bmf_a[level], "T2_post_rebuildIBM",
+                level, cur_step, TRIPWIRE_LO, TRIPWIRE_HI);
+
     // Fill cells newly exposed by the geometry motion at this level
-    IBM::ib.fixExposedCells(old_markers, S1, level);
+    IBM::ib.fixExposedCells(old_markers, S1, level, cur_step);
+
+    ib_tripwire(S1, *IBM::ib.bmf_a[level], "T3_post_fixExposed",
+                level, cur_step, TRIPWIRE_LO, TRIPWIRE_HI);
   }
 #endif
 
@@ -399,18 +415,27 @@ Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
     } // end FSI flood-fill
 
     // ------------------------------------------------------------------------
-    // Pass 3 (SAFETY NET): Catch catastrophically broken cells (NaN/Inf or
-    // values outside [0.01, 100] for density). Replace with neighbor-median
-    // or freestream fallback. This should rarely trigger; if it fires often,
-    // there's a deeper numerical problem to investigate.
+    // Pass 3 (SAFETY NET): Catch catastrophically broken cells.
+    //
+    // IMPORTANT:
+    //   The original implementation used hard-coded dimensional thresholds
+    //   (rho in [1e-2, 1e2], E in [1e1, 1e10]) plus a 1 atm / 300 K fallback.
+    //   That silently breaks low-density nondimensional cases: a perfectly
+    //   valid freestream with rho ~ 3e-3 and rhoE ~ O(1) is flagged as bad,
+    //   then overwritten everywhere by the dimensional fallback state.
+    //
+    //   To keep this pass scale-agnostic, only treat cells as bad when they
+    //   are non-finite or non-positive in the conserved quantities that must
+    //   stay positive. Neighbor repair is still used first; only the last-
+    //   resort fallback remains hard-coded.
+    //
+    // This should rarely trigger; if it fires often, there's a deeper
+    // numerical problem to investigate.
     // ------------------------------------------------------------------------
     {
-      // Permissive bounds — only catch truly broken cells, not moderate
-      // physical deviations (shocks, expansion fans, etc.).
-      constexpr Real rho_lo  = Real(0.01);
-      constexpr Real rho_hi  = Real(100.0);
-      constexpr Real E_lo    = Real(1.0e1);
-      constexpr Real E_hi    = Real(1.0e10);
+      // Scale-agnostic positivity / finiteness checks.
+      constexpr Real rho_lo  = Real(1.0e-14);
+      constexpr Real E_lo    = Real(1.0e-14);
       // Freestream fallback (air at 1 atm, 300 K)
       constexpr Real rho_ref  = Real(1.177);
       constexpr Real eint_ref = Real(2.15e5);
@@ -425,8 +450,8 @@ Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
           const Real rho = state(i,j,k, PC::URHO);
           const Real E   = state(i,j,k, PC::UET);
 
-          const bool bad = !std::isfinite(rho) || rho < rho_lo || rho > rho_hi
-                        || !std::isfinite(E)   || E   < E_lo   || E   > E_hi;
+          const bool bad = !std::isfinite(rho) || rho <= rho_lo
+                        || !std::isfinite(E)   || E   <= E_lo;
           if (!bad) return;
 
           // Find a representative neighbor density (median-ish of valid ones)
@@ -443,8 +468,7 @@ Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
                 const int ii = i+di, jj = j+dj, kk = k+dk;
                 if (!bxg.contains(IntVect(AMREX_D_DECL(ii,jj,kk)))) continue;
                 const Real rho_n = state(ii,jj,kk, PC::URHO);
-                if (std::isfinite(rho_n) && rho_n >= rho_lo && rho_n <= rho_hi
-                    && n_nbrs < 9) {
+                if (std::isfinite(rho_n) && rho_n > rho_lo && n_nbrs < 9) {
                   rho_nbrs[n_nbrs++] = rho_n;
                 }
               }
