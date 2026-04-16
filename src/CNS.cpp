@@ -826,8 +826,10 @@ void CNS::post_regrid(int lbase, int new_finest) {
       });
     }
 
+    // Tripwire disabled by default. Edit the (lo, hi) window to re-enable
+    // for a specific step range when debugging post_regrid behaviour.
     ib_tripwire(get_new_data(State_Type), *IBM::ib.bmf_a[level],
-                "T4_post_regrid", level, parent->levelSteps(0), 2200, 2420);
+                "T4_post_regrid", level, parent->levelSteps(0), -1, -1);
   }  // end if (ib_move)
 #endif  // AMREX_USE_GPIBM
 

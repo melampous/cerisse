@@ -9,8 +9,11 @@
 using namespace amrex;
 
 #ifdef AMREX_USE_GPIBM
-static constexpr int TRIPWIRE_LO = 2200;
-static constexpr int TRIPWIRE_HI = 2420;
+// IB pipeline tripwire window. Disabled by default (-1,-1 never fires).
+// To enable for a targeted run, set TRIPWIRE_LO..TRIPWIRE_HI to the step
+// range of interest. See src/ibm/ibm_tripwire.h.
+static constexpr int TRIPWIRE_LO = -1;
+static constexpr int TRIPWIRE_HI = -1;
 #endif
 
 Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {

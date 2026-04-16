@@ -1196,9 +1196,11 @@ public:
     auto& mfab = *bmf_a[lev];
     const int ncons = cls_t::NCONS;
 
-    // Diagnostic capture: only active in step window [DIAG_LO, DIAG_HI]
-    constexpr int DIAG_LO = 2200;
-    constexpr int DIAG_HI = 2420;
+    // Per-cell diagnostic capture. Disabled by default (step is always
+    // outside [-1, -1]). Set DIAG_LO/DIAG_HI to a real step range when
+    // debugging fresh-cell donor selection.
+    constexpr int DIAG_LO = -1;
+    constexpr int DIAG_HI = -1;
     constexpr int DIAG_MAX = 50;        // at most 50 cells captured per call
     const bool diag_on = (step >= DIAG_LO && step <= DIAG_HI);
 
