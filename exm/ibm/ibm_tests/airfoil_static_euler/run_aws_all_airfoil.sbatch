@@ -4,18 +4,25 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=96
 #SBATCH --cpus-per-task=1
+#SBATCH --exclusive
+#SBATCH --hint=nomultithread
+#SBATCH --threads-per-core=1
 #SBATCH --time=03:00:00
 #SBATCH --output=/shared/cerisse/exm/ibm/ibm_tests/airfoil_static_euler/slurm_all_%j.out
 #SBATCH --error=/shared/cerisse/exm/ibm/ibm_tests/airfoil_static_euler/slurm_all_%j.err
 #
-# Full static-airfoil matrix on one 96-rank hpc8a node.
+# Full static-airfoil matrix on ONE 96-rank hpc8a node, packed into a
+# single job submission (one sbatch, everything inside):
 #
 #   Block 1: Euler canonical         (build once, 12 runs share binary)
 #             2 geometries x 6 AoA = 12 cases
 #   Block 2: NS robustness           (rebuild per Re, 3 Re values)
 #             mid_a00 only, Re = 1e4 / 1e5 / 1e6
 #
-# Expected wall-clock on 96 ranks: ~30-45 min total.
+# Resource policy: strict 1 rank per physical core, no hyperthreading,
+# no oversubscribe. Node is held exclusive for the duration of the job.
+#
+# Expected wall-clock on 96 physical cores: ~30-45 min total.
 
 set -euo pipefail
 
@@ -25,6 +32,14 @@ module load openmpi/4.1.7 2>/dev/null || true
 ROOT=/shared/cerisse
 MAX_STEP=${MAX_STEP:-5000}
 PLOT_INT=${PLOT_INT:-250}
+
+# Make sure OpenMP / MKL / BLAS threading does not steal cores from MPI
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+
+# Common srun flags: one rank per physical core, no oversubscribe
+SRUN_OPTS="--mpi=pmix --ntasks=96 --cpus-per-task=1 --hint=nomultithread --threads-per-core=1"
 
 echo "================================================================"
 echo " Static-airfoil full matrix"
@@ -53,7 +68,7 @@ for geom in mid x018; do
     tag=${geom}_a${a}
     echo "---- Euler case ${tag}  start $(date)"
     rm -rf plot_${tag} surf_${tag}
-    srun --mpi=pmix ./"${EXE}" inputs_${tag} \
+    srun ${SRUN_OPTS} ./"${EXE}" inputs_${tag} \
          max_step=${MAX_STEP} \
          amr.plot_int=${PLOT_INT} \
          amr.check_int=-1 \
@@ -84,7 +99,7 @@ for re in 1e4 1e5 1e6; do
   ln -sf ${EULER_DIR}/diamond_wedge_mid_a00.dat ./diamond_wedge.dat
 
   rm -rf plot_re${re} surf_re${re}
-  srun --mpi=pmix ./"${EXE_NS}" inputs_re${re} \
+  srun ${SRUN_OPTS} ./"${EXE_NS}" inputs_re${re} \
        max_step=${MAX_STEP} \
        amr.plot_int=${PLOT_INT} \
        amr.check_int=-1 \
