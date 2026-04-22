@@ -67,9 +67,11 @@ def read_vtp(path):
            for i in range(0, len(raw), ncomp)]
 
     fields = {}
-    pdata = piece.find("PointData")
-    if pdata is not None:
-        for da in pdata.findall("DataArray"):
+    for tag in ("PointData", "CellData"):
+        d = piece.find(tag)
+        if d is None:
+            continue
+        for da in d.findall("DataArray"):
             fields[da.attrib["Name"]] = [float(v) for v in da.text.split()]
 
     conn = []
@@ -119,13 +121,22 @@ def integrate_one(vtp_path, alpha_deg, geom, case_name):
     # with that convention, so the force on the body from pressure is
     #     F = sum (p - p_inf) * n_hat * ds
     # where n_hat points OUTWARD (away from the body).
-    for poly in conn:
+    # Cerisse exports each wall panel as a 2-vertex Polys entry;
+    # Pressure is per-cell. For >2-vertex polys, treat as closed and
+    # sum edges (but average P over the two point indices is not
+    # meaningful for cell data, so use the cell's single P).
+    for cell_idx, poly in enumerate(conn):
         if len(poly) < 2:
             continue
-        for k in range(len(poly)):
-            i0 = poly[k]
-            i1 = poly[(k + 1) % len(poly)]
-            if i1 == i0:
+        if len(poly) == 2:
+            edges = [(poly[0], poly[1])]
+        else:
+            edges = [(poly[k], poly[(k + 1) % len(poly)])
+                     for k in range(len(poly))]
+        p_seg = P[cell_idx]
+        dp = p_seg - P_INF
+        for i0, i1 in edges:
+            if i0 == i1:
                 continue
             x0, y0 = pts[i0]
             x1, y1 = pts[i1]
@@ -137,8 +148,6 @@ def integrate_one(vtp_path, alpha_deg, geom, case_name):
             # outward normal (body to the left, normal to the right)
             nx = dy / ds
             ny = -dx / ds
-            p_seg = 0.5 * (P[i0] + P[i1])
-            dp = p_seg - P_INF
             # force contribution per segment
             fx = dp * nx * ds
             fy = dp * ny * ds
@@ -151,15 +160,21 @@ def integrate_one(vtp_path, alpha_deg, geom, case_name):
             Mz_QC += (xm - qc_world[0]) * fy - (ym - qc_world[1]) * fx
 
     # Non-dimensionalize (per unit span, 2D)
+    # Force on body = -sum (p - p_inf) n_hat ds  (n outward), so
+    # flip sign of the accumulator above.
     norm = Q_INF * C_REF
-    CL = CL_world / norm
-    CD = CD_world / norm
-    Cm_LE = Mz_LE / (norm * C_REF)
-    Cm_c4 = Mz_QC / (norm * C_REF)
+    CL = -CL_world / norm
+    CD = -CD_world / norm
+    Cm_LE = -Mz_LE / (norm * C_REF)
+    Cm_c4 = -Mz_QC / (norm * C_REF)
 
-    # x_cp only when lift magnitude is above noise
+    # x_cp (distance from LE along chord, nondimensionalized by chord).
+    # With our sign convention (force ON body, CL>0 for nose-up α),
+    # positive Cm_LE about LE is nose-up, which for a lift force at
+    # x_cp downstream of the LE gives Mz_LE = +x_cp * CL * c, so
+    # x_cp/c = Cm_LE / CL.
     if abs(CL) > CL_EPS:
-        x_cp_over_c = -Cm_LE / CL
+        x_cp_over_c = Cm_LE / CL
     else:
         x_cp_over_c = None
 

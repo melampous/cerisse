@@ -93,11 +93,13 @@ def read_vtp(path):
         y = float(pts_data[i + 1])
         pts.append((x, y))
 
-    # point data
+    # point data + cell data (Cerisse writes most scalars to CellData)
     fields = {}
-    pdata = piece.find("PointData")
-    if pdata is not None:
-        for da in pdata.findall("DataArray"):
+    for tag in ("PointData", "CellData"):
+        d = piece.find(tag)
+        if d is None:
+            continue
+        for da in d.findall("DataArray"):
             name = da.attrib["Name"]
             vals = [float(v) for v in da.text.split()]
             fields[name] = vals
