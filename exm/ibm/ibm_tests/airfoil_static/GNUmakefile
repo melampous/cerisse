@@ -15,6 +15,11 @@ USE_GPIBM = TRUE
 AMREX_NO_PROBINIT = TRUE
 CUDA_ARCH = 8.0
 
+# Re is compile-time constant in prob.h; override with REYNOLDS_USER=...
+ifdef REYNOLDS_USER
+  DEFINES += -DREYNOLDS_USER=$(REYNOLDS_USER)
+endif
+
 AMR_SOLVER = $(abspath ../../../../)
 AMREX_HOME = $(AMR_SOLVER)/lib/amrex
 

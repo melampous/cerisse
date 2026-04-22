@@ -20,7 +20,11 @@ static constexpr Real Mach     = 2.0;
 static constexpr Real Mw       = 28.96e-3;
 static constexpr Real gam      = 1.4;
 static constexpr Real Rgas     = gas_constant/Mw;
-static constexpr Real Reynolds = 10000;
+// Reynolds can be overridden at build time: `make REYNOLDS_USER=1e5`.
+#ifndef REYNOLDS_USER
+#define REYNOLDS_USER 10000.0
+#endif
+static constexpr Real Reynolds = REYNOLDS_USER;
 static constexpr Real Pr       = 0.7;
 static constexpr Real Cv       = Rgas/(gam - 1.0);
 static constexpr Real Cp       = gam*Cv;
