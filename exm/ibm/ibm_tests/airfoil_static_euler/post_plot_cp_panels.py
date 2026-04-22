@@ -160,30 +160,36 @@ def main(argv=None):
         ax.plot(xs, ys, **PANEL_STYLE[name])
 
     # theory overlay
+    #
+    # Convention (positive alpha = nose-up): the upper front face sees a
+    # reduced compression or an expansion, the lower front face sees an
+    # increased compression. So:
+    #   upper θ_eff = θ_w − α   (Prandtl-Meyer when α > θ_w)
+    #   lower θ_eff = θ_w + α   (always compressive for α ≥ 0)
     if args.theory:
         th_w = (math.degrees(math.atan2(0.00437, 0.050))
                 if args.geom == "mid"
                 else math.degrees(math.atan2(0.00437, 0.018)))
-        cp_fu = cp_after_oblique_shock(th_w + args.alpha)
-        cp_al = cp_after_expansion(-(th_w + args.alpha) - th_w)  # aft-upper = expansion through 2*th_w
-        # Note: aft-upper Cp is post-expansion from fore-upper state,
-        # not from freestream. This simple overlay only shows the FORE
-        # face analytic values. Labelling clearly:
+        # UPPER front face
+        theta_upper = th_w - args.alpha
+        if theta_upper > 0:
+            cp_fu = cp_after_oblique_shock(theta_upper)
+            lbl = f"theory fore_upper (θ={theta_upper:.1f}°)"
+        else:
+            cp_fu = cp_after_expansion(theta_upper)
+            lbl = f"theory fore_upper (exp {abs(theta_upper):.1f}°)"
         if cp_fu is not None:
-            ax.axhline(cp_fu, color="C3", ls=":", lw=1.2,
-                       label=f"theory fore_upper (θ={th_w+args.alpha:.1f}°)")
-        # lower face
-        theta_lower = th_w - args.alpha
+            ax.axhline(cp_fu, color="C3", ls=":", lw=1.2, label=lbl)
+        # LOWER front face
+        theta_lower = th_w + args.alpha
         if theta_lower > 0:
             cp_fl = cp_after_oblique_shock(theta_lower)
-            if cp_fl is not None:
-                ax.axhline(cp_fl, color="C9", ls=":", lw=1.2,
-                           label=f"theory fore_lower (θ={theta_lower:.1f}°)")
+            lbl = f"theory fore_lower (θ={theta_lower:.1f}°)"
         else:
             cp_fl = cp_after_expansion(theta_lower)
-            if cp_fl is not None:
-                ax.axhline(cp_fl, color="C9", ls=":", lw=1.2,
-                           label=f"theory fore_lower (exp {abs(theta_lower):.1f}°)")
+            lbl = f"theory fore_lower (exp {abs(theta_lower):.1f}°)"
+        if cp_fl is not None:
+            ax.axhline(cp_fl, color="C9", ls=":", lw=1.2, label=lbl)
 
     ax.set_xlabel("x_body (chord-wise)")
     ax.set_ylabel("Cp")
