@@ -109,26 +109,29 @@ def extract_one(pltdir, alpha_deg, geom, level=-1):
     drho_dx = np.gradient(rho, x1, axis=0)
 
     def fit_side(side):
+        # Scan strips where the LE oblique shock dominates cleanly:
+        #   |y - le_y| ∈ [0.010, 0.025] keeps the sample inside the
+        # search box AND above the shoulder/expansion-fan interaction
+        # that muddies near-LE strips. The x-window is sized so the
+        # expected shock (β ≥ 30°) lies well inside the strip.
         if side == "upper":
-            y_lo = le_y + 0.002            # skip first 2 mm (GP / local noise)
-            y_hi = le_y + 0.06
+            y_lo = le_y + 0.010
+            y_hi = le_y + 0.030
         else:
-            y_lo = le_y - 0.06
-            y_hi = le_y - 0.002
-        # window in x
-        x_lo = le_x - 0.02
-        x_hi = le_x + 0.04
+            y_lo = le_y - 0.030
+            y_hi = le_y - 0.010
+        x_lo = le_x - 0.005
+        x_hi = le_x + 0.06
 
         ix_win = np.where((x1 >= x_lo) & (x1 <= x_hi))[0]
         iy_win = np.where((x2 >= y_lo) & (x2 <= y_hi))[0]
         if ix_win.size == 0 or iy_win.size == 0:
             return None
 
-        xs = []
-        ys = []
+        xs, ys = [], []
         for iy in iy_win:
             strip = np.abs(drho_dx[ix_win, iy])
-            if np.all(strip == 0):
+            if strip.max() <= 0.0:
                 continue
             k = int(np.argmax(strip))
             xs.append(float(x1[ix_win[k]]))
@@ -136,6 +139,17 @@ def extract_one(pltdir, alpha_deg, geom, level=-1):
 
         if len(xs) < 5:
             return None
+
+        # Robust: drop outliers that sit >3 median-deviations from a
+        # coarse linear fit (kills residual expansion-fan hits).
+        ys_a = np.array(ys); xs_a = np.array(xs)
+        m0, b0 = np.polyfit(ys_a, xs_a, 1)
+        res = np.abs(xs_a - (m0 * ys_a + b0))
+        mad = np.median(res) + 1e-9
+        keep = res < 4.0 * mad
+        if keep.sum() < 5:
+            return None
+        xs = xs_a[keep].tolist(); ys = ys_a[keep].tolist()
 
         m, b, r2 = linear_fit(ys, xs)
         # x = m*y + b  ->  tan(beta) = dy/dx = 1/m with beta measured

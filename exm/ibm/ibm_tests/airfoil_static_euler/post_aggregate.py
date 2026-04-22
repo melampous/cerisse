@@ -227,11 +227,20 @@ def plot_beta_vs_alpha(all_rows, theory, out_path):
                     ax.plot(th_x, th_y, linestyle=":", color=colors[geom],
                             marker="x",
                             label=f"{geom} {side} (theory)")
+    # Reference Mach wave at M=2: μ = asin(1/M) = 30°. On faces where
+    # θ_eff < 0 (expansion, state=="expansion"), the extractor can only
+    # see the leading Mach wave of the Prandtl-Meyer fan, which sits at
+    # μ from the upstream flow direction. Drawing this as a guide line
+    # makes the expansion regime visually distinguishable from attached
+    # shock regimes.
+    mu_M2 = math.degrees(math.asin(1.0 / 2.0))
+    ax.axhline(mu_M2, color="gray", linestyle="-.", lw=1.0,
+               label=f"Mach wave μ={mu_M2:.0f}° (M=2)")
     ax.set_xlabel("angle of attack [deg]")
     ax.set_ylabel("leading-edge shock angle β [deg]")
     ax.set_title("Shock angle: numerical vs weak-shock theory (M=2)")
     ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=8, ncol=2)
+    ax.legend(fontsize=7, ncol=2, loc="upper left")
     fig.tight_layout()
     fig.savefig(out_path, dpi=130)
     plt.close(fig)

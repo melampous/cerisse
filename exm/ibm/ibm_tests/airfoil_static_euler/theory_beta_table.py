@@ -119,11 +119,14 @@ def main():
                 # lower face by (th_w - alpha). Signs track whether the
                 # rotated surface is still compression or has become
                 # expansion.
-                theta_eff = th_w + sign * a
-                # for 'lower', sign=-1: theta_eff = th_w - a
-                # for 'upper', sign=+1: theta_eff = th_w + a
-                # (the "sign" name is about which face, not about theta itself)
-                if side == "lower":
+                # Positive alpha = nose-up rotation of the body. In
+                # that attitude the flow on the UPPER front face is
+                # turned AWAY from the body (expansion when α>θ_w),
+                # while the LOWER front face sees a stronger
+                # compression.  So:
+                #   upper: θ_eff = θ_w − α (may be < 0 → Prandtl-Meyer)
+                #   lower: θ_eff = θ_w + α (always compressive)
+                if side == "upper":
                     theta_eff = th_w - a
                 else:
                     theta_eff = th_w + a
