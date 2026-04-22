@@ -1,0 +1,50 @@
+#------------------------------------------------------------------------------#
+#  Canonical static diamond wedge, Euler, M=2, +x freestream
+#  Angle of attack is baked into the .dat geometry (pre-rotated); ib.move=0.
+#  This file is the template; per-case inputs override ib.filename and any
+#  case-specific overrides via command-line args.
+#------------------------------------------------------------------------------#
+max_step  = 10000
+stop_time = 1.0e-2
+cfl = 0.25
+
+cns.order_rk  = 3
+cns.stages_rk = 3
+cns.lo_bc = 1 2         # x-low: supersonic inflow; y-low: outflow
+cns.hi_bc = 2 2         # x-high: outflow; y-high: outflow
+cns.nstep_screen_output = 10
+cns.verbose = 1
+
+#-------------------------------- IMMERSED BOUNDARY ---------------------------#
+# ib.filename is set per-case by the specific inputs_*.in files.
+ib.filename = diamond_wedge_mid_a00.dat
+ib.move = 0
+ib.plot_surf = 1
+ib.surf_file = ./surf/surf
+ib.surf_int  = 100
+
+#-------------------------------- COMPUTATIONAL DOMAIN ------------------------#
+geometry.is_periodic = 0 0
+geometry.coord_sys   = 0
+geometry.prob_lo     = -0.5  -0.7
+geometry.prob_hi     =  0.8   0.7
+amr.n_cell           = 512   544
+
+#-------------------------------- REFINEMENT / REGRIDDING ---------------------#
+amr.max_level       = 3
+amr.ref_ratio       = 2 2 2
+amr.regrid_int      = 5
+amr.blocking_factor = 16
+amr.max_grid_size   = 128
+amr.n_error_buf     = 2
+amr.grid_eff        = 0.80
+
+#-------------------------------- PLOTFILES -----------------------------------#
+amr.plot_files_output = 1
+amr.plot_file         = ./plot/plt
+amr.plot_int          = 100
+amr.derive_plot_vars  = pressure velocity temperature density
+amr.v = 1
+
+amr.checkpoint_files_output = 0
+amrex.the_arena_is_managed  = 0
