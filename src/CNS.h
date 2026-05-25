@@ -180,6 +180,7 @@ class CNS : public amrex::AmrLevel {
 
   static amrex::Real dt_constant;
   static bool dt_dynamic;
+  static amrex::Real dt_max;        // optional absolute cap on dt (cns.dt_max)
   static int nstep_screen_output;
   static int dist_linear;
   static int order_rk;
@@ -190,6 +191,14 @@ class CNS : public amrex::AmrLevel {
   // "already non-positive". Catches silent clipping in cons2prims that
   // would otherwise mask a numerical breakdown.
   static bool strict_positivity;
+
+  // When true, the end-of-step IBM check clips bad fluid cells (rho<=0
+  // or E<=0) to (rho_floor, rho*ei_floor + KE) and continues, instead
+  // of aborting. NaN/Inf cells still abort. Intended as an opt-in
+  // robustness net for cases where WENO-Z5 briefly overshoots in
+  // strong expansions at IBM sharp corners. Not conservative locally;
+  // the number of clipped cells is reported every step it fires.
+  static bool soft_positivity;
 
   // Pass 2 (flood-fill interior solid + zero momentum) always runs for FSI.
   // For static geometry, it is opt-in: some complex-geometry / multi-body

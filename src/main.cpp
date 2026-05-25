@@ -33,6 +33,7 @@ int main(int argc, char* argv[])
   pp.query("max_step", max_step);
   pp.query("stop_time", stop_time);
   if (pp.query("cfl", CNS::cfl)) { CNS::dt_dynamic = true; }
+  pp.query("dt_max", CNS::dt_max);
   if (pp.query("time_step", CNS::dt_constant)) {
     if (CNS::dt_dynamic) {
       amrex::Abort("Simulation run parameters over-specified. Please only specify "

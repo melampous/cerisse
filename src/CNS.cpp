@@ -44,11 +44,13 @@ int CNS::nstep_screen_output = 10;
 int CNS::order_rk = 2;
 int CNS::stages_rk = 2;
 bool CNS::strict_positivity = false;
+bool CNS::soft_positivity = false;
 bool CNS::pass2_static = false;
 int CNS::do_reflux = 0; // default reflux is off
 int CNS::refine_max_dengrad_lev = -1;
 Real CNS::cfl = 0.0_rt;
 Real CNS::dt_constant = 0.0_rt;
+Real CNS::dt_max = std::numeric_limits<Real>::max(); // disabled by default
 Real CNS::refine_dengrad = 1.0e10;
 int  CNS::INDEX_THERM = 0;
 bool CNS::compute_stats = false;
@@ -140,6 +142,11 @@ void CNS::read_params() {
   pp.query("strict_positivity", strict_positivity);
   if (strict_positivity) {
     amrex::Print() << "  cns.strict_positivity = 1 (abort if state approaches smallr/ei_min floors)\n";
+  }
+
+  pp.query("soft_positivity", soft_positivity);
+  if (soft_positivity) {
+    amrex::Print() << "  cns.soft_positivity = 1 (clip bad fluid cells to floors instead of aborting; NaN/Inf still aborts)\n";
   }
 
   pp.query("pass2_static", pass2_static);
@@ -378,13 +385,17 @@ void CNS::computeInitialDt(int finest_level, int sub_cycle,
                                         dx[2] / eigenvals_level[i][2]));
 #endif
     }
+    // Absolute cap (cns.dt_max — disabled by default)
+    for (int i = 0; i <= finest_level; i++) {
+      dt_level[i] = std::min(dt_level[i], dt_max);
+    }
     // Find min dt across all levels
     int nfactor = 1;
     for (int i = 0; i <= finest_level; i++) {
       nfactor *= n_cycle[i];
       dt0 = std::min(dt0, nfactor * dt_level[i]);
     }
-  } 
+  }
   else {
     // If constant dt
     dt0 = dt_constant;
@@ -470,6 +481,10 @@ void CNS::computeNewDt(int finest_level, int sub_cycle, Vector<int> &n_cycle,
       for (int i = 0; i <= finest_level; i++) {
         dt_min[i] = std::min(dt_min[i], change_max * dt_level[i]);
       }
+    }
+    // Absolute cap (cns.dt_max — disabled by default)
+    for (int i = 0; i <= finest_level; i++) {
+      dt_min[i] = std::min(dt_min[i], dt_max);
     }
     // Find the minimum over all levels
     int nfactor = 1;
