@@ -350,9 +350,22 @@ static void extrapolate(
             break;
         }
     }
+    // Positivity-preserving floor for the ghost extrapolation of positive-definite
+    // thermodynamic primitives (temperature, pressure). A steep wall-normal gradient
+    // — e.g. a cold injection wall (SRP nozzle, T clamped to the cold throat value)
+    // adjacent to a shock-/compression-heated image point — makes the linear/quadratic
+    // extrapolation overshoot a positive quantity through zero. A negative ghost
+    // temperature then reaches the EOS unclamped (when CLIP_MINTEMP is off) and yields
+    // rho = P/(R T) < 0, which poisons the neighbouring fluid reconstruction (NaN).
+    // We limit the ghost to at least this fraction of the (positive) surface value
+    // rather than masking the result downstream. This only triggers on genuine
+    // overshoot; well-resolved boundary layers leave the ghost well above the floor
+    // and are unaffected.
+    constexpr Real GP_POS_FLOOR_FRAC = Real(0.1);
+
     // only extrapolate up to QLS (Last Species), skipping aux vars like QC, QG, QEINT.
     for (int n = 0; n <= cls_t::QLS; ++n) {
-        
+
         if (eff_order >= 2) {
             // Quadratic Lagrange interpolation using surface value (slot 1)
             // and two image-point values (slots 2 and 3).
@@ -391,6 +404,14 @@ static void extrapolate(
         }
         else {
             prims(0, n) = prims(1, n);
+        }
+
+        // Positivity floor for temperature and pressure (see note above). The
+        // surface value prims(1,n) is positive for T and P, so the floor is a
+        // positive lower bound that prevents the ghost from crossing zero.
+        if (n == cls_t::QT || n == cls_t::QPRES) {
+            const Real floor_val = GP_POS_FLOOR_FRAC * prims(1, n);
+            if (prims(0, n) < floor_val) prims(0, n) = floor_val;
         }
     }
 }

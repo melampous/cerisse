@@ -124,6 +124,24 @@ class riemann_t {
     return dsgn * min(dlim, Math::abs(dcen));
   }
 
+  // \brief Positivity-preserving order-reduction sensor for one axis.
+  // In a strong rarefaction the characteristic MUSCL reconstruction is amplified
+  // by 1/c (the acoustic slopes carry dp/c, and the low sound speed of a
+  // near-vacuum pocket inflates them); the reconstructed face states collapse to
+  // near-vacuum and the HLLC update can then drive the cell-centred density
+  // negative (observed in the SRP under-expanded jet near-field). A deep local
+  // minimum in density OR pressure — the cell value far below BOTH axial
+  // neighbours — flags such a rarefaction/near-vacuum pocket. A shock is a
+  // monotone jump, never a local minimum, so this sensor is shock-safe (it does
+  // not smear the bow shock). When flagged, the caller drops the cell to first
+  // order (donor cell), which is positivity-robust under the usual CFL.
+  AMREX_GPU_DEVICE AMREX_FORCE_INLINE bool rarefaction_pocket(
+      Real qc, Real qm, Real qp, Real pc, Real pm, Real pp) const {
+    constexpr Real RAREFY_RATIO = Real(0.1);  // cell < 10% of larger neighbour
+    return (qc < RAREFY_RATIO * amrex::max(qm, qp)) ||
+           (pc < RAREFY_RATIO * amrex::max(pm, pp));
+  }
+
   AMREX_GPU_DEVICE AMREX_FORCE_INLINE void hllc(
       const Real rl, const Real ul, const Real pl, const Real ut1l,
       const Real ut2l, const Real el, const Real yl[NUM_SPECIES], const Real cl, 
@@ -232,12 +250,20 @@ class riemann_t {
     if (reduce_order) {
       for (int n = 0; n < cls.NSLOPE; ++n) { dq(i,j,k,n) = 0.0;}
       return;
-    }  
+    }
 #endif
+
+    // positivity: reduce to first order in a rarefaction/near-vacuum pocket
+    if (rarefaction_pocket(q(i, j, k, cls.QRHO), q(i - 1, j, k, cls.QRHO),
+                           q(i + 1, j, k, cls.QRHO), q(i, j, k, cls.QPRES),
+                           q(i - 1, j, k, cls.QPRES), q(i + 1, j, k, cls.QPRES))) {
+      for (int n = 0; n < cls.NSLOPE; ++n) { dq(i, j, k, n) = 0.0; }
+      return;
+    }
 
     Real cspeed = q(i, j, k, cls.QC) + 1.e-40;
 
-    // left slope  (involves  i and i-1)   
+    // left slope  (involves  i and i-1)
     Real dlft = Real(0.5) *
                     (q(i, j, k, cls.QPRES) - q(i - 1, j, k, cls.QPRES)) /
                     cspeed -
@@ -306,8 +332,16 @@ class riemann_t {
     if (reduce_order) {
       for (int n = 0; n < cls.NSLOPE; ++n) { dq(i,j,k,n) = 0.0;}
       return;
-   }  
+   }
 #endif
+
+    // positivity: reduce to first order in a rarefaction/near-vacuum pocket
+    if (rarefaction_pocket(q(i, j, k, cls.QRHO), q(i, j - 1, k, cls.QRHO),
+                           q(i, j + 1, k, cls.QRHO), q(i, j, k, cls.QPRES),
+                           q(i, j - 1, k, cls.QPRES), q(i, j + 1, k, cls.QPRES))) {
+      for (int n = 0; n < cls.NSLOPE; ++n) { dq(i, j, k, n) = 0.0; }
+      return;
+    }
 
     Real cspeed = q(i, j, k, cls.QC) + 1.e-40;
     Real dlft = Real(0.5) *
@@ -376,8 +410,16 @@ class riemann_t {
     if (reduce_order) {
       for (int n = 0; n < cls.NSLOPE; ++n) { dq(i,j,k,n) = 0.0;}
       return;
-    }  
+    }
 #endif
+
+    // positivity: reduce to first order in a rarefaction/near-vacuum pocket
+    if (rarefaction_pocket(q(i, j, k, cls.QRHO), q(i, j, k - 1, cls.QRHO),
+                           q(i, j, k + 1, cls.QRHO), q(i, j, k, cls.QPRES),
+                           q(i, j, k - 1, cls.QPRES), q(i, j, k + 1, cls.QPRES))) {
+      for (int n = 0; n < cls.NSLOPE; ++n) { dq(i, j, k, n) = 0.0; }
+      return;
+    }
 
     Real cspeed = q(i, j, k, cls.QC) + 1.e-40;
     Real dlft = Real(0.5) *
