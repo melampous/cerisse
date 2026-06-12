@@ -320,7 +320,49 @@ class weno_t {
 #endif
         
 
-        const Real alpha = cls->max_char_speed(iv, dir, ng, prims_in);
+        const Real alpha_raw = cls->max_char_speed(iv, dir, ng, prims_in);
+        AMREX_ASSERT_WITH_MESSAGE(alpha_raw > Real(0.0), "Non-positive LLF alpha in WENO/TENO flux split");
+        const Real alpha = (alpha_raw > Real(0.0))
+                               ? alpha_raw
+                               : std::numeric_limits<Real>::epsilon();
+
+        // --- Fix C: positivity-preserving first-order fallback --------------
+        // The high-order WENO/TENO reconstruction of the LLF-split conservative
+        // fluxes is not positivity-preserving: in the under-expanded jet near-
+        // field it overshoots the energy component and the update yields
+        // rho*e < 0 (negative internal energy) even though LLF keeps rho > 0.
+        // Detect a rarefaction / near-vacuum pocket (deep local minimum of
+        // density OR pressure across this face, along this direction) and use
+        // the first-order LLF (Rusanov) flux there, which is positivity-robust
+        // under the usual CFL. A shock is a monotone jump, not a local minimum,
+        // so the bow shock is not smeared. Mirrors the HLLC rarefaction_pocket
+        // sensor in Riemann.h. No-op in smooth flow (a 10x local drop is needed).
+        {
+          constexpr Real RAREFY_RATIO = Real(0.1);
+          bool pocket = false;
+          for (int side = -1; side <= 0 && !pocket; ++side) {  // cells iv-ivd, iv
+            const IntVect c = iv + side * ivd;
+            const Real rc = prims_in(c, cls_t::QRHO);
+            const Real pc = prims_in(c, cls_t::QPRES);
+            pocket = (rc < RAREFY_RATIO * amrex::max(prims_in(c - ivd, cls_t::QRHO),
+                                                     prims_in(c + ivd, cls_t::QRHO))) ||
+                     (pc < RAREFY_RATIO * amrex::max(prims_in(c - ivd, cls_t::QPRES),
+                                                     prims_in(c + ivd, cls_t::QPRES)));
+          }
+          if (pocket) {
+            Real fL[cls_t::NCONS], fR[cls_t::NCONS], uL[cls_t::NCONS], uR[cls_t::NCONS];
+            cls->prims2flux(iv - ivd, dir, prims_in, fL);
+            cls->prims2cons(iv - ivd, prims_in, uL);
+            cls->prims2flux(iv, dir, prims_in, fR);
+            cls->prims2cons(iv, prims_in, uR);
+            for (int n = 0; n < cls_t::NCONS; ++n)
+              flx(iv, n) = Real(0.5) * (fL[n] + fR[n]) -
+                           Real(0.5) * alpha * (uR[n] - uL[n]);
+            return;
+          }
+        }
+        // -------------------------------------------------------------------
+
         const auto roe_avg = cls->roe_avg_state(iv, dir, prims_in);
 
         Real cons[cls_t::NCONS], f[cls_t::NCONS], fp[2 * ng][cls_t::NCONS],
