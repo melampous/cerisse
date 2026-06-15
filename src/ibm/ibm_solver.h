@@ -1722,7 +1722,11 @@ public:
         h_prims[ifab] = prims_mf.array(mfi);
       }
       Gpu::copyAsync(Gpu::hostToDevice, h_prims.begin(), h_prims.end(), d_prims.begin());
-      // No streamSynchronize: copyAsync and ParallelFor share the same stream.
+      // Sync the async H2D copy before the host-side reads of managed members
+      // (geom_offsets) below: on WSL2, host access to managed memory while a
+      // copy is in flight on the stream faults. (computeAllGPs reads these
+      // BEFORE its copyAsync, so it is unaffected.)
+      Gpu::streamSynchronize();
     }
 
     auto* prims_arr = d_prims.data();
