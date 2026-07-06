@@ -3,6 +3,7 @@
 
 #include <AMReX_CONSTANTS.H>
 #include <AMReX_FArrayBox.H>
+#include <AMReX_ParmParse.H>
 
 #include <Constants.h>
 #include <TransPele.h>
@@ -68,7 +69,9 @@ class viscous_t {
 
     // mesh sizes
     const GpuArray<Real, AMREX_SPACEDIM> dxinv = geom.InvCellSizeArray();
-    const GpuArray<Real, AMREX_SPACEDIM> dx = geom.CellSizeArray(); 
+    const GpuArray<Real, AMREX_SPACEDIM> dx = geom.CellSizeArray();
+    const GpuArray<Real, AMREX_SPACEDIM> prob_lo = geom.ProbLoArray();
+    const bool is_rz = geom.IsRZ();
 
     // grid
    // const Box& bx = mfi.tilebox();        
@@ -152,17 +155,23 @@ class viscous_t {
     if constexpr(useLES)
     {
       Real Delta = cls->calc_delta(dx); // compute filter width
-      Real mu_sgs,cond_sgs, diff_sgs;
-      // loop over cells (including enough ghost to build stencil)  
-      const Box& bxgs = mfi.growntilebox(halfsten);   
-      // BEWARE cannot go over all the ghost cell !! 
+      // loop over cells (including enough ghost to build stencil)
+      const Box& bxgs = mfi.growntilebox(halfsten);
+      // BEWARE cannot go over all the ghost cell !!
       // for viscous order 2, LES order can be  2,4
       // for viscous order 4, LES order can be  2
       // for viscous order 6, LES cannot be used
       amrex::ParallelFor( bxgs, [=, *this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
 
-        Real Cp_o_Pr = lam_arr(i,j,k)/(mu_arr(i,j,k)+1.e-15); 
-        cls-> compute_sgsterms(i,j,k,prims, dxinv, Delta, Cp_o_Pr,  mu_sgs, cond_sgs, diff_sgs);
+        Real mu_sgs, cond_sgs, diff_sgs;   // per-cell SGS outputs (must be lambda-local, not captured-by-value)
+        Real Cp_o_Pr = lam_arr(i,j,k)/(mu_arr(i,j,k)+1.e-15);
+        // axisymmetric (r-z) hoop strain S_thetatheta = u_r/r passed to the SGS model
+        Real hoop = Real(0.0);
+        if (is_rz) {
+          const Real rr = prob_lo[0] + (Real(i)+Real(0.5))*dx[0];
+          hoop = (rr > Real(1.0e-12)) ? prims(i,j,k,cls_t::QU)/rr : Real(0.0);
+        }
+        cls-> compute_sgsterms(i,j,k,prims, dxinv, Delta, Cp_o_Pr,  mu_sgs, cond_sgs, diff_sgs, hoop, is_rz);
         mu_arr(i,j,k) += mu_sgs;
         lam_arr(i,j,k)+= cond_sgs;   
         for (int n=0;n<NUM_SPECIES; n++){        
@@ -191,21 +200,193 @@ class viscous_t {
 #if (AMREX_USE_GPIBM || CNS_USE_EB )   
       amrex::ParallelFor(bxgnodal,
                   [=,*this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {                                       
-                    this->cns_diff_ibm(i, j, k,dir, prims,flx,coeftrans, dxinv, cls,ibMarkers);
+                    this->cns_diff_ibm(i, j, k,dir, prims,flx,coeftrans,
+                                       dxinv, dx, prob_lo, is_rz, cls,ibMarkers);
                   });                      
-#else    
+#else
       amrex::ParallelFor(bxgnodal,
-                  [=,*this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {                   
-                    this->cns_diff(i, j, k,dir, prims,flx,coeftrans, dxinv, cls);
-                  });                  
+                  [=,*this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+                    this->cns_diff(i, j, k,dir, prims,flx,coeftrans,
+                                   dxinv, dx, prob_lo, is_rz, cls);
+                  });
 #endif
-        
-    }  
-    // end loop  ------------------------------------------------------
-  } 
 
- 
-  // ----------------------------------------------------------------------------------------------  
+    }
+    // end loop  ------------------------------------------------------
+  }
+
+#if !(AMREX_USE_GPIBM || CNS_USE_EB)
+  // ----------------------------------------------------------------------------------------------
+  // Region-parameterized overload (comm/comp overlap). Computes diffusion
+  // fluxes only on the faces of surroundingNodes(rbx, dir) for each dir,
+  // with transport coefficients evaluated on grow(rbx, halfsten) — exactly
+  // the cells read by the face interpolations. Faces whose BOTH adjacent
+  // cells lie inside the optional 'skip_cells' box are skipped (overlap
+  // shell pass; those faces were computed in Pass 1), and coefficient cells
+  // read only by skipped faces (grow(skip_cells, -halfsten)) are skipped
+  // too. Per-face numerics are identical to the MFIter version above, so
+  // splitting a tilebox into interior + shell regions yields
+  // bitwise-identical fluxes at every face.
+  // Requires prims valid on grow(rbx, max(halfsten (+1 for LES), NGHOST-safe)).
+  void inline dflux(const Geometry& geom, const Box& rbx,
+            const Array4<Real>& prims, std::array<FArrayBox*, AMREX_SPACEDIM> const &flxt,
+            const Array4<Real>& /*cons*/, const cls_t* cls,
+            const Box& skip_cells = Box()) {
+
+    // LES options
+    constexpr bool useLES = []{
+    if constexpr (requires { param::use_LES; })
+        return param::use_LES;
+    else
+        return false;
+    }();
+
+    // mesh sizes
+    const GpuArray<Real, AMREX_SPACEDIM> dxinv = geom.InvCellSizeArray();
+    const GpuArray<Real, AMREX_SPACEDIM> dx = geom.CellSizeArray();
+    const GpuArray<Real, AMREX_SPACEDIM> prob_lo = geom.ProbLoArray();
+    const bool is_rz = geom.IsRZ();
+
+    // face-skip box and coefficient-skip box (cells read ONLY by skipped
+    // faces; see proof in the header comment: a cell c in
+    // grow(skip_cells,-halfsten) is only read by faces whose two adjacent
+    // cells are both inside skip_cells, which are all skipped)
+    const Box skipbox = skip_cells;
+    const bool skip_ok = skipbox.ok();
+    const Box cskipbox = skip_ok ? amrex::grow(skipbox, -halfsten) : Box();
+    const bool cskip_ok = cskipbox.ok();
+
+    // coefficient cells needed by the face interpolations of this region
+    const Box bxg = amrex::grow(rbx, halfsten);
+
+    // allocate arrays for transport properties
+    FArrayBox coeffs(bxg, cls_t::NCOEF, The_Async_Arena());
+    const int CMU    = cls_t::CMU;
+    const int CLAM   = cls_t::CLAM;
+    const int CXI    = cls_t::CXI;
+    const int CRHOD  = cls_t::CRHOD;
+
+    const auto& mu_arr   = coeffs.array(CMU);     // dynamic viscosity
+    const auto& lam_arr  = coeffs.array(CLAM);    // thermal conductivity
+    const auto& xi_arr   = coeffs.array(CXI);     // bulk viscosity
+    const auto& rhoD_arr = coeffs.array(CRHOD);   // species diffusivity (times rho)
+
+    // pointer to array of transport coefficients
+    const amrex::Array4<const amrex::Real>& coeftrans = coeffs.array();
+
+    // calculate all transport properties and store in array
+#ifdef USE_PELEPHYSICS
+
+    FArrayBox qfab(bxg, cls_t::NPRIM, The_Async_Arena());     // prep space q-arrays
+    auto const& q = qfab.array();
+    // fill it with prims data
+    amrex::ParallelFor( bxg, [=, *this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+      for (int n=0;n<cls_t::NPRIM; n++){ q(i,j,k,n) = prims(i,j,k,n);}
+
+      q(i,j,k,cls_t::QRHO) *=rho_si2cgs; // convert to cgs for PelePhysics
+
+    });
+
+    // pointers/arrays to communicate with pelephysics
+    auto const& q_y   = qfab.const_array(cls_t::QFS);             // species mass fraction
+    auto const& q_T   = qfab.const_array(cls_t::QT);              // temperature
+    auto const& q_rho = qfab.const_array(cls_t::QRHO);            // density (change units below)
+
+
+    BL_PROFILE("PelePhysics::get_transport_coeffs()");
+    // Soret effect (not used yet)
+    const auto& chi_arr = coeffs.array(cls_t::CSORET);
+
+#if (PELEPVERSION==23)
+    trans_parms.allocate();
+    auto const* ltransparm = trans_parms.device_trans_parm();
+#else
+    auto const* ltransparm = trans_parms.device_parm();
+#endif
+
+    amrex::launch(bxg, [=] AMREX_GPU_DEVICE(Box const& tbx) {
+
+            auto trans = pele::physics::PhysicsType::transport();
+            trans.get_transport_coeffs(tbx, q_y, q_T, q_rho,
+                rhoD_arr, chi_arr, mu_arr,xi_arr, lam_arr, ltransparm);
+          });
+
+    // change units
+    amrex::ParallelFor(
+        bxg, [=, *this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+        mu_arr(i,j,k) *= visc_cgs2si;
+        lam_arr(i,j,k)*= cond_cgs2si;
+        for (int n=0;n<NUM_SPECIES; n++){
+          rhoD_arr(i,j,k,n) *= rhodiff_cgs2si;
+        }
+        xi_arr(i,j,k) *= visc_cgs2si;
+        });
+    //
+#else
+    amrex::ParallelFor(
+        bxg, [=, *this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+        if (cskip_ok && cskipbox.contains(i,j,k)) { return; }
+        mu_arr(i,j,k)  = cls->visc(prims(i,j,k,cls_t::QT));
+        lam_arr(i,j,k) = cls->cond(prims(i,j,k,cls_t::QT));
+        xi_arr(i,j,k)  = 0.0;
+        });
+#endif
+
+    // -------  LES Options  ----------- //
+    if constexpr(useLES)
+    {
+      Real Delta = cls->calc_delta(dx); // compute filter width
+      // SGS terms are added on the same cells the face interpolations read.
+      // compute_sgsterms reads a +-1 stencil around each cell, so prims must
+      // be valid on grow(bxg, 1) as well (guaranteed: halfsten+1 <= NGHOST).
+      amrex::ParallelFor( bxg, [=, *this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+        if (cskip_ok && cskipbox.contains(i,j,k)) { return; }
+
+        Real mu_sgs, cond_sgs, diff_sgs;   // per-cell SGS outputs (must be lambda-local, not captured-by-value)
+        Real Cp_o_Pr = lam_arr(i,j,k)/(mu_arr(i,j,k)+1.e-15);
+        // axisymmetric (r-z) hoop strain S_thetatheta = u_r/r passed to the SGS model
+        Real hoop = Real(0.0);
+        if (is_rz) {
+          const Real rr = prob_lo[0] + (Real(i)+Real(0.5))*dx[0];
+          hoop = (rr > Real(1.0e-12)) ? prims(i,j,k,cls_t::QU)/rr : Real(0.0);
+        }
+        cls-> compute_sgsterms(i,j,k,prims, dxinv, Delta, Cp_o_Pr,  mu_sgs, cond_sgs, diff_sgs, hoop, is_rz);
+        mu_arr(i,j,k) += mu_sgs;
+        lam_arr(i,j,k)+= cond_sgs;
+        for (int n=0;n<NUM_SPECIES; n++){
+          rhoD_arr(i,j,k,n) += diff_sgs;
+        }
+      });
+    }
+
+
+    // loop over directions -----------------------------------------------
+    for (int dir = 0; dir < AMREX_SPACEDIM; dir++) {
+      auto const& flx = flxt[dir]->array();
+
+      const Box& rbxnodal = amrex::surroundingNodes(rbx, dir);
+      const IntVect ivd = IntVect::TheDimensionVector(dir);
+
+      // compute diffusion fluxes
+      amrex::ParallelFor(rbxnodal,
+                  [=,*this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+                    if (skip_ok) {
+                      const amrex::IntVect iv{AMREX_D_DECL(i, j, k)};
+                      if (skipbox.contains(iv) && skipbox.contains(iv - ivd)) {
+                        return;  // face computed in Pass 1
+                      }
+                    }
+                    this->cns_diff(i, j, k,dir, prims,flx,coeftrans,
+                                   dxinv, dx, prob_lo, is_rz, cls);
+                  });
+
+    }
+    // end loop  ------------------------------------------------------
+  }
+#endif  // !(AMREX_USE_GPIBM || CNS_USE_EB)
+
+
+  // ----------------------------------------------------------------------------------------------
   /**
   * @brief Compute diffusion fluxes (viscosity + heat + diffusion).
   *        Calculates flux[i] which correspond to flux(i-1/2) between i and i-1
@@ -222,9 +403,12 @@ class viscous_t {
       const int i, const int j, const int k, const int d1,
       amrex::Array4<const amrex::Real> const& q,
       amrex::Array4<amrex::Real> const& flx,
-      amrex::Array4<const amrex::Real> const& coeffs,
-      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv,
-      const cls_t* /*cls*/) const {
+	      amrex::Array4<const amrex::Real> const& coeffs,
+	      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv,
+	      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dx,
+	      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& prob_lo,
+	      const bool is_rz,
+	      const cls_t* /*cls*/) const {
     
     using amrex::Real;
     const amrex::IntVect iv{AMREX_D_DECL(i, j, k)};
@@ -253,7 +437,18 @@ class viscous_t {
     const Real u13  = tangent_diff<param::order>(iv, d1, d3, QU1, q, dxinv);
     const Real u33  = tangent_diff<param::order>(iv, d1, d3, QU3, q, dxinv);
 #endif
-    const Real divu   = AMREX_D_TERM(u11, +u22, +u33);
+	    Real divu = AMREX_D_TERM(u11, +u22, +u33);
+#if (AMREX_SPACEDIM == 2)
+	    if (is_rz) {
+	      const Real r_face = (d1 == 0)
+	          ? prob_lo[0] + Real(i) * dx[0]
+	          : prob_lo[0] + (Real(i) + Real(0.5)) * dx[0];
+	      const Real dudr_face = (d1 == 0) ? u11 : u22;
+	      const Real ur_face = interp<param::order>(iv, d1, cls_t::QU, q);
+	      const Real tiny_r = Real(1.0e-14) * dx[0];
+	      divu += (r_face > tiny_r) ? (ur_face / r_face) : dudr_face;
+	    }
+#endif
     
     const Real muf    = interp<param::order>(iv, d1, cls_t::CMU, coeffs);
     const Real xif    = interp<param::order>(iv, d1, cls_t::CXI, coeffs);    
@@ -372,7 +567,106 @@ class viscous_t {
 #endif                                           
       
   }
-  // ---------------------------------------------------------------------------------------------  
+  // ---------------------------------------------------------------------------------------------
+#if (AMREX_USE_GPIBM || CNS_USE_EB)
+  AMREX_GPU_DEVICE AMREX_FORCE_INLINE bool ibm_diff_cell_usable(
+      const amrex::IntVect& iv, const Array4<uint8_t>& marker) const noexcept {
+    return (marker(iv, 0) == 0) || (marker(iv, 1) != 0);
+  }
+
+  AMREX_GPU_DEVICE AMREX_FORCE_INLINE bool ibm_diff_cell_fluid(
+      const amrex::IntVect& iv, const Array4<uint8_t>& marker) const noexcept {
+    return marker(iv, 0) == 0;
+  }
+
+  template <int order>
+  AMREX_GPU_DEVICE AMREX_FORCE_INLINE bool ibm_standard_diff_stencil_clean(
+      const amrex::IntVect& iv, int idir, const Array4<uint8_t>& marker) const noexcept {
+    const auto ivn = amrex::IntVect::TheDimensionVector(idir);
+
+    // Normal face derivative/interpolation footprint:
+    // order 2: iv-1, iv; order 4: iv-2..iv+1; order 6: iv-3..iv+2.
+    constexpr int half = order / 2;
+    for (int dn = -half; dn <= half - 1; ++dn) {
+      if (!ibm_diff_cell_fluid(iv + dn * ivn, marker)) return false;
+    }
+
+    // Tangential derivative footprint used by tangent_diff<order>. If any
+    // point is a GP or unreconstructed solid cell, the formal high-order
+    // Cartesian stencil is no longer clean relative to the immersed wall.
+    for (int tdir = 0; tdir < AMREX_SPACEDIM; ++tdir) {
+      if (tdir == idir) continue;
+      const auto ivt = amrex::IntVect::TheDimensionVector(tdir);
+      for (int dn = -half; dn <= half - 1; ++dn) {
+        const amrex::IntVect base = iv + dn * ivn;
+        for (int dt = 1; dt <= half; ++dt) {
+          if (!ibm_diff_cell_fluid(base + dt * ivt, marker)) return false;
+          if (!ibm_diff_cell_fluid(base - dt * ivt, marker)) return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  AMREX_GPU_DEVICE AMREX_FORCE_INLINE Real normal_diff_ibm2(
+      const amrex::IntVect& iv, int idir, int comp,
+      amrex::Array4<const amrex::Real> const& q,
+      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv,
+      const Array4<uint8_t>& marker) const noexcept {
+    const auto ivn = amrex::IntVect::TheDimensionVector(idir);
+    const amrex::IntVect ivm = iv - ivn;
+    if (ibm_diff_cell_usable(iv, marker) && ibm_diff_cell_usable(ivm, marker)) {
+      return (q(iv, comp) - q(ivm, comp)) * dxinv[idir];
+    }
+    return Real(0.0);
+  }
+
+  AMREX_GPU_DEVICE AMREX_FORCE_INLINE Real interp_ibm2(
+      const amrex::IntVect& iv, int idir, int comp,
+      amrex::Array4<const amrex::Real> const& q,
+      const Array4<uint8_t>& marker) const noexcept {
+    const auto ivn = amrex::IntVect::TheDimensionVector(idir);
+    const amrex::IntVect ivm = iv - ivn;
+    const bool okp = ibm_diff_cell_usable(iv, marker);
+    const bool okm = ibm_diff_cell_usable(ivm, marker);
+    if (okp && okm) return Real(0.5) * (q(iv, comp) + q(ivm, comp));
+    if (okp) return q(iv, comp);
+    if (okm) return q(ivm, comp);
+    return Real(0.0);
+  }
+
+  AMREX_GPU_DEVICE AMREX_FORCE_INLINE Real tangent_diff_cell_ibm2(
+      const amrex::IntVect& iv, int tdir, int comp,
+      amrex::Array4<const amrex::Real> const& q,
+      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv,
+      const Array4<uint8_t>& marker) const noexcept {
+    const auto ivt = amrex::IntVect::TheDimensionVector(tdir);
+    const amrex::IntVect ivp = iv + ivt;
+    const amrex::IntVect ivm = iv - ivt;
+    const bool okp = ibm_diff_cell_usable(ivp, marker);
+    const bool ok0 = ibm_diff_cell_usable(iv, marker);
+    const bool okm = ibm_diff_cell_usable(ivm, marker);
+
+    if (okp && okm) return Real(0.5) * (q(ivp, comp) - q(ivm, comp)) * dxinv[tdir];
+    if (okp && ok0) return (q(ivp, comp) - q(iv, comp)) * dxinv[tdir];
+    if (ok0 && okm) return (q(iv, comp) - q(ivm, comp)) * dxinv[tdir];
+    return Real(0.0);
+  }
+
+  AMREX_GPU_DEVICE AMREX_FORCE_INLINE Real tangent_diff_ibm2(
+      const amrex::IntVect& iv, int idir, int tdir, int comp,
+      amrex::Array4<const amrex::Real> const& q,
+      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv,
+      const Array4<uint8_t>& marker) const noexcept {
+    const auto ivn = amrex::IntVect::TheDimensionVector(idir);
+    const Real dp = tangent_diff_cell_ibm2(iv, tdir, comp, q, dxinv, marker);
+    const Real dm = tangent_diff_cell_ibm2(iv - ivn, tdir, comp, q, dxinv, marker);
+    return Real(0.5) * (dp + dm);
+  }
+#endif
+
+#if (AMREX_USE_GPIBM || CNS_USE_EB)
+  // ---------------------------------------------------------------------------------------------
   /**
   * @brief Compute diffusion fluxes in IB/EB.
   *
@@ -389,9 +683,12 @@ class viscous_t {
       const int i, const int j, const int k, const int d1,
       amrex::Array4<const amrex::Real> const& q,
       amrex::Array4<amrex::Real> const& flx,
-      amrex::Array4<const amrex::Real> const& coeffs,
-      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv,
-      const cls_t* cls, const Array4<uint8_t>& marker) const {
+	      amrex::Array4<const amrex::Real> const& coeffs,
+	      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv,
+	      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dx,
+	      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& prob_lo,
+	      const bool is_rz,
+	      const cls_t* cls, const Array4<uint8_t>& marker) const {
     
     using amrex::Real;
     const amrex::IntVect iv{AMREX_D_DECL(i, j, k)};
@@ -404,42 +701,47 @@ class viscous_t {
     AMREX_D_TERM(const int UM1 = cls_t::UMX + d1;, const int UM2 = cls_t::UMX + d2;
                , const int UM3 = cls_t::UMX + d3;)
 
-    // ivm  is iv -1 
-    const bool close_to_wall  = marker(iv,1) || marker(ivm,1);      //  flux close to a GP (IBM) or a cut-cell (EB)
+    // ivm is iv -1.  Use the high-order viscous stencil only when its whole
+    // footprint is pure fluid.  Otherwise, use IBM-aware second-order
+    // operators that never read unreconstructed solid cells.
+    const bool close_to_wall = !ibm_standard_diff_stencil_clean<param::order>(iv, d1, marker);
     const bool intersolid_flx = marker(iv,0) &&  marker(ivm,0);    // inter-flux
 
     if (intersolid_flx) return;  // flux =0  inside solid   
 
-    Real u11,dTdn,u21,u12,u22,u31,u13,u33,muf,xif,lamf;
+	    Real u11,dTdn,u21,u12,u22,u31,u13,u33,muf,xif,lamf;
+#if (AMREX_SPACEDIM == 2)
+	    Real ur_face = Real(0.0);
+#endif
     
-    constexpr int order_default = 2; 
-    int order_local = (close_to_wall ? order_default : param::order);   
-
 #if NUM_SPECIES > 1
     Real rhoD_f[NUM_SPECIES];
 #endif
     // reduce interpolation and differentiation to second order across the wall
     if (close_to_wall)
     {        
-      dTdn = normal_diff<order_default>(iv, d1, cls_t::QT, q, dxinv);
-      u11  = normal_diff<order_default>(iv, d1, QU1, q, dxinv);
+      dTdn = normal_diff_ibm2(iv, d1, cls_t::QT, q, dxinv, marker);
+      u11  = normal_diff_ibm2(iv, d1, QU1, q, dxinv, marker);
 #if (AMREX_SPACEDIM >= 2)
-      u21  = normal_diff<order_default>(iv, d1, QU2, q, dxinv);
-      u12  = tangent_diff<order_default>(iv, d1, d2, QU1, q, dxinv);
-      u22  = tangent_diff<order_default>(iv, d1, d2, QU2, q, dxinv);
+      u21  = normal_diff_ibm2(iv, d1, QU2, q, dxinv, marker);
+      u12  = tangent_diff_ibm2(iv, d1, d2, QU1, q, dxinv, marker);
+      u22  = tangent_diff_ibm2(iv, d1, d2, QU2, q, dxinv, marker);
 #endif
 #if (AMREX_SPACEDIM == 3)
-      u31  = normal_diff<order_default>(iv, d1, QU3, q, dxinv);
-      u13  = tangent_diff<order_default>(iv, d1, d3, QU1, q, dxinv);
-      u33  = tangent_diff<order_default>(iv, d1, d3, QU3, q, dxinv);
+      u31  = normal_diff_ibm2(iv, d1, QU3, q, dxinv, marker);
+      u13  = tangent_diff_ibm2(iv, d1, d3, QU1, q, dxinv, marker);
+      u33  = tangent_diff_ibm2(iv, d1, d3, QU3, q, dxinv, marker);
 #endif  
       // properties
-      muf  = interp<order_default>(iv, d1, cls_t::CMU, coeffs);
-      xif  = interp<order_default>(iv, d1, cls_t::CXI, coeffs);
-      lamf = interp<order_default>(iv, d1, cls_t::CLAM, coeffs);   
+      muf  = interp_ibm2(iv, d1, cls_t::CMU, coeffs, marker);
+      xif  = interp_ibm2(iv, d1, cls_t::CXI, coeffs, marker);
+	      lamf = interp_ibm2(iv, d1, cls_t::CLAM, coeffs, marker);
+#if (AMREX_SPACEDIM == 2)
+	      ur_face = interp_ibm2(iv, d1, cls_t::QU, q, marker);
+#endif
 #if NUM_SPECIES > 1          
       for (int n = 0; n < NUM_SPECIES; ++n) {  
-        rhoD_f[n] = interp<order_default>(iv, d1, cls_t::CRHOD + n, coeffs); 
+        rhoD_f[n] = interp_ibm2(iv, d1, cls_t::CRHOD + n, coeffs, marker);
       }
 #endif      
     }
@@ -460,7 +762,10 @@ class viscous_t {
       // properties
       muf  = interp<param::order>(iv, d1, cls_t::CMU, coeffs);
       xif  = interp<param::order>(iv, d1, cls_t::CXI, coeffs);
-      lamf = interp<param::order>(iv, d1, cls_t::CLAM, coeffs);
+	      lamf = interp<param::order>(iv, d1, cls_t::CLAM, coeffs);
+#if (AMREX_SPACEDIM == 2)
+	      ur_face = interp<param::order>(iv, d1, cls_t::QU, q);
+#endif
 #if NUM_SPECIES > 1          
       for (int n = 0; n < NUM_SPECIES; ++n) {  
         rhoD_f[n] = interp<param::order>(iv, d1, cls_t::CRHOD + n, coeffs);             
@@ -469,7 +774,17 @@ class viscous_t {
 
     }  
     
-    const Real divu   = AMREX_D_TERM(u11, +u22, +u33);
+	    Real divu = AMREX_D_TERM(u11, +u22, +u33);
+#if (AMREX_SPACEDIM == 2)
+	    if (is_rz) {
+	      const Real r_face = (d1 == 0)
+	          ? prob_lo[0] + Real(i) * dx[0]
+	          : prob_lo[0] + (Real(i) + Real(0.5)) * dx[0];
+	      const Real dudr_face = (d1 == 0) ? u11 : u22;
+	      const Real tiny_r = Real(1.0e-14) * dx[0];
+	      divu += (r_face > tiny_r) ? (ur_face / r_face) : dudr_face;
+	    }
+#endif
     
     AMREX_D_TERM(Real tau11 = muf * (2.0 * u11 - (2.0 / 3.0) * divu) + xif * divu;
                , Real tau12 = muf * (u12 + u21);, Real tau13 = muf * (u13 + u31);)
@@ -580,12 +895,62 @@ class viscous_t {
 #endif 
 
 
-  }   
+  }
+#endif
 
 
+	  // RZ viscous hoop-stress source for radial momentum:
+	  //   RHS(rho u_r) += -tau_theta_theta / r,
+	  //   tau_theta_theta = 2 mu u_r/r - 2/3 mu Theta + xi Theta,
+	  //   Theta = du_r/dr + u_r/r + du_z/dz.
+	  // The remaining viscous terms are already handled by the metric FV
+	  // divergence of the face fluxes.
+	  void inline rz_geometric_source(const amrex::Geometry& geom,
+	                                  const amrex::MFIter& mfi,
+	                                  const amrex::Array4<amrex::Real>& prims,
+	                                  const amrex::Array4<amrex::Real>& state,
+	                                  const cls_t* cls) {
+#if (AMREX_SPACEDIM == 2)
+	    if (!geom.IsRZ()) return;
 
+	    // Validation toggle (default ON): cns.rz_visc_hoop=0 disables the hoop
+	    // source for A/B testing its effect on near-axis vorticity. Default
+	    // preserves the as-implemented behaviour.
+	    static const int s_hoop = []{ int v = 1;
+	        amrex::ParmParse pp("cns"); pp.query("rz_visc_hoop", v); return v; }();
+	    if (!s_hoop) return;
 
-  }; 
+	    const auto dx = geom.CellSizeArray();
+	    const auto prob_lo = geom.ProbLoArray();
+	    const auto dxinv = geom.InvCellSizeArray();
+	    const Box& bx = mfi.tilebox();
+
+	    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+	      const Real r = prob_lo[0] + (Real(i) + Real(0.5)) * dx[0];
+	      const Real tiny_r = Real(1.0e-14) * dx[0];
+	      const Real ur = prims(i,j,k,cls_t::QU);
+	      const Real ur_over_r = (r > tiny_r)
+	          ? (ur / r)
+	          : normal_diff_cc<param::order>(
+	                amrex::IntVect(AMREX_D_DECL(i,j,k)), 0, cls_t::QU, prims, dxinv);
+
+	      const amrex::IntVect iv(AMREX_D_DECL(i,j,k));
+	      const Real durdr = normal_diff_cc<param::order>(iv, 0, cls_t::QU, prims, dxinv);
+	      const Real duzdz = normal_diff_cc<param::order>(iv, 1, cls_t::QV, prims, dxinv);
+	      const Real theta = durdr + ur_over_r + duzdz;
+
+	      const Real mu = cls->visc(prims(i,j,k,cls_t::QT));
+	      const Real xi = Real(0.0);
+	      const Real tau_tt = mu * (Real(2.0) * ur_over_r - Real(2.0/3.0) * theta)
+	                        + xi * theta;
+	      state(i,j,k,cls_t::UMX) -= tau_tt / amrex::max(r, tiny_r);
+	    });
+#else
+	    amrex::ignore_unused(geom, mfi, prims, state, cls);
+#endif
+	  }
+
+  };
 
 //---------------------------------------------
 #endif

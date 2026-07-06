@@ -36,18 +36,25 @@ public:
 class no_euler_t
 {
 public:
+  static constexpr bool rz_pressure_split_capable = false;  // RZ pressure-split is WENO-only
   template<typename... Args>
 #if (AMREX_USE_GPIBM || CNS_USE_EB )  
   // void eflux_ibm(Args&&... args){}
   void eflux_ibm(const Geometry& /*geom*/, const MFIter& /*mfi*/,
                     const Array4<Real>& /*prims*/, std::array<FArrayBox*, AMREX_SPACEDIM> const /*&flxt*/,
                     const Array4<Real>& /*cons*/, Args&&... args ) { }
-#else  
+#else
   //void eflux(Args&&... args){}
   void eflux(const Geometry& /*geom*/, const MFIter& /*mfi*/,
-            const Array4<Real>& /*prims*/, std::array<FArrayBox*, AMREX_SPACEDIM> const /*&flxt*/,            
+            const Array4<Real>& /*prims*/, std::array<FArrayBox*, AMREX_SPACEDIM> const /*&flxt*/,
             const Array4<Real>& /*rhs*/, Args&&... args) { }
-#endif  
+
+  // Region-parameterized no-op (comm/comp overlap support)
+  template<typename... Args2>
+  void eflux(const Geometry& /*geom*/, const Box& /*rbx*/,
+            const Array4<const Real>& /*prims*/, std::array<FArrayBox*, AMREX_SPACEDIM> const& /*flxt*/,
+            const Array4<Real>& /*rhs*/, Args2&&... args) { }
+#endif
 };
 
 // no diffusive flux
@@ -67,12 +74,18 @@ public:
             const Array4<Real>& rhs, Args&&... args) { }
 
 #else
-  //void dflux(Args&&... args) {}  
+  //void dflux(Args&&... args) {}
   void dflux(const Geometry& geom, const MFIter& mfi,
-            const Array4<Real>& prims, std::array<FArrayBox*, AMREX_SPACEDIM> const &flxt,            
+            const Array4<Real>& prims, std::array<FArrayBox*, AMREX_SPACEDIM> const &flxt,
             const Array4<Real>& rhs, Args&&... args) { }
 
-#endif  
+  // Region-parameterized no-op (comm/comp overlap support)
+  template<typename... Args2>
+  void dflux(const Geometry& /*geom*/, const Box& /*rbx*/,
+            const Array4<Real>& /*prims*/, std::array<FArrayBox*, AMREX_SPACEDIM> const& /*flxt*/,
+            const Array4<Real>& /*rhs*/, Args2&&... args) { }
+
+#endif
 
   // no-op RZ geometric viscous source (no diffusion => no hoop stress)
   void inline rz_geometric_source(const Geometry& /*geom*/, const MFIter& /*mfi*/,

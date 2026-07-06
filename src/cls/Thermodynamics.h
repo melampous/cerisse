@@ -5,6 +5,7 @@ using namespace amrex;
 
 #include <Constants.h>
 #include <CNSconstants.h>
+#include <limits>
 
 
 using namespace universal_constants;
@@ -146,7 +147,9 @@ class calorifically_perfect_gas_t {
     Real udir = ux * vdir[0] + uy * vdir[1] + uz * vdir[2];
 
     Real ekin = Real(0.5) * (ux * ux + uy * uy + uz * uz);
-    Real rhoet = rho * (cp * prims(i, j, k, idx_t::QT) + ekin);
+    // total energy density rho*E = rho*(cv*T + ekin); the +P below then makes the
+    // energy flux (rho*E + P)*udir. (Was cp*T = rho*E + P, which double-counted P.)
+    Real rhoet = rho * (cv * prims(i, j, k, idx_t::QT) + ekin);
 
     fluxes(i, j, k, idx_t::URHO) = rho * udir;
     fluxes(i, j, k, idx_t::UMX)  = rho * ux * udir + P * vdir[0];
@@ -158,11 +161,23 @@ class calorifically_perfect_gas_t {
   // TODO: remove ParallelFor from here. Keep closures local
   void inline cons2prims(const MFIter& mfi, const Array4<Real>& cons,
                          const Array4<Real>& prims) const {
+    cons2prims(mfi.growntilebox(idx_t::NGHOST), cons, prims);
+  }
 
-    const Box& bxg = mfi.growntilebox(idx_t::NGHOST);
+  // Box-parameterized overload (used by the comm/comp-overlap RHS path to
+  // convert only a sub-region, e.g. valid cells first and the ghost ring
+  // later). Cells inside the optional 'skip' box are left untouched (used
+  // to convert only the ghost ring in one launch). Per-cell math is
+  // identical to the MFIter version.
+  void inline cons2prims(const Box& bxg, const Array4<Real>& cons,
+                         const Array4<Real>& prims,
+                         const Box& skip = Box()) const {
+    const Box skipbox = skip;
+    const bool do_skip = skip.ok();
     amrex::ParallelFor(bxg, [=, *this] AMREX_GPU_DEVICE(int i, int j, int k) {
+      if (do_skip && skipbox.contains(i, j, k)) { return; }
       Real rho = cons(i, j, k, idx_t::URHO);
-      rho = max(smallr, rho);
+      rho = max(small_rho(), rho);
       Real rhoinv = Real(1.0) / rho;
       Real ux = cons(i, j, k, idx_t::UMX) * rhoinv;
       Real uy = cons(i, j, k, idx_t::UMY) * rhoinv;
@@ -233,10 +248,11 @@ class calorifically_perfect_gas_t {
     const amrex::IntVect ivd(amrex::IntVect::TheDimensionVector(dir));
     Real alpha = 0.0;
     for (int m = -ng; m < ng; ++m) {
-      alpha = std::max(alpha, std::abs(prims(iv + m * ivd, QUN)) +
-                                  prims(iv + m * ivd, idx_t::QC));
+      const Real wavespeed = std::abs(prims(iv + m * ivd, QUN)) +
+                             prims(iv + m * ivd, idx_t::QC);
+      if (wavespeed > alpha) alpha = wavespeed;
     }
-    return alpha;
+    return (alpha > Real(0.0)) ? alpha : std::numeric_limits<Real>::epsilon();
   }
 
   /// @brief Roe-averaged states between i-1 and i.
@@ -259,9 +275,11 @@ class calorifically_perfect_gas_t {
     r.CT = (dir + 1) % 3;
     r.CTT = (dir + 2) % 3;
 
-    const Real rl = prims(ivm, idx_t::QRHO);
-    const Real rr = prims(iv, idx_t::QRHO);
-    const Real rratio = std::sqrt(rl) / (std::sqrt(rl) + std::sqrt(rr));
+    const Real rl = amrex::max(prims(ivm, idx_t::QRHO), small_rho());
+    const Real rr = amrex::max(prims(iv, idx_t::QRHO), small_rho());
+    const Real sqrt_rl = std::sqrt(rl);
+    const Real sqrt_rr = std::sqrt(rr);
+    const Real rratio = sqrt_rl / (sqrt_rl + sqrt_rr);
     r.u = prims(ivm, idx_t::QU + r.CN) * rratio +
           prims(iv, idx_t::QU + r.CN) * (1.0 - rratio);
     r.v = prims(ivm, idx_t::QU + r.CT) * rratio +
@@ -269,17 +287,19 @@ class calorifically_perfect_gas_t {
     r.w = prims(ivm, idx_t::QU + r.CTT) * rratio +
           prims(iv, idx_t::QU + r.CTT) * (1.0 - rratio);
     r.q2 = r.u * r.u + r.v * r.v + r.w * r.w;
-    const Real El = prims(ivm, idx_t::QEINT) +
+    const Real pl = amrex::max(prims(ivm, idx_t::QPRES), min_press());
+    const Real pr = amrex::max(prims(iv, idx_t::QPRES), min_press());
+    const Real El = amrex::max(prims(ivm, idx_t::QEINT), get_ei_min()) +
                     Real(0.5) * (prims(ivm, idx_t::QU) * prims(ivm, idx_t::QU) +
                                  prims(ivm, idx_t::QV) * prims(ivm, idx_t::QV) +
                                  prims(ivm, idx_t::QW) * prims(ivm, idx_t::QW));
-    const Real Er = prims(iv, idx_t::QEINT) +
+    const Real Er = amrex::max(prims(iv, idx_t::QEINT), get_ei_min()) +
                     Real(0.5) * (prims(iv, idx_t::QU) * prims(iv, idx_t::QU) +
                                  prims(iv, idx_t::QV) * prims(iv, idx_t::QV) +
                                  prims(iv, idx_t::QW) * prims(iv, idx_t::QW));
-    r.H = (El + prims(ivm, idx_t::QPRES) / rl) * rratio +
-          (Er + prims(iv, idx_t::QPRES) / rr) * (1.0 - rratio);
-    r.h = r.H - 0.5 * r.q2;
+    r.H = (El + pl / rl) * rratio +
+          (Er + pr / rr) * (1.0 - rratio);
+    r.h = amrex::max(r.H - 0.5 * r.q2, this->gamma * get_ei_min());
     r.c = std::sqrt((this->gamma - 1) * r.h);
 
     return r;
@@ -661,9 +681,19 @@ class multispecies_pele_gas_t {
   // TODO: remove ParallelFor from here. Keep closures local
   void inline cons2prims(const MFIter& mfi, const Array4<Real>& cons,
                          const Array4<Real>& prims) const {
-    const Box& bxg = mfi.growntilebox(idx_t::NGHOST);
+    cons2prims(mfi.growntilebox(idx_t::NGHOST), cons, prims);
+  }
 
+  // Box-parameterized overload (used by the comm/comp-overlap RHS path to
+  // convert only a sub-region). Cells inside the optional 'skip' box are
+  // left untouched. Per-cell math identical to the MFIter version.
+  void inline cons2prims(const Box& bxg, const Array4<Real>& cons,
+                         const Array4<Real>& prims,
+                         const Box& skip = Box()) const {
+    const Box skipbox = skip;
+    const bool do_skip = skip.ok();
     amrex::ParallelFor(bxg, [=, *this] AMREX_GPU_DEVICE(int i, int j, int k) {
+      if (do_skip && skipbox.contains(i, j, k)) { return; }
       Real rho = 0.0;
       for (int n = 0; n < NUM_SPECIES; ++n) {
         rho += cons(i, j, k, idx.UFS + n);

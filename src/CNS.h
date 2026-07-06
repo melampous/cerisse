@@ -52,7 +52,34 @@ class CNS : public amrex::AmrLevel {
                    amrex::FluxRegister* fr_as_crse,
                    amrex::FluxRegister* fr_as_fine);
 
-#if NUM_SPECIES > 1                   
+  // Communication/computation-overlap variant of (FillPatch + compute_rhs)
+  // for one RK stage. Enabled by cns.overlap_comm=1; supports only the
+  // non-IBM/non-EB, non-RZ, SSP-RK(3,3) configuration. Fills Stemp itself
+  // (valid copy from SRC; coarse-fine ghosts via a split-phase equivalent
+  // of amrex::FillPatcher whose communication overlaps the interior flux
+  // computation; same-level ghosts via FillBoundary_nowait/finish, also
+  // overlapped; physical BCs via StateDataPhysBCFunct) and leaves the RHS
+  // in Stemp, exactly like FillPatch + compute_rhs would.
+  void compute_rhs_overlap(amrex::MultiFab& Stemp, amrex::Real dt,
+                           amrex::FluxRegister* fr_as_crse,
+                           amrex::FluxRegister* fr_as_fine,
+                           amrex::Real t_fill, amrex::MultiFab& SRC,
+                           amrex::MultiFab& prims_mf);
+
+  // comm/comp overlap: cached coarse-fine boundary data (level > 0). This is
+  // a split-phase re-implementation of amrex::FillPatcher's
+  // fillCoarseFineBoundary: the coarse-patch communication is started with
+  // ParallelCopy_nowait before the interior computation and finished after,
+  // so the coarse-fine exchange wait is overlapped as well. The cache must
+  // be reset whenever the coarse data changes (done in post_timestep, same
+  // lifetime rule as AmrLevel's FillPatcher).
+  amrex::Vector<std::pair<amrex::Real, std::unique_ptr<amrex::MultiFab>>>
+      m_ovl_cfb_data;
+  std::unique_ptr<amrex::MultiFab> m_ovl_cfb_tmp;
+  std::unique_ptr<amrex::MultiFab> m_ovl_cfb_fine;
+  void resetOvlCFB() { m_ovl_cfb_data.clear(); }
+
+#if NUM_SPECIES > 1
   void clip_species_state(amrex::MultiFab& S);                   
 #endif  
 
@@ -185,6 +212,11 @@ class CNS : public amrex::AmrLevel {
   static int dist_linear;
   static int order_rk;
   static int stages_rk;
+
+  // cns.overlap_comm (default 0): overlap same-level ghost exchange with
+  // interior RHS computation in the SSP-RK(3,3) advance. 0 = exactly the
+  // legacy FillPatch + compute_rhs path.
+  static int overlap_comm;
 
   // When true, the end-of-step IBM abort check uses "approaching the
   // smallr / ei_min clipping floors" as the failure criterion instead of

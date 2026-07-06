@@ -43,6 +43,7 @@ std::string CNS::eb_redistribution_type = "NoRedist";
 int CNS::nstep_screen_output = 10;
 int CNS::order_rk = 2;
 int CNS::stages_rk = 2;
+int CNS::overlap_comm = 0;
 bool CNS::strict_positivity = false;
 bool CNS::soft_positivity = false;
 bool CNS::pass2_static = false;
@@ -137,6 +138,19 @@ void CNS::read_params() {
     if (order_rk == 3 && !(stages_rk == 4 || stages_rk == 3)) {
       amrex::Abort("SSPRK3 number of stages must equal 3 or 4");
     }
+  }
+
+  pp.query("overlap_comm", overlap_comm);
+  if (overlap_comm != 0) {
+#if defined(AMREX_USE_GPIBM) || defined(CNS_USE_EB)
+    amrex::Abort("cns.overlap_comm=1 is not supported in IBM/EB builds");
+#endif
+    if (order_rk != 3 || stages_rk != 3) {
+      amrex::Abort(
+          "cns.overlap_comm=1 requires order_rk=3 and stages_rk=3 "
+          "(SSP-RK(3,3)); disable cns.overlap_comm or switch scheme");
+    }
+    amrex::Print() << "  cns.overlap_comm = 1 (overlap ghost exchange with interior RHS computation)\n";
   }
 
   pp.query("strict_positivity", strict_positivity);
@@ -658,11 +672,25 @@ void CNS::post_timestep(int /* iteration*/) {
   BL_PROFILE("post_timestep");
   //amrex::Print() << " oo CNS::post_timestep " << std::endl;
 
-  if (do_reflux && level < parent->finestLevel()) {
-    MultiFab &S = get_new_data(State_Type);
-    CNS &fine_level = getLevel(level + 1);
-    fine_level.flux_reg->Reflux(S, Real(1.0), 0, 0, PROB::ProbClosures::NCONS, geom);
+  // The overlap path caches coarse-fine boundary source data in the finer
+  // level (keyed by coarse old/new times). Reset it here — after the finer
+  // level has finished its subcycles on this level's data — exactly as
+  // AmrLevel::post_timestep does for its FillPatcher. No-op when
+  // overlap_comm is off (the cache is never populated in that case).
+  if (overlap_comm && level < parent->finestLevel()) {
+    getLevel(level + 1).resetOvlCFB();
   }
+
+  // Reflux disabled: compute_rhs never calls FluxRegister::FineAdd/CrseInit
+  // (verified — no call sites anywhere in src/), and advance() zeroes the
+  // registers every step, so this Reflux was a full MPI ParallelCopy +
+  // kernels on all-zero registers each step: a numeric no-op, pure overhead.
+  // Re-enable once compute_rhs actually fills the flux registers.
+  // if (do_reflux && level < parent->finestLevel()) {
+  //   MultiFab &S = get_new_data(State_Type);
+  //   CNS &fine_level = getLevel(level + 1);
+  //   fine_level.flux_reg->Reflux(S, Real(1.0), 0, 0, PROB::ProbClosures::NCONS, geom);
+  // }
 
   if (level < parent->finestLevel()) {
     avgDown();
@@ -771,14 +799,30 @@ void CNS::post_regrid(int lbase, int new_finest) {
       auto const& state = S.array(mfi);
       auto const& mk    = ib_mf.const_array(mfi);
 
-      // Tag array: 0 = fluid or ghost point (valid)
-      //            1 = interior solid (needs fixing)
-      //            2 = solid, already fixed this iteration
-      BaseFab<int> tagfab(bxg, 1, The_Managed_Arena());
+      // Tag values: 0 = fluid or ghost point (valid)
+      //             1 = interior solid (needs fixing)
+      //             2 = solid, fixed in a previous iteration
+      //
+      // JACOBI DOUBLE BUFFER (F3 fix, same defect as the end-of-step Pass-2
+      // fill in src/tim/advance.cpp — see the full rationale there): comp
+      // iter%2 of tagfab is the previous iterate (read-only), comp 1-iter%2
+      // receives the next; buffers swap by parity. The old in-place update
+      // raced within a GPU kernel launch (neighbor tag/state read while
+      // sibling threads set tag=2 and overwrote state) — nondeterministic
+      // fill values. `state` needs no second buffer: cells written have
+      // old-tag 1, cells read have old-tag 0/2 — disjoint. CPU and GPU now
+      // compute identical (Jacobi) fill values; fresh-cell fills change
+      // slightly vs the old sequential Gauss-Seidel CPU sweep (an IC for
+      // newly-uncovered cells, physics-neutral).
+      BaseFab<int> tagfab(bxg, 2, The_Managed_Arena());
       auto const& tag = tagfab.array();
 
       ParallelFor(bxg, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
-        tag(i,j,k) = (mk(i,j,k,0) != 0 && mk(i,j,k,1) == 0) ? 1 : 0;
+        const int t = (mk(i,j,k,0) != 0 && mk(i,j,k,1) == 0) ? 1 : 0;
+        // Init BOTH buffers: ghost-ring cells (bxg minus bx) are never
+        // rewritten by the fill kernel (domain bx).
+        tag(i,j,k,0) = t;
+        tag(i,j,k,1) = t;
       });
 
       // [A] Iterative flood fill — propagate valid data inward one ring
@@ -786,9 +830,15 @@ void CNS::post_regrid(int lbase, int new_finest) {
       for (int iter = 0; iter < MAX_FLOOD_ITER; ++iter) {
         Gpu::DeviceScalar<int> d_nfixed(0);
         int* p_nfixed = d_nfixed.dataPtr();
+        const int told = iter & 1;   // previous iterate (read)
+        const int tnew = 1 - told;   // next iterate (write)
 
         ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
-          if (tag(i,j,k) != 1) return;
+          const int t = tag(i,j,k,told);
+          if (t != 1) {              // valid or already fixed:
+            tag(i,j,k,tnew) = t;     // carry tag into the next iterate
+            return;
+          }
 
           Real sum[PROB::ProbClosures::NCONS] = {};
           int count = 0;
@@ -802,7 +852,8 @@ void CNS::post_regrid(int lbase, int new_finest) {
                 if (di == 0 && dj == 0 && dk == 0) continue;
                 const int ii = i+di, jj = j+dj, kk = k+dk;
                 if (!bxg.contains(IntVect(AMREX_D_DECL(ii,jj,kk)))) continue;
-                if (tag(ii,jj,kk) == 0 || tag(ii,jj,kk) == 2) {
+                const int tn = tag(ii,jj,kk,told);
+                if (tn == 0 || tn == 2) {
                   for (int n = 0; n < ncons; ++n)
                     sum[n] += state(ii,jj,kk,n);
                   count++;
@@ -814,8 +865,10 @@ void CNS::post_regrid(int lbase, int new_finest) {
             const Real inv = Real(1.0) / count;
             for (int n = 0; n < ncons; ++n)
               state(i,j,k,n) = sum[n] * inv;
-            tag(i,j,k) = 2;
+            tag(i,j,k,tnew) = 2;
             Gpu::Atomic::Add(p_nfixed, 1);
+          } else {
+            tag(i,j,k,tnew) = 1;     // still unreached, try next iteration
           }
         });
 
@@ -1407,6 +1460,32 @@ void CNS::rebuildIBM() {
   // only rebuild them once the entire regrid cascade is complete (i.e.,
   // when the finest level calls rebuildIBM).
   if (level == parent->finestLevel()) {
+     // --- Runaway-regrid guard (benefits ALL IBM+AMR cases) -------------------
+     // A refinement criterion that is NOT grid-independent (e.g. a pure flow-
+     // gradient tag whose stencil straddles the artificial IBM ghost/jet jump)
+     // can make the AMR regrid cascade never converge: every regrid produces a
+     // different fine-grid layout, so this re-surfacing fires endlessly within a
+     // single coarse step with no time advance -- the run wedges silently (CPU
+     // pinned, only plt00000, no STEP). Rather than spin forever, fail loud with
+     // an actionable diagnostic (consistent with the solver's no-silent-fix /
+     // abort-with-diagnostics policy).
+     static int s_last_step = -1;
+     static int s_rebuilds_this_step = 0;
+     const int cur_step = parent->levelSteps(0);
+     if (cur_step != s_last_step) { s_last_step = cur_step; s_rebuilds_this_step = 0; }
+     const int max_rebuilds = 32 * (parent->maxLevel() + 1);
+     if (++s_rebuilds_this_step > max_rebuilds) {
+        amrex::Abort(
+          "IBM+AMR: surface re-build fired " + std::to_string(s_rebuilds_this_step) +
+          " times within coarse step " + std::to_string(cur_step) +
+          " (cap " + std::to_string(max_rebuilds) + ") -- the AMR regrid cascade is "
+          "NOT converging. Cause: a non-grid-independent refinement tag near the IBM "
+          "surface (a flow-gradient stencil that straddles the IBM ghost/jet jump "
+          "oscillates as FillPatch re-interpolates each regrid). Fix: add a "
+          "GEOMETRY-ANCHORED (grid-independent) refinement region near the IBM "
+          "surface in user_tagging, and skip the gradient tag where the stencil "
+          "touches solid/ghost cells. See exm/underexpanded_jet/2d/npr3_ibm_solid/prob.h.");
+     }
      for (int lev = parent->finestLevel(); lev >= 0; --lev) {
         IBM::ib.computeSurfIndices(lev);
      }
@@ -1434,6 +1513,16 @@ void CNS::writeSurfFile() {
     
     FillPatch(*this, Sdata, nghost, time, State_Type, 0, ncons);
 
+    // In 2D, prob_initdata / bcnormal may never write UMZ (the index exists
+    // even in 2D), so valid cells and physical-BC ghosts can hold garbage.
+    // compute_rhs() sanitises its own working copy each stage, but this
+    // export path reads Sdata directly — zero UMZ here too so cons2prims
+    // does not turn garbage z-kinetic-energy into floor-clipped P/T on the
+    // exported surface. Mirrors compute_rhs.cpp.
+#if (AMREX_SPACEDIM < 3)
+    Sdata.setVal(Real(0.0), PROB::ProbClosures::UMZ, 1, Sdata.nGrow());
+#endif
+
     // Convert conservative to primitive variables for surface interpolation
     int nprim = PROB::ProbClosures::NPRIM;
     MultiFab prims_mf(Sdata.boxArray(), Sdata.DistributionMap(),
@@ -1444,6 +1533,20 @@ void CNS::writeSurfFile() {
 
     const PROB::ProbClosures* cls_d = CNS::d_prob_closures;
     const PROB::ProbClosures* cls_h = CNS::h_prob_closures; 
+    amrex::ignore_unused(cls_h);
+
+    bool plot_gp = false;
+    std::string gp_filename = surf_filename + "_gp";
+    {
+      ParmParse ppib("ib");
+      ppib.query("plot_gp", plot_gp);
+      ppib.query("gp_file", gp_filename);
+    }
+
+    if (plot_gp) {
+      IBM::ib.computeAllGPs(prims_mf, cls_d, this->level);
+      IBM::ib.plotGP(time, istep, gp_filename, this->level);
+    }
 
     IBM::ib.computeSURFs(prims_mf,cls_d,this->level); // computed at each level. From low to high.
 
