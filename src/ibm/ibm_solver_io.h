@@ -352,6 +352,89 @@ void plotSURF(
     }
 }
 
+void plotGP(
+    const amrex::Real time, int step, const std::string& prefix, int lev)
+{
+    if (lev < 0 || lev >= static_cast<int>(gpstore_a.size())) return;
+    const auto& gpstore = gpstore_a[lev];
+    if (gpstore.total_ngps == 0) return;
+
+    // The computeAllGPs kernel that fills n_valid / recon_prim is asynchronous;
+    // the host reads of those managed arrays below must wait for it (WSL2
+    // managed memory faults on concurrent access — same class as the
+    // computeSURFs fix in 524df480a). Sync here (cold diagnostic path) rather
+    // than at the end of computeAllGPs (hot path, called every RK stage).
+    Gpu::streamSynchronize();
+
+    std::string base_dir = ".";
+    std::string file_prefix = prefix;
+    auto pos = prefix.find_last_of("/\\");
+    if (pos != std::string::npos) {
+        base_dir = prefix.substr(0, pos);
+        file_prefix = prefix.substr(pos + 1);
+        if (!amrex::UtilCreateDirectory(base_dir, 0755)) {
+            amrex::Print() << "Error: Could not create directory " << base_dir << "\n";
+        }
+    }
+
+    const int rank = amrex::ParallelDescriptor::MyProc();
+    std::ostringstream name;
+    name << base_dir << "/" << file_prefix
+         << "_lev" << lev
+         << "_rank" << rank
+         << "_" << std::setw(5) << std::setfill('0') << step
+         << ".csv";
+
+    std::ofstream ofs(name.str());
+    if (!ofs.good()) {
+        amrex::Print() << "Error: Cannot open GP diagnostic file "
+                       << name.str() << " for writing.\n";
+        return;
+    }
+
+    const auto prob_lo = amr_p->Geom(lev).ProbLoArray();
+    const auto& dx = dx_a[lev];
+
+    ofs << "time,step,level,rank,gp_index,i,j,k,x,y,z,"
+           "ib_x,ib_y,ib_z,disGP,n_valid,rho,u,v,w,p,T\n";
+    ofs << std::setprecision(17);
+    for (int ii = 0; ii < gpstore.total_ngps; ++ii) {
+        const int i = gpstore.gp_ijk[ii](0);
+        const int j = gpstore.gp_ijk[ii](1);
+#if (AMREX_SPACEDIM == 3)
+        const int k = gpstore.gp_ijk[ii](2);
+#else
+        const int k = 0;
+#endif
+        const Real x = prob_lo[0] + (Real(0.5) + Real(i)) * dx[0];
+        const Real y = prob_lo[1] + (Real(0.5) + Real(j)) * dx[1];
+#if (AMREX_SPACEDIM == 3)
+        const Real z = prob_lo[2] + (Real(0.5) + Real(k)) * dx[2];
+#else
+        const Real z = Real(0.0);
+#endif
+        ofs << time << "," << step << "," << lev << "," << rank << "," << ii
+            << "," << i << "," << j << "," << k
+            << "," << x << "," << y << "," << z
+            << "," << gpstore.ib_xyz[ii](0)
+            << "," << gpstore.ib_xyz[ii](1)
+#if (AMREX_SPACEDIM == 3)
+            << "," << gpstore.ib_xyz[ii](2)
+#else
+            << "," << Real(0.0)
+#endif
+            << "," << gpstore.disGP[ii]
+            << "," << gpstore.n_valid[ii]
+            << "," << gpstore.recon_prim[ii](0)
+            << "," << gpstore.recon_prim[ii](1)
+            << "," << gpstore.recon_prim[ii](2)
+            << "," << gpstore.recon_prim[ii](3)
+            << "," << gpstore.recon_prim[ii](4)
+            << "," << gpstore.recon_prim[ii](5)
+            << "\n";
+    }
+}
+
 // ============================================================================
 // 3. buildCSR
 // ============================================================================

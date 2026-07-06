@@ -18,8 +18,11 @@
 //   8. check_interpolation_stencil — Validate stencil containment in box
 // ============================================================================
 // ============================================================================
-// 1. valid_mirror
+// 1. valid_mirror — count fluid cells in the (iorder_t+1)^D interpolation block
+//    whose lower corner is (i,j,k).  iorder_t=1: bilinear 2^D corners;
+//    iorder_t=2: the 3^D WLS neighbourhood.
 // ============================================================================
+template <int iorder_t>
 static AMREX_FORCE_INLINE AMREX_GPU_HOST_DEVICE
 int valid_mirror(
     int i, int j, int k,
@@ -27,24 +30,20 @@ int valid_mirror(
 {
     int fluid_count = 0;
 #if (AMREX_SPACEDIM == 2)
-    for (int di = 0; di <= 1; ++di) {
-      for (int dj = 0; dj <= 1; ++dj) {
-          int ii = i + di;
-          int jj = j + dj;
-          if (ibMarkers(ii, jj, 0, 0) == 0) {
+    amrex::ignore_unused(k);
+    for (int di = 0; di <= iorder_t; ++di) {
+      for (int dj = 0; dj <= iorder_t; ++dj) {
+          if (ibMarkers(i + di, j + dj, 0, 0) == 0) {
               ++fluid_count;
           }
       }
     }
     return fluid_count;
 #else
-    for (int di = 0; di <= 1; ++di) {
-      for (int dj = 0; dj <= 1; ++dj) {
-        for (int dk = 0; dk <= 1; ++dk) {
-          int ii = i + di;
-          int jj = j + dj;
-          int kk = k + dk;
-          if (ibMarkers(ii, jj, kk, 0) == 0) {
+    for (int di = 0; di <= iorder_t; ++di) {
+      for (int dj = 0; dj <= iorder_t; ++dj) {
+        for (int dk = 0; dk <= iorder_t; ++dk) {
+          if (ibMarkers(i + di, j + dj, k + dk, 0) == 0) {
             ++fluid_count;
           }
         }
@@ -54,11 +53,27 @@ int valid_mirror(
 #endif
 }
 // ============================================================================
+// 1b. ibm_interp_base_index — lower-corner cell index of the interpolation
+//     block for a point at physical coordinate x.
+//     iorder_t=1: the 2-cell bracket (cell centres straddle x);
+//     iorder_t=2: the 3-cell block centred on the cell containing x.
+// ============================================================================
+template <int iorder_t>
+static AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+int ibm_interp_base_index(Real x, Real prob_lo_d, Real dx_d)
+{
+    if constexpr (iorder_t == 1) {
+        return int(amrex::Math::floor((x - prob_lo_d) / dx_d - Real(0.5)));
+    } else {
+        return int(amrex::Math::floor((x - prob_lo_d) / dx_d)) - (iorder_t / 2);
+    }
+}
+// ============================================================================
 // 2. search_optimal_image_point
 // ============================================================================
 template <int eorder_t, int iorder_t, typename IPDATA, int GP_OR_SURF = is_gpData_t<IPDATA>::value ? 1 : 0>
 static AMREX_FORCE_INLINE AMREX_GPU_HOST_DEVICE
-void search_optimal_image_point(
+int search_optimal_image_point(
     const Point& cp_start,
     const LocalFrame& localframe,
     int lev,
@@ -74,6 +89,12 @@ void search_optimal_image_point(
     Array1D<Real, 0, eorder_t - 1>& disIM,
     Array1D< int, 0, eorder_t - 1>& imp_ninterp)
 {
+    // Status bitmask returned to the caller so the GPU init kernel can
+    // aggregate failures into device counters (device printf is lossy and
+    // AMREX_ASSERT is stripped in release):
+    //   bit 0: first-attempt stencil out of box (CPU aborts here)
+    //   bit 1: best stencil below INTERP_THRESHOLD (placement failure)
+    int status = 0;
     int best_fluid = 0;
     Array1D<Real, 0, AMREX_SPACEDIM - 1> candi_xyz;
     Array1D< int, 0, AMREX_SPACEDIM - 1> candi_ijk;
@@ -90,24 +111,23 @@ void search_optimal_image_point(
     
       for (int d = 0; d < AMREX_SPACEDIM; ++d) {
           candi_xyz(d) = cp_start[d] + IMP_FACTOR[attempt] * di * localframe.normal[d];
-          candi_ijk(d) = int(amrex::Math::floor(
-              (candi_xyz(d) - prob_lo[d]) / dx_lev[d] - 0.5
-          ));
+          candi_ijk(d) = ibm_interp_base_index<iorder_t>(candi_xyz(d), prob_lo[d], dx_lev[d]);
       }
     
 #if (AMREX_SPACEDIM == 2)
-      bool in_box = check_interpolation_stencil<IPDATA>(candi_ijk(0), candi_ijk(1), 0, 
+      bool in_box = check_interpolation_stencil<IPDATA, iorder_t>(candi_ijk(0), candi_ijk(1), 0, 
                                                 bxg, lev,
                                                 ipData, f_idx,
                                                 (attempt == 0) ? CheckMode::Abort : CheckMode::Silent);
-      int n_fluid = (in_box) ? valid_mirror(candi_ijk(0), candi_ijk(1), 0, ibMarkers) : -1;
+      int n_fluid = (in_box) ? valid_mirror<iorder_t>(candi_ijk(0), candi_ijk(1), 0, ibMarkers) : -1;
 #else
-      bool in_box = check_interpolation_stencil<IPDATA>(candi_ijk(0), candi_ijk(1), candi_ijk(2),
+      bool in_box = check_interpolation_stencil<IPDATA, iorder_t>(candi_ijk(0), candi_ijk(1), candi_ijk(2),
                                                 bxg, lev,
                                                 ipData, f_idx,
                                                 (attempt == 0) ? CheckMode::Abort : CheckMode::Silent);
-      int n_fluid = (in_box) ? valid_mirror(candi_ijk(0), candi_ijk(1), candi_ijk(2), ibMarkers) : -1;
+      int n_fluid = (in_box) ? valid_mirror<iorder_t>(candi_ijk(0), candi_ijk(1), candi_ijk(2), ibMarkers) : -1;
 #endif
+      if (attempt == 0 && !in_box) { status |= 1; }
       if (n_fluid > best_fluid) {
         best_fluid = n_fluid;
         for (int d = 0; d < AMREX_SPACEDIM; ++d) {
@@ -124,6 +144,7 @@ void search_optimal_image_point(
     } // end loop on attempt
     constexpr int INTERP_THRESHOLD = (GP_OR_SURF ? INTERP_THRESHOLD_GP : INTERP_THRESHOLD_SURF);
     if (best_fluid < INTERP_THRESHOLD) {
+        status |= 2;
 #if AMREX_DEVICE_COMPILE
         AMREX_DEVICE_PRINTF("Not enough valid interpolation points for first image point! "
                             "lev=%d f_idx=%d best_fluid=%d threshold=%d\n",
@@ -180,6 +201,7 @@ void search_optimal_image_point(
         std::fflush(stdout);
 #endif // AMREX_DEVICE_COMPILE
     }
+    return status;
 }
 // ============================================================================
 // 3. search_image_point
@@ -205,25 +227,125 @@ void search_image_point(
 {
     for (int d = 0; d < AMREX_SPACEDIM; ++d) {
         imp_xyz(jj, d) = cp_start[d] + di * localframe.normal[d];
-        imp_ijk(jj, d) = int(amrex::Math::floor(
-            (imp_xyz(jj, d) - prob_lo[d]) / dx_lev[d] - 0.5
-        ));
+        imp_ijk(jj, d) = ibm_interp_base_index<iorder_t>(imp_xyz(jj, d), prob_lo[d], dx_lev[d]);
     }
 #if (AMREX_SPACEDIM == 2)
-    bool in_box = check_interpolation_stencil<IPDATA>(imp_ijk(jj, 0), imp_ijk(jj, 1), 0, 
+    bool in_box = check_interpolation_stencil<IPDATA, iorder_t>(imp_ijk(jj, 0), imp_ijk(jj, 1), 0, 
                                               bxg, lev,
                                               ipData, f_idx, 
                                               CheckMode::Silent);
-    int fluid = (in_box) ? valid_mirror(imp_ijk(jj, 0), imp_ijk(jj, 1), 0, ibMarkers) : -1;
+    int fluid = (in_box) ? valid_mirror<iorder_t>(imp_ijk(jj, 0), imp_ijk(jj, 1), 0, ibMarkers) : -1;
 #else
-    bool in_box = check_interpolation_stencil<IPDATA>(imp_ijk(jj, 0), imp_ijk(jj, 1), imp_ijk(jj, 2),
+    bool in_box = check_interpolation_stencil<IPDATA, iorder_t>(imp_ijk(jj, 0), imp_ijk(jj, 1), imp_ijk(jj, 2),
                                               bxg, lev,
                                               ipData, f_idx,
                                               CheckMode::Silent);   
-    int fluid = (in_box) ? valid_mirror(imp_ijk(jj, 0), imp_ijk(jj, 1), imp_ijk(jj, 2), ibMarkers) : -1;
+    int fluid = (in_box) ? valid_mirror<iorder_t>(imp_ijk(jj, 0), imp_ijk(jj, 1), imp_ijk(jj, 2), ibMarkers) : -1;
 #endif
     disIM(jj) = (jj > 0) ? disIM(jj - 1) + di : di;
     imp_ninterp(jj) = fluid;
+}
+// ============================================================================
+// 3b. place_image_points — chained walk along the surface normal
+//
+// Drives the eorder_t image-point sequence:
+//   IP_0 ← search_optimal_image_point starting from the IB point on surface
+//   IP_jj ← search_image_point starting from IP_{jj-1}, fixed step di
+//
+// Used identically by both the GPU and CPU paths in initialiseGPs.  The
+// `cp_start` slide between iterations is the only place the two backend
+// Point types diverge (CGAL Point uses ctor, BVH Point uses subscript) —
+// kept in this helper so the call site stays single-line.
+// ============================================================================
+template <int eorder_t, int iorder_t, typename IPDATA>
+static AMREX_FORCE_INLINE AMREX_GPU_HOST_DEVICE
+int place_image_points(
+    const Point& cp,
+    const LocalFrame& localframe,
+    int lev,
+    const GpuArray<Real, AMREX_SPACEDIM>& prob_lo,
+    const GpuArray<Real, AMREX_SPACEDIM>& dx_lev,
+    Real di,
+    const Box& bxg,
+    const Array4<uint8_t const>& ibMarkers,
+    const IPDATA& ipData,
+    int gidx,
+    Array2D<Real, 0, eorder_t - 1, 0, AMREX_SPACEDIM - 1>& imp_xyz,
+    Array2D< int, 0, eorder_t - 1, 0, AMREX_SPACEDIM - 1>& imp_ijk,
+    Array1D<Real, 0, eorder_t - 1>& disIM,
+    Array1D< int, 0, eorder_t - 1>& imp_ninterp)
+{
+    Point cp_start = cp;
+    int status = 0;
+    for (int jj = 0; jj < eorder_t; ++jj) {
+        if (jj == 0) {
+            status = search_optimal_image_point<eorder_t, iorder_t>(
+                cp_start, localframe,
+                lev, prob_lo, dx_lev, di,
+                bxg, ibMarkers,
+                ipData, gidx,
+                imp_xyz, imp_ijk, disIM, imp_ninterp);
+        } else {
+            search_image_point<eorder_t, iorder_t>(
+                jj, cp_start, localframe,
+                lev, prob_lo, dx_lev, di,
+                bxg, ibMarkers,
+                ipData, gidx,
+                imp_xyz, imp_ijk, disIM, imp_ninterp);
+        }
+        // Slide cp_start to the IP just placed, ready for jj+1.
+#if defined(AMREX_USE_CGAL)
+#if (AMREX_SPACEDIM == 2)
+        cp_start = Point(imp_xyz(jj, 0), imp_xyz(jj, 1));
+#else
+        cp_start = Point(imp_xyz(jj, 0), imp_xyz(jj, 1), imp_xyz(jj, 2));
+#endif
+#else
+        for (int d = 0; d < AMREX_SPACEDIM; ++d) cp_start[d] = imp_xyz(jj, d);
+#endif
+    }
+    return status;
+}
+// ============================================================================
+// 3c. ibm_spd_solve_e0 — solve M y = e0 for a small SPD system via Cholesky
+//     with a relative pivot guard.  Used by the iorder=2 WLS interpolation:
+//     with the polynomial basis centred at the image point, the interpolated
+//     value is the constant coefficient, whose normal-equation solution only
+//     needs M^{-1} e0.  Returns false when the (masked) stencil is too
+//     ill-conditioned for this basis — the caller then demotes the basis.
+// ============================================================================
+template <int NB>
+static AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+bool ibm_spd_solve_e0(const Real M[NB][NB], Real y[NB])
+{
+    Real maxdiag = M[0][0];
+    for (int a = 1; a < NB; ++a) maxdiag = amrex::max(maxdiag, M[a][a]);
+    const Real tol = Real(1.0e-11) * amrex::max(maxdiag, Real(1.0e-300));
+
+    Real L[NB][NB] = {};
+    for (int a = 0; a < NB; ++a) {
+        Real sdiag = M[a][a];
+        for (int c = 0; c < a; ++c) sdiag -= L[a][c] * L[a][c];
+        if (!(sdiag > tol)) return false;
+        L[a][a] = std::sqrt(sdiag);
+        for (int b = a + 1; b < NB; ++b) {
+            Real t = M[b][a];
+            for (int c = 0; c < a; ++c) t -= L[b][c] * L[a][c];
+            L[b][a] = t / L[a][a];
+        }
+    }
+    Real z[NB];
+    for (int a = 0; a < NB; ++a) {
+        Real t = (a == 0) ? Real(1.0) : Real(0.0);
+        for (int c = 0; c < a; ++c) t -= L[a][c] * z[c];
+        z[a] = t / L[a][a];
+    }
+    for (int a = NB - 1; a >= 0; --a) {
+        Real t = z[a];
+        for (int c = a + 1; c < NB; ++c) t -= L[c][a] * y[c];
+        y[a] = t / L[a][a];
+    }
+    return true;
 }
 // ============================================================================
 // 4. computeIPweights
@@ -241,18 +363,32 @@ void computeIPweights(
     const Array4<uint8_t const>&                                 ibFab)
 {
     constexpr int INTERP_THRESHOLD = (GP_OR_SURF ? INTERP_THRESHOLD_GP : INTERP_THRESHOLD_SURF);
+    // iorder=2 WLS cannot fit anything below the linear-basis minimum D+1;
+    // lift the usability gate so such IPs are discarded up front and marked
+    // invalid (ninterp=0) for the persisted store / n_valid / eff_order.
+    constexpr int MIN_PTS = (iorder_t == 1)
+        ? INTERP_THRESHOLD
+        : ((INTERP_THRESHOLD > AMREX_SPACEDIM + 1) ? INTERP_THRESHOLD
+                                                   : AMREX_SPACEDIM + 1);
     for (int iim = 0; iim < eorder_t; ++iim) {
-      if (imp_ninterp(iim) < INTERP_THRESHOLD) {
+      if (imp_ninterp(iim) < MIN_PTS) {
         for (int corner = 0; corner < N_InterP; ++corner) {
           weights(iim, corner) = Real(0.0);
           for (int d = 0; d < AMREX_SPACEDIM; ++d) {
             ip_ijk(iim, corner, d) = -99;
           }
         }
+        if constexpr (iorder_t != 1) { imp_ninterp(iim) = 0; }
         continue;
       }
       int base_ijk[AMREX_SPACEDIM];
       for (int d = 0; d < AMREX_SPACEDIM; ++d) {base_ijk[d] = imp_ijk(iim, d);}
+
+      if constexpr (iorder_t == 1) {
+      // ----------------------------------------------------------------------
+      // Bilinear/trilinear path (legacy, bit-identical): tensor-product weights
+      // on the 2^D corner cells, solid corners zeroed and renormalised.
+      // ----------------------------------------------------------------------
       Real frac[AMREX_SPACEDIM];
       for (int d = 0; d < AMREX_SPACEDIM; ++d) {
         Real lo = prob_lo[d] + Real(base_ijk[d] + 0.5_rt) * dxyz[d];
@@ -302,6 +438,124 @@ void computeIPweights(
       AMREX_ASSERT_WITH_MESSAGE(
           amrex::Math::abs(check_sum - Real(1.0)) < Real(1.0e-9),
           "Interpolation point weights do not sum to 1.0");
+
+      } else {
+      // ----------------------------------------------------------------------
+      // iorder == 2: weighted-least-squares quadratic interpolation on the 3^D
+      // fluid cells of the block anchored at imp_ijk (containing cell - 1).
+      //
+      // The monomial basis is centred AT the image point and scaled by dx, so
+      // the interpolated value equals the constant coefficient a0 and the
+      // per-cell weights are lambda_i = b(xi_i) . M^{-1} e0 with
+      // M = sum_fluid b b^T (plain LS, unit weights).  Constant and linear
+      // (and quadratic) reproduction hold by construction — masking solid
+      // cells does NOT break partition of unity, unlike the renormalised
+      // bilinear path.  Basis ordering keeps the linear terms first, so the
+      // linear-basis fallback reuses the leading NBL x NBL block of M:
+      //   2D: {1, x, y, x^2, xy, y^2}          NBQ = 6, NBL = 3
+      //   3D: {1, x, y, z, x^2, y^2, z^2,
+      //        xy, xz, yz}                     NBQ = 10, NBL = 4
+      // Demotion ladder: quadratic (n_f >= NBQ and well-conditioned)
+      //   -> linear WLS (n_f >= NBL) -> IP invalidated (ninterp := 0), which
+      // the existing INTERP_THRESHOLD / n_valid machinery then discards.
+      // Register-heavy but init-time only (once per GP per regrid).
+      // ----------------------------------------------------------------------
+      static_assert(iorder_t == 2, "computeIPweights: iorder must be 1 or 2");
+      constexpr int NBQ = (AMREX_SPACEDIM == 2) ? 6 : 10;
+      constexpr int NBL = AMREX_SPACEDIM + 1;
+
+      Real bmat[N_InterP][NBQ];
+      bool isfl[N_InterP];
+      Real Mq[NBQ][NBQ] = {};
+      int  n_f = 0;
+
+      for (int corner = 0; corner < N_InterP; ++corner) {
+        int rem = corner;
+        int ijk[AMREX_SPACEDIM];
+        Real xi[AMREX_SPACEDIM];
+        for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+            const int off = rem % (iorder_t + 1);
+            rem /= (iorder_t + 1);
+            ijk[d] = base_ijk[d] + off;
+            ip_ijk(iim, corner, d) = ijk[d];
+            const Real xc = prob_lo[d] + (Real(ijk[d]) + Real(0.5)) * dxyz[d];
+            xi[d] = (xc - imp_xyz(iim, d)) / dxyz[d];
+        }
+        int ii = ijk[0];
+        int jj = ijk[1];
+#if (AMREX_SPACEDIM == 3)
+        int kk = ijk[2];
+#else
+        int kk = 0;
+#endif
+        Real* b = bmat[corner];
+        b[0] = Real(1.0);
+        for (int d = 0; d < AMREX_SPACEDIM; ++d) b[1 + d] = xi[d];
+#if (AMREX_SPACEDIM == 2)
+        b[3] = xi[0] * xi[0];
+        b[4] = xi[0] * xi[1];
+        b[5] = xi[1] * xi[1];
+#else
+        b[4] = xi[0] * xi[0];
+        b[5] = xi[1] * xi[1];
+        b[6] = xi[2] * xi[2];
+        b[7] = xi[0] * xi[1];
+        b[8] = xi[0] * xi[2];
+        b[9] = xi[1] * xi[2];
+#endif
+        isfl[corner] = (ibFab(ii, jj, kk, 0) == 0);
+        if (isfl[corner]) {
+            ++n_f;
+            for (int a = 0; a < NBQ; ++a)
+                for (int c = 0; c <= a; ++c)
+                    Mq[a][c] += b[a] * b[c];
+        }
+      }
+      for (int a = 0; a < NBQ; ++a)
+          for (int c = a + 1; c < NBQ; ++c)
+              Mq[a][c] = Mq[c][a];
+
+      int used_nb = 0;
+      Real yq[NBQ];
+      if (n_f >= NBQ) {
+          if (ibm_spd_solve_e0<NBQ>(Mq, yq)) used_nb = NBQ;
+      }
+      if (used_nb == 0 && n_f >= NBL) {
+          Real Ml[NBL][NBL];
+          Real yl[NBL];
+          for (int a = 0; a < NBL; ++a)
+              for (int c = 0; c < NBL; ++c)
+                  Ml[a][c] = Mq[a][c];
+          if (ibm_spd_solve_e0<NBL>(Ml, yl)) {
+              for (int a = 0; a < NBL; ++a) yq[a] = yl[a];
+              used_nb = NBL;
+          }
+      }
+
+      if (used_nb == 0) {
+          // Not enough resolvable fluid data even for a linear fit: invalidate
+          // this image point so n_valid / eff_order treat it as missing.
+          for (int corner = 0; corner < N_InterP; ++corner) {
+              weights(iim, corner) = Real(0.0);
+          }
+          imp_ninterp(iim) = 0;
+      } else {
+          Real check_sum = Real(0.0);
+          for (int corner = 0; corner < N_InterP; ++corner) {
+              Real w = Real(0.0);
+              if (isfl[corner]) {
+                  for (int a = 0; a < used_nb; ++a) w += bmat[corner][a] * yq[a];
+              }
+              weights(iim, corner) = w;
+              check_sum += w;
+          }
+          imp_ninterp(iim) = n_f;
+          AMREX_ASSERT_WITH_MESSAGE(
+              amrex::Math::abs(check_sum - Real(1.0)) < Real(1.0e-8),
+              "WLS interpolation weights do not reproduce constants");
+          amrex::ignore_unused(check_sum);
+      }
+      } // end iorder branch
     } // end loop over image points
 }
 // ============================================================================
@@ -358,52 +612,60 @@ static void extrapolate(
     // temperature then reaches the EOS unclamped (when CLIP_MINTEMP is off) and yields
     // rho = P/(R T) < 0, which poisons the neighbouring fluid reconstruction (NaN).
     // We limit the ghost to at least this fraction of the (positive) surface value
-    // rather than masking the result downstream. This only triggers on genuine
-    // overshoot; well-resolved boundary layers leave the ghost well above the floor
-    // and are unaffected.
-    constexpr Real GP_POS_FLOOR_FRAC = Real(0.1);
+    // rather than masking the result downstream.
+    //
+    // NOTE: this must be a *positivity rescue* only -- a small floor that catches
+    // the genuine overshoot-through-zero, NOT a 10%-of-surface clamp. In an
+    // under-expanded jet / nozzle expansion the near-wall ghost legitimately sits
+    // well below the surface value (the gas is expanding), and the old 0.1 floor
+    // wrongly raised those physical low pressures/temperatures, injecting a
+    // spurious near-wall pressure jump and breaking the extrapolation's
+    // normal-derivative continuity. 1e-3 only triggers on values heading through
+    // zero; at the floor T and P scale together so rho=P/(RT) stays ~surface
+    // density (bounded). Legitimate expansion (>0.1% of surface) is preserved.
+    constexpr Real GP_POS_FLOOR_FRAC = Real(1.0e-3);
+
+    // Reduce eff_order while the two outermost image points are nearly
+    // coincident (vanishing Lagrange denominators). disIM is monotone by
+    // construction (chained IP walk with step di), so checking the trailing
+    // pair suffices; reducing by one reproduces the pre-existing
+    // quadratic->linear fallback exactly.
+    {
+        constexpr Real eps_dist = Real(1.0e-12);
+        while (eff_order >= 2) {
+            const Real xa = disIM(eff_order - 2);
+            const Real xb = disIM(eff_order - 1);
+            if (amrex::Math::abs(xb - xa) > eps_dist * amrex::max(xa, xb)) break;
+            --eff_order;
+        }
+    }
 
     // only extrapolate up to QLS (Last Species), skipping aux vars like QC, QG, QEINT.
     for (int n = 0; n <= cls_t::QLS; ++n) {
 
-        if (eff_order >= 2) {
-            // Quadratic Lagrange interpolation using surface value (slot 1)
-            // and two image-point values (slots 2 and 3).
-            // Note: this branch is only reachable when eorder_t >= 2.
-            if constexpr (eorder_t >= 2) {
-                Real u0 = prims(1, n);
-                Real u1 = prims(2, n);
-                Real u2 = prims(3, n);
-
-                Real x1 = disIM(0);
-                Real x2 = disIM(1);
-                AMREX_ASSERT(x1 > 0 && x2 > 0);
-
-                // Guard: if image points are nearly coincident, the quadratic
-                // Lagrange denominator (x1-x2) vanishes. Fall back to linear.
-                constexpr Real eps_dist = Real(1.0e-12);
-                if (amrex::Math::abs(x1 - x2) < eps_dist * amrex::max(x1, x2)) {
-                    // linear fallback using surface + first image point
-                    Real slope = (u1 - u0) / x1;
-                    prims(0, n) = u0 - slope * disGP;
-                } else {
-                    Real x = -disGP;
-                    Real L0 = (x - x1) * (x - x2) / (x1 * x2);
-                    Real L1 = x * (x - x2) / (x1 * (x1 - x2));
-                    Real L2 = x * (x - x1) / (x2 * (x2 - x1));
-                    prims(0, n) = u0 * L0 + u1 * L1 + u2 * L2;
-                }
-            }
-        }
-        else if (eff_order == 1) {
-            Real val_surf = prims(1, n);
-            Real val_im1  = prims(2, n);
-            Real d_im1    = disIM(0);
-            Real slope = (val_im1 - val_surf) / d_im1;
-            prims(0, n) = val_surf - slope * disGP;
-        }
-        else {
+        if (eff_order == 0) {
             prims(0, n) = prims(1, n);
+        } else {
+            // Degree-eff_order Lagrange polynomial through the wall-normal nodes
+            // {0, disIM(0), ..., disIM(eff-1)} with values
+            // {prims(1,n), prims(2,n), ..., prims(eff+1,n)}, evaluated at the
+            // ghost abscissa s = -disGP. eff_order==1/2 reproduce the previous
+            // linear/quadratic formulas identically; eff_order>=3 (available
+            // when extrap_order>=3 image points are placed) is the cubic+
+            // extension. Runtime eff_order <= eorder_t bounds all indices.
+            const Real s = -disGP;
+            Real acc = Real(0.0);
+            for (int m = 0; m <= eff_order; ++m) {
+                const Real xm = (m == 0) ? Real(0.0) : disIM(m - 1);
+                Real Lm = Real(1.0);
+                for (int kk = 0; kk <= eff_order; ++kk) {
+                    if (kk == m) continue;
+                    const Real xk = (kk == 0) ? Real(0.0) : disIM(kk - 1);
+                    Lm *= (s - xk) / (xm - xk);
+                }
+                acc += Lm * prims(m + 1, n);
+            }
+            prims(0, n) = acc;
         }
 
         // Positivity floor for temperature and pressure (see note above). The
@@ -487,7 +749,7 @@ static void local2global(
 // ============================================================================
 // 8. check_interpolation_stencil
 // ============================================================================
-template <typename IPDATA, int GP_OR_SURF = is_gpData_t<IPDATA>::value ? 1 : 0>
+template <typename IPDATA, int iorder_t = 1, int GP_OR_SURF = is_gpData_t<IPDATA>::value ? 1 : 0>
 static AMREX_FORCE_INLINE AMREX_GPU_HOST_DEVICE
 bool check_interpolation_stencil(
     int i, int j, int k, 
@@ -498,11 +760,11 @@ bool check_interpolation_stencil(
     CheckMode mode)
 {
 #if (AMREX_SPACEDIM == 2)
-    bool is_valid = bx.contains(amrex::IntVect(i, j)) && 
-                    bx.contains(amrex::IntVect(i+1, j+1));
+    bool is_valid = bx.contains(amrex::IntVect(i, j)) &&
+                    bx.contains(amrex::IntVect(i+iorder_t, j+iorder_t));
 #else
-    bool is_valid = bx.contains(amrex::IntVect(i, j, k)) && 
-                    bx.contains(amrex::IntVect(i+1, j+1, k+1));
+    bool is_valid = bx.contains(amrex::IntVect(i, j, k)) &&
+                    bx.contains(amrex::IntVect(i+iorder_t, j+iorder_t, k+iorder_t));
 #endif
     if (!is_valid) {
         if (mode == CheckMode::Silent) {

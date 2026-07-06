@@ -1,0 +1,53 @@
+diff --git a/src/tim/compute_rhs.cpp b/src/tim/compute_rhs.cpp
+index abfb61e52..6756c2ab4 100644
+--- a/src/tim/compute_rhs.cpp
++++ b/src/tim/compute_rhs.cpp
+@@ -199,10 +237,47 @@ void CNS::compute_rhs(MultiFab& statemf, Real dt, FluxRegister* fr_as_crse, Flux
+         const Real dr = dx[0];
+         const Real dz = dx[1];
+         const Real r0 = prob_lo[0];
++        const Box domain = geom.Domain();
++        const int ilo = domain.smallEnd(0);
++        const int ihi = domain.bigEnd(0);
+         const int qpres   = PROB::ProbClosures::QPRES;
++        const int qrho    = PROB::ProbClosures::QRHO;
++        const int qu      = PROB::ProbClosures::QU;   // radial velocity (dir 0 = r)
++        const int qc      = PROB::ProbClosures::QC;   // sound speed
+         const int umom_r  = PROB::ProbClosures::UMX;
+         const Real inv_dz = Real(1.0) / dz;
+-        
++
++        // --- (Route B) near-axis radial-momentum dissipation -----------------
++        // Damps the spurious odd-even / carbuncle-like u_r seeded at strong
++        // on-axis shocks by the singular RZ axis discretisation (the p/r source
++        // amplified by 1/r_c=2/dr at i=0).  OFF by default (coeff 0) so no other
++        // case is affected; enable per-case with cns.rz_axis_diss=<O(0.5)>.
++        static const Real s_rz_diss = []{ Real v=Real(0.0);
++            amrex::ParmParse pp("cns"); pp.query("rz_axis_diss", v); return v; }();
++        static const int  s_rz_nc   = []{ int n=3;
++            amrex::ParmParse pp("cns"); pp.query("rz_axis_diss_ncell", n); return n; }();
++        // Experimental WENO/TENO-only pressure split:
++        //   radial momentum pressure force = -dp/dr, not
++        //   -(1/r)d(rp)/dr + p/r.  The matching Weno.h path removes p from
++        //   the r-momentum r-face flux.  Leave OFF unless that path is active.
++        static const int s_rz_pressure_split = []{ int v=0;
++            amrex::ParmParse pp("cns"); pp.query("rz_pressure_split", v); return v; }();
++        const Real rz_diss = s_rz_diss;   // local copies -> captured by value (GPU-safe)
++        const int  rz_nc   = s_rz_nc;
++        const bool rz_pressure_split = (s_rz_pressure_split != 0);
++        // HARD GUARD: the -dp/dr pressure-split form below MUST be paired with a
++        // flux that removed the radial pressure flux. Only weno_t::eflux does so
++        // (rz_pressure_split_capable=true). With any other flux scheme the radial
++        // pressure would be counted twice (in the flux AND here) -> wrong equations.
++        if (rz_pressure_split && !rz_psplit_capable<PROB::ProbRHS>::value) {
++          amrex::Abort("cns.rz_pressure_split is experimental and WENO/TENO-only: "
++                       "it requires weno_t::eflux to remove the radial pressure flux. "
++                       "The active flux scheme does not, so the pressure would be "
++                       "double-counted. Disable cns.rz_pressure_split or use weno_t.");
++        }
++        const Real dr_loc  = dr;
++        const Real inv_2dr = Real(0.5) / dr;
++
+         ParallelFor(bx,
+                 [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+ 

@@ -49,6 +49,31 @@ void ibm_copy_species(Array2D<Real,0,eorder+1,0,cls_t::NPRIM-1>& q)
 #endif
 }
 
+/// \brief disIM-aware species copy: impose zero normal gradient on the mass
+///        fractions to 2nd order (general spacing, surface + IP1 + IP2) and
+///        renormalise to sum to 1.  Degrades to the 1st-order single-image-point
+///        form (identical to the overload above) when EO < 2 or n_valid < 2.
+template <typename cls_t, int EO, typename QArr, typename DisArr>
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+void ibm_copy_species(QArr& q, const DisArr& disIM, int n_valid)
+{
+#if NUM_SPECIES > 1
+    Real sumY = 0.0_rt;
+    for (int n = 0; n < NUM_SPECIES; ++n) {
+      q(1,cls_t::QFS+n) = ibm_zero_grad_surface_pos<EO>(q, cls_t::QFS+n, disIM, n_valid);
+      sumY += q(1,cls_t::QFS+n);
+    }
+    if (sumY > 0.0_rt) {
+      Real inv = 1.0_rt / sumY;
+      for (int n = 0; n < NUM_SPECIES; ++n) {
+        q(1,cls_t::QFS+n) *= inv;
+      }
+    }
+#else
+    amrex::ignore_unused(q, disIM, n_valid);
+#endif
+}
+
 //--------------------------------------------------------------------------//
 // Isothermal slip wall
 //--------------------------------------------------------------------------//
@@ -59,20 +84,24 @@ public:
   static constexpr Real Twall = param::Twall;
   static constexpr int eorder_tparm = param::extrap_order;
 
+  template <int EO>
   AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-  static void compute_surfIB(const Array1D<Real,0,AMREX_SPACEDIM-1>& /*xyz*/,
+  static void compute_surfIB(std::integral_constant<int,EO> /*eo_tag*/,
+    const Array1D<Real,0,AMREX_SPACEDIM-1>& /*xyz*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*norm*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*t1*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*t2*/,
-    Array2D<Real,0,eorder_tparm+1,0,cls_t::NPRIM-1>& q,
+    const Array1D<Real,0,EO-1>& disIM,
+    int n_valid,
+    Array2D<Real,0,EO+1,0,cls_t::NPRIM-1>& q,
     int /*type_solid_bc*/, const cls_t* /*cls*/)
   {
-    q(1,cls_t::QU) = 0.0_rt;           // un  = 0 (no penetration)
-    q(1,cls_t::QV) = q(2,cls_t::QV);   // ut1 = slip
-    q(1,cls_t::QW) = q(2,cls_t::QW);   // ut2 = slip
-    q(1,cls_t::QPRES) = q(2,cls_t::QPRES);  // zero-gradient pressure
-    q(1,cls_t::QT)    = param::Twall;        // prescribed wall temperature
-    ibm_copy_species<cls_t, eorder_tparm>(q);
+    q(1,cls_t::QU) = 0.0_rt;                                                       // un  = 0 (no penetration)
+    q(1,cls_t::QV) = ibm_zero_grad_surface<EO>(q, cls_t::QV,    disIM, n_valid);   // ut1 = slip (zero normal grad)
+    q(1,cls_t::QW) = ibm_zero_grad_surface<EO>(q, cls_t::QW,    disIM, n_valid);   // ut2 = slip
+    q(1,cls_t::QPRES) = ibm_zero_grad_surface_pos<EO>(q, cls_t::QPRES, disIM, n_valid);// zero-gradient pressure
+    q(1,cls_t::QT)    = param::Twall;                                              // prescribed wall temperature
+    ibm_copy_species<cls_t, EO>(q, disIM, n_valid);
   }
 };
 
@@ -86,20 +115,24 @@ public:
   static constexpr Real Twall = param::Twall;
   static constexpr int eorder_tparm = param::extrap_order;
 
+  template <int EO>
   AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-  static void compute_surfIB(const Array1D<Real,0,AMREX_SPACEDIM-1>& /*xyz*/,
+  static void compute_surfIB(std::integral_constant<int,EO> /*eo_tag*/,
+    const Array1D<Real,0,AMREX_SPACEDIM-1>& /*xyz*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*norm*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*t1*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*t2*/,
-    Array2D<Real,0,eorder_tparm+1,0,cls_t::NPRIM-1>& q,
+    const Array1D<Real,0,EO-1>& disIM,
+    int n_valid,
+    Array2D<Real,0,EO+1,0,cls_t::NPRIM-1>& q,
     int /*type_solid_bc*/, const cls_t* /*cls*/)
   {
     q(1,cls_t::QU) = 0.0_rt;   // un  = 0
     q(1,cls_t::QV) = 0.0_rt;   // ut1 = 0
     q(1,cls_t::QW) = 0.0_rt;   // ut2 = 0
-    q(1,cls_t::QPRES) = q(2,cls_t::QPRES);  // zero-gradient pressure
-    q(1,cls_t::QT)    = param::Twall;        // prescribed wall temperature
-    ibm_copy_species<cls_t, eorder_tparm>(q);
+    q(1,cls_t::QPRES) = ibm_zero_grad_surface_pos<EO>(q, cls_t::QPRES, disIM, n_valid); // zero-gradient pressure
+    q(1,cls_t::QT)    = param::Twall;                                              // prescribed wall temperature
+    ibm_copy_species<cls_t, EO>(q, disIM, n_valid);
   }
 };
 
@@ -112,20 +145,24 @@ class ibm_adiabatic_slip_wall_t
 public:
   static constexpr int eorder_tparm = param::extrap_order;
 
+  template <int EO>
   AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-  static void compute_surfIB(const Array1D<Real,0,AMREX_SPACEDIM-1>& /*xyz*/,
+  static void compute_surfIB(std::integral_constant<int,EO> /*eo_tag*/,
+    const Array1D<Real,0,AMREX_SPACEDIM-1>& /*xyz*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*norm*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*t1*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*t2*/,
-    Array2D<Real,0,eorder_tparm+1,0,cls_t::NPRIM-1>& q,
+    const Array1D<Real,0,EO-1>& disIM,
+    int n_valid,
+    Array2D<Real,0,EO+1,0,cls_t::NPRIM-1>& q,
     int /*type_solid_bc*/, const cls_t* /*cls*/)
   {
-    q(1,cls_t::QU) = 0.0_rt;           // un  = 0
-    q(1,cls_t::QV) = q(2,cls_t::QV);   // ut1 = slip
-    q(1,cls_t::QW) = q(2,cls_t::QW);   // ut2 = slip
-    q(1,cls_t::QPRES) = q(2,cls_t::QPRES);  // zero-gradient pressure
-    q(1,cls_t::QT)    = q(2,cls_t::QT);      // zero-gradient temperature
-    ibm_copy_species<cls_t, eorder_tparm>(q);
+    q(1,cls_t::QU) = 0.0_rt;                                                       // un  = 0
+    q(1,cls_t::QV) = ibm_zero_grad_surface<EO>(q, cls_t::QV,    disIM, n_valid);   // ut1 = slip (zero normal grad)
+    q(1,cls_t::QW) = ibm_zero_grad_surface<EO>(q, cls_t::QW,    disIM, n_valid);   // ut2 = slip
+    q(1,cls_t::QPRES) = ibm_zero_grad_surface_pos<EO>(q, cls_t::QPRES, disIM, n_valid);// zero-gradient pressure
+    q(1,cls_t::QT)    = ibm_zero_grad_surface_pos<EO>(q, cls_t::QT,    disIM, n_valid);// zero-gradient temperature (adiabatic)
+    ibm_copy_species<cls_t, EO>(q, disIM, n_valid);
   }
 };
 
@@ -138,28 +175,35 @@ class ibm_adiabatic_noslip_wall_t
 public:
   static constexpr int eorder_tparm = param::extrap_order;
 
+  template <int EO>
   AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-  static void compute_surfIB(const Array1D<Real,0,AMREX_SPACEDIM-1>& /*xyz*/,
+  static void compute_surfIB(std::integral_constant<int,EO> /*eo_tag*/,
+    const Array1D<Real,0,AMREX_SPACEDIM-1>& /*xyz*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*norm*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*t1*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*t2*/,
-    Array2D<Real,0,eorder_tparm+1,0,cls_t::NPRIM-1>& q,
+    const Array1D<Real,0,EO-1>& disIM,
+    int n_valid,
+    Array2D<Real,0,EO+1,0,cls_t::NPRIM-1>& q,
     int /*type_solid_bc*/, const cls_t* /*cls*/)
   {
     q(1,cls_t::QU) = 0.0_rt;   // un  = 0
     q(1,cls_t::QV) = 0.0_rt;   // ut1 = 0
     q(1,cls_t::QW) = 0.0_rt;   // ut2 = 0
-    q(1,cls_t::QPRES) = q(2,cls_t::QPRES);  // zero-gradient pressure
-    q(1,cls_t::QT)    = q(2,cls_t::QT);      // zero-gradient temperature
-    ibm_copy_species<cls_t, eorder_tparm>(q);
+    q(1,cls_t::QPRES) = ibm_zero_grad_surface_pos<EO>(q, cls_t::QPRES, disIM, n_valid); // zero-gradient pressure
+    q(1,cls_t::QT)    = ibm_zero_grad_surface_pos<EO>(q, cls_t::QT,    disIM, n_valid); // zero-gradient temperature (adiabatic)
+    ibm_copy_species<cls_t, EO>(q, disIM, n_valid);
   }
 };
 
 //--------------------------------------------------------------------------//
 // General boundary condition
-// Imposes BC of the form: phi(1) = alpha * phi(2) + beta
+// Imposes BC of the form: phi(1) = alpha * phi_zg + beta
 //   alpha=1, beta=0     → dphi/dn = 0  (Neumann)
 //   alpha=0, beta=PHIBC → phi = PHIBC   (Dirichlet)
+// where phi_zg is the zero-normal-gradient surface value reconstructed to 2nd
+// order from IP1, IP2 (general spacing).  At EO=1 / n_valid<2 phi_zg = phi(2),
+// so this reduces *exactly* to the previous "alpha*phi(2)+beta" form.
 //--------------------------------------------------------------------------//
 template <typename param, typename cls_t>
 class ibm_general_wall_t
@@ -167,16 +211,21 @@ class ibm_general_wall_t
 public:
   static constexpr int eorder_tparm = param::extrap_order;
 
+  template <int EO>
   AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-  static void compute_surfIB(const Array1D<Real,0,AMREX_SPACEDIM-1>& /*xyz*/,
+  static void compute_surfIB(std::integral_constant<int,EO> /*eo_tag*/,
+    const Array1D<Real,0,AMREX_SPACEDIM-1>& /*xyz*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*norm*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*t1*/,
     const Array1D<Real,0,AMREX_SPACEDIM-1>& /*t2*/,
-    Array2D<Real,0,eorder_tparm+1,0,cls_t::NPRIM-1>& q,
+    const Array1D<Real,0,EO-1>& disIM,
+    int n_valid,
+    Array2D<Real,0,EO+1,0,cls_t::NPRIM-1>& q,
     int /*type_solid_bc*/, const cls_t* /*cls*/)
   {
     for (int n = 0; n <= cls_t::QLS; ++n) {
-      q(1,n) = param::alpha[n] * q(2,n) + param::beta[n];
+      const Real phi_zg = ibm_zero_grad_surface<EO>(q, n, disIM, n_valid);
+      q(1,n) = param::alpha[n] * phi_zg + param::beta[n];
     }
   }
 };

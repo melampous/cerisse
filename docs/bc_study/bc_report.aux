@@ -1,0 +1,63 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Motivation}{1}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}The boundary conditions}{1}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}(A) Zero-gradient extrapolation --- \texttt  {foextrap}}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}(B) Hard Dirichlet freestream}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}(C) Algebraic Riemann-invariant closure (``NSCBC'')}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}(D) Reference: true Poinsot--Lele NSCBC}{2}{subsection.2.4}\protected@file@percent }
+\newlabel{eq:relax}{{7}{2}{(D) Reference: true Poinsot--Lele NSCBC}{equation.2.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Benchmark method}{3}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Results}{3}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Acoustic reflection at a quiescent ($M{=}0$) boundary}{3}{subsection.4.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Acoustic-pulse $x$--$t$ diagrams, $M{=}0$. The incident pulse travels up-and-right; a returning (up-and-left) streak is a reflection. Only the algebraic ``NSCBC'' produces one.}}{3}{figure.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:xt}{{1}{3}{Acoustic-pulse $x$--$t$ diagrams, $M{=}0$. The incident pulse travels up-and-right; a returning (up-and-left) streak is a reflection. Only the algebraic ``NSCBC'' produces one}{figure.caption.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Energy-based reflection coefficient at a quiescent ($M{=}0$) boundary. The algebraic ``NSCBC'' returns 78\% of the incident acoustic energy amplitude; the proper NSCBC and the two simple ghost BCs are essentially non-reflecting.}}{3}{table.caption.3}\protected@file@percent }
+\newlabel{tab:R0}{{1}{3}{Energy-based reflection coefficient at a quiescent ($M{=}0$) boundary. The algebraic ``NSCBC'' returns 78\% of the incident acoustic energy amplitude; the proper NSCBC and the two simple ghost BCs are essentially non-reflecting}{table.caption.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Sensor pressure history at $M{=}0$. First lobe is the incident pulse; the later lobe (only for algebraic NSCBC) is the reflection.}}{4}{figure.caption.2}\protected@file@percent }
+\newlabel{fig:sensor}{{2}{4}{Sensor pressure history at $M{=}0$. First lobe is the incident pulse; the later lobe (only for algebraic NSCBC) is the reflection}{figure.caption.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Reflection versus Mach number}{4}{subsection.4.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Reflection coefficient vs.\ normal Mach number.}}{4}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:Rmach}{{3}{4}{Reflection coefficient vs.\ normal Mach number}{figure.caption.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Root cause: the missing relaxation}{4}{subsection.4.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Root-cause demonstration: reflection of the proper NSCBC vs.\ its relaxation $\sigma $. The dashed line is the algebraic Cerisse closure.}}{5}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:root}{{4}{5}{Root-cause demonstration: reflection of the proper NSCBC vs.\ its relaxation $\sigma $. The dashed line is the algebraic Cerisse closure}{figure.caption.5}{}}
+\@writefile{toc}{\contentsline {paragraph}{Why the ghost-cell architecture forces this.}{5}{section*.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}The trade-off: reflection versus mean anchoring}{5}{subsection.4.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Two-dimensional extension: the radiated sound of a co-rotating vortex pair}{5}{section.5}\protected@file@percent }
+\newlabel{sec:cvp}{{5}{5}{Two-dimensional extension: the radiated sound of a co-rotating vortex pair}{section.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Mean-pressure drift, $M{=}0.1$. \texttt  {foextrap} never returns to $p_\infty $; the algebraic NSCBC returns fastest. Anchoring and non-reflection are in tension.}}{6}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:drift}{{5}{6}{Mean-pressure drift, $M{=}0.1$. \texttt {foextrap} never returns to $\pinf $; the algebraic NSCBC returns fastest. Anchoring and non-reflection are in tension}{figure.caption.7}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Reflection versus mean-anchoring trade-off. No ghost BC achieves both; a proper relaxed NSCBC ($\sigma {\approx }0.25$) comes closest but is not implemented in Cerisse.}}{6}{table.caption.8}\protected@file@percent }
+\newlabel{tab:drift}{{2}{6}{Reflection versus mean-anchoring trade-off. No ghost BC achieves both; a proper relaxed NSCBC ($\sigma {\approx }0.25$) comes closest but is not implemented in Cerisse}{table.caption.8}{}}
+\@writefile{toc}{\contentsline {paragraph}{Note on code 7.}{6}{section*.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}The aeroacoustic test problem}{6}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Compressible-consistent initial condition.}{7}{section*.10}\protected@file@percent }
+\newlabel{eq:csq}{{13}{7}{Compressible-consistent initial condition}{equation.5.13}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Wide ($\pm 40$) reference: the radiated rotating-quadrupole acoustic spiral (pressure perturbation), the reflection-free ``truth'' against which the truncated-domain BCs are measured.}}{7}{figure.caption.11}\protected@file@percent }
+\newlabel{fig:cvpspiral}{{6}{7}{Wide ($\pm 40$) reference: the radiated rotating-quadrupole acoustic spiral (pressure perturbation), the reflection-free ``truth'' against which the truncated-domain BCs are measured}{figure.caption.11}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}A drift-free, phase-aware corruption metric}{7}{subsection.5.2}\protected@file@percent }
+\newlabel{sec:metric}{{5.2}{7}{A drift-free, phase-aware corruption metric}{subsection.5.2}{}}
+\@writefile{toc}{\contentsline {paragraph}{Single-tone phasor by least squares.}{7}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Why least squares and not a DFT.}{7}{section*.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Drift-free broadband RMS.}{8}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Far-field annulus.}{8}{section*.15}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Reference truth and corruption number.}{8}{section*.16}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Window and leakage.}{8}{section*.17}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Noise floor: the decisive honesty check.}{8}{section*.18}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Results: the radiated wave is not a BC discriminator}{8}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{The wave is below the floor.}{8}{section*.20}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Rigorous acoustic-corruption numbers (annulus-$L^2$ vs.\ the wide truth, drift-free, phase-aware, $4\,T_{\text  {ac}}$ window). \emph  {Every} BC's wave corruption lies at or below the truth-against-itself noise floor (64\% Fourier, 14\% RMS): the radiated wave does not discriminate the BCs. The only field that separates them is the DC mean drift, where \texttt  {foextrap} and characteristic anchor ($\sim 10^{-4}$) while the finite-relaxation LODI drifts $50\times $ more.}}{9}{table.caption.19}\protected@file@percent }
+\newlabel{tab:cvp}{{3}{9}{Rigorous acoustic-corruption numbers (annulus-$L^2$ vs.\ the wide truth, drift-free, phase-aware, $4\,T_{\text {ac}}$ window). \emph {Every} BC's wave corruption lies at or below the truth-against-itself noise floor (64\% Fourier, 14\% RMS): the radiated wave does not discriminate the BCs. The only field that separates them is the DC mean drift, where \texttt {foextrap} and characteristic anchor ($\sim 10^{-4}$) while the finite-relaxation LODI drifts $50\times $ more}{table.caption.19}{}}
+\@writefile{toc}{\contentsline {paragraph}{The one clean discriminator is mean anchoring.}{9}{section*.23}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Conclusion of the 2-D test.}{9}{section*.24}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Recommendation for the validation cases}{9}{section.6}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Recommended far-field BC per boundary.}}{9}{table.caption.25}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Quadrupole acoustic amplitude $|\hat  P|$ at $f_{\text  {ac}}=0.1273$ for the four runs (annulus dashed, $\lambda $ dotted). The truth and the three truncated-domain BCs are visually near-identical spirals; the quoted percentages are the annulus-$L^2$ amplitude corruptions, all near the $64\%$ noise floor.}}{10}{figure.caption.21}\protected@file@percent }
+\newlabel{fig:cvpphat}{{7}{10}{Quadrupole acoustic amplitude $|\hat P|$ at $f_{\text {ac}}=0.1273$ for the four runs (annulus dashed, $\lambda $ dotted). The truth and the three truncated-domain BCs are visually near-identical spirals; the quoted percentages are the annulus-$L^2$ amplitude corruptions, all near the $64\%$ noise floor}{figure.caption.21}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Directivity $|\hat  P|(\theta )$ on $r=9$. The trace is dominated by spiral-arm crossings and residual near field, not a clean $\cos 2\theta $ quadrupole lobe pattern, and the four BCs trace curves of the same magnitude --- visual confirmation that the wave does not discriminate them.}}{11}{figure.caption.22}\protected@file@percent }
+\newlabel{fig:cvpdir}{{8}{11}{Directivity $|\hat P|(\theta )$ on $r=9$. The trace is dominated by spiral-arm crossings and residual near field, not a clean $\cos 2\theta $ quadrupole lobe pattern, and the four BCs trace curves of the same magnitude --- visual confirmation that the wave does not discriminate them}{figure.caption.22}{}}
+\gdef \@abspage@last{11}

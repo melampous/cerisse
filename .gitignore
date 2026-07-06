@@ -58,3 +58,15 @@ exm/ibm/ibm_tests/*/plot/
 exm/ibm/ibm_tests/*/surf/
 exm/ibm/*/plot/
 exm/ibm/*/surf/
+
+# local-only large data / thesis trees (2026-07-06)
+IBM/
+U_jet/
+THESIS/
+THESIS_overleaf_upload.zip
+overleaf_thesis_work/
+temp/
+docs/thesis/
+.codex/
+docs/theory/*.aux
+docs/theory/*.out

@@ -209,7 +209,8 @@ class Smagorinsky_t : public LES_t<param, idx_t> {
   */
   AMREX_GPU_DEVICE AMREX_FORCE_INLINE void visc_sgs(
   const int i, const int j, const int k, const Array4<const Real>& q,
-  const GpuArray<Real, AMREX_SPACEDIM>& dxinv, const Real delta, Real& mu_T) const
+  const GpuArray<Real, AMREX_SPACEDIM>& dxinv, const Real delta, Real& mu_T,
+  const Real hoop = Real(0.0), const bool is_rz = false) const
   {
     // Calculate derivatives at cell centers uisng  central differences
     const amrex::IntVect iv{AMREX_D_DECL(i, j, k)};
@@ -220,16 +221,21 @@ class Smagorinsky_t : public LES_t<param, idx_t> {
       	dUdx[m][n] = normal_diff_cc<param::order>(iv, n, idx_t::QU + m, q, dxinv);
      }
     }
-    // || Sij ||
-    Real Sijmag = 0.0;
+    // || Sij ||  and dilatation S_kk = div(u)
+    Real Sijmag = 0.0, divu = 0.0;
     for (int m = 0; m < AMREX_SPACEDIM; m++) {
+      divu += dUdx[m][m];
       for (int n = 0; n < AMREX_SPACEDIM; n++) {
         Sijmag += (0.5 * (dUdx[m][n] + dUdx[n][m])) *
                 (0.5 * (dUdx[m][n] + dUdx[n][m])); // Sij*Sij
       }
     }
-    Sijmag = std::sqrt(2.0 * Sijmag);
-    mu_T = q(i, j, k, idx_t::QRHO) * param::Cs * param::Cs * delta * delta * Sijmag;
+    // axisymmetric (r-z): add hoop strain S_thetatheta = u_r/r
+    if (is_rz) { Sijmag += hoop * hoop; divu += hoop; }
+    // deviatoric (trace-free) strain so mu_T is insensitive to pure dilatation:
+    // S*_ij S*_ij = S_ij S_ij - (1/3) (S_kk)^2
+    const Real Sdev = amrex::max(Sijmag - one_third * divu * divu, Real(0.0));
+    mu_T = q(i, j, k, idx_t::QRHO) * param::Cs * param::Cs * delta * delta * std::sqrt(2.0 * Sdev);
   }
   /**
    * \brief calculates sub-grid conductivity
@@ -265,9 +271,10 @@ class Smagorinsky_t : public LES_t<param, idx_t> {
   AMREX_GPU_DEVICE AMREX_FORCE_INLINE void compute_sgsterms(
   const int i, const int j, const int k, const Array4<const Real>& q,
   const GpuArray<Real, AMREX_SPACEDIM>& dxinv, const Real delta, const Real& Cp_o_Pr, 
-  Real& mu_T, Real& cond_T, Real& rhoD_T) const
+  Real& mu_T, Real& cond_T, Real& rhoD_T,
+  const Real hoop = Real(0.0), const bool is_rz = false) const
   {
-    visc_sgs(i,j,k,q,dxinv,delta,mu_T);
+    visc_sgs(i,j,k,q,dxinv,delta,mu_T, hoop, is_rz);
     cond_T = mu_T*param::Pr_o_Prsgs*Cp_o_Pr;
     rhoD_T = mu_T*this->Scsgs_inv;
   }  
@@ -297,7 +304,8 @@ public :
 
   AMREX_GPU_DEVICE AMREX_FORCE_INLINE void visc_sgs(
   const int i, const int j, const int k, const Array4<const Real>& q,
-  const GpuArray<Real, AMREX_SPACEDIM>& dxinv, const Real delta, Real& mu_T) const
+  const GpuArray<Real, AMREX_SPACEDIM>& dxinv, const Real delta, Real& mu_T,
+  const Real hoop = Real(0.0), const bool is_rz = false) const
   {
     // Calculate derivatives at cell centers, second order central difference
     const amrex::IntVect iv{AMREX_D_DECL(i, j, k)};
@@ -311,7 +319,6 @@ public :
      }
     }
     //
-    const Real divu = AMREX_D_TERM(dUdx[0][0], +dUdx[1][1], +dUdx[2][2]);
     Real dUdx2[3][3] = {{0.0}};
     for (int m = 0; m < AMREX_SPACEDIM; m++) {
       for (int n = 0; n < AMREX_SPACEDIM; n++) {
@@ -319,10 +326,14 @@ public :
         dUdx[m][0] * dUdx[0][n] + dUdx[m][1] * dUdx[1][n] + dUdx[m][2] * dUdx[2][n];
       }
     }
-    // assert(divu * divu == dUdx2[0][0] + dUdx2[1][1] + dUdx2[2][2]); // tested true
+    // WALE traceless operator: subtract (1/3) trace(g^2) = (1/3) sum_k (g^2)_kk,
+    // NOT (1/3)(trace g)^2 = (1/3) divu^2  (the two are unequal in general).
+    Real trace_g2 = AMREX_D_TERM(dUdx2[0][0], +dUdx2[1][1], +dUdx2[2][2]);
+    if (is_rz) trace_g2 += hoop * hoop;   // axisymmetric g_thetatheta = u_r/r
+    const Real Dkk = trace_g2 * one_third;
 
     Real SijSij = 0.0;
-    Real DijDij = 0.0; Real Dkk = divu * divu * one_third; 
+    Real DijDij = 0.0;
     for (int m = 0; m < AMREX_SPACEDIM; m++) {
       for (int n = 0; n < AMREX_SPACEDIM; n++) {
         SijSij += (0.5 * (dUdx[m][n] + dUdx[n][m])) *
@@ -331,6 +342,12 @@ public :
           (0.5 * (dUdx2[m][n] + dUdx2[n][m]) - Real(m == n) * Dkk) *
           (0.5 * (dUdx2[m][n] + dUdx2[n][m]) - Real(m == n) * Dkk); // Dij*Dij
       }
+    }
+    // axisymmetric (r-z) theta-theta contributions to the invariants
+    if (is_rz) {
+      SijSij += hoop * hoop;
+      const Real Sd_tt = hoop * hoop - Dkk;
+      DijDij += Sd_tt * Sd_tt;
     }
 
     mu_T = q(i, j, k, idx_t::QRHO) * Cw * Cw * delta * delta * std::pow(DijDij, 1.5) /
@@ -366,9 +383,10 @@ public :
   AMREX_GPU_DEVICE AMREX_FORCE_INLINE void compute_sgsterms(
   const int i, const int j, const int k, const Array4<const Real>& q,
   const GpuArray<Real, AMREX_SPACEDIM>& dxinv, const Real delta, const Real& Cp_o_Pr, 
-  Real& mu_T, Real& cond_T, Real& rhoD_T) const
+  Real& mu_T, Real& cond_T, Real& rhoD_T,
+  const Real hoop = Real(0.0), const bool is_rz = false) const
   {
-    visc_sgs(i,j,k,q,dxinv,delta,mu_T);
+    visc_sgs(i,j,k,q,dxinv,delta,mu_T, hoop, is_rz);
     cond_T = mu_T*this->Pr_o_Prsgs*Cp_o_Pr;
     rhoD_T = mu_T*this->Scsgs_inv;
   }  

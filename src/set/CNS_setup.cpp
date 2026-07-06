@@ -13,26 +13,28 @@ using BndryFunc = StateDescriptor::BndryFunc;
 
 //
 // Components are:
-//  Interior, Inflow, Outflow, Symmetry, SlipWall, NoSlipWall, User defined
-//  (0)         (1)     (2)       (3)      (4)        (5)         (6)
+//  Interior, Inflow, Outflow, Symmetry, SlipWall, NoSlipWall, User, FarField
+//  (0)       (1)     (2)      (3)       (4)       (5)         (6)   (7)
 static int scalar_bc[] = {BCType::int_dir,      BCType::ext_dir,
                           BCType::foextrap,     BCType::reflect_even,
                           BCType::reflect_even, BCType::reflect_even,
-                          BCType::ext_dir};
+                          BCType::ext_dir,      BCType::ext_dir};
 
 static int norm_vel_bc[] = {BCType::int_dir,     BCType::ext_dir,
                             BCType::foextrap,    BCType::reflect_odd,
                             BCType::reflect_odd, BCType::reflect_odd,
-                            BCType::ext_dir};
+                            BCType::ext_dir,     BCType::ext_dir};
 
 static int tang_vel_bc[] = {BCType::int_dir,      BCType::ext_dir,
                             BCType::foextrap,     BCType::reflect_even,
                             BCType::reflect_even, BCType::reflect_odd,
-                            BCType::ext_dir};
+                            BCType::ext_dir,      BCType::ext_dir};
 
 // If AMReX returns a negative BC (e.g. -1), treat as Interior (0) (this is to avoid weird errors while using periodic BCs)
 inline int safe_bc_index(int bc) {    
-  return (bc < 0 ? 0 : bc);
+  if (bc < 0) return 0;
+  if (bc > 7) amrex::Abort("Unsupported cns.lo_bc/hi_bc value");
+  return bc;
 }
 
 static void set_scalar_bc(BCRec& bc, const BCRec* phys_bc) {

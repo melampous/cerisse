@@ -8,6 +8,7 @@
 template <bool isAD, bool isIB, int order, typename cls_t>
 class centraldif_t {
   public:
+  static constexpr bool rz_pressure_split_capable = false;  // RZ pressure-split is WENO-only
 
   AMREX_GPU_HOST_DEVICE
   centraldif_t() {

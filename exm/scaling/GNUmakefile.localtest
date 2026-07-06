@@ -1,0 +1,21 @@
+# ==== Cerisse GPU build for NVIDIA A100 (sm_80) ====
+# Build:  make -f GNUmakefile.a100 -j 8
+# Produces: main3d.gnu.MPI.CUDA.ex
+DEBUG        = FALSE
+DIM          = 3
+COMP         = gnu
+CXXSTD       = c++20
+PRECISION    = DOUBLE
+TINY_PROFILE = TRUE
+USE_MPI      = TRUE      # 1 MPI rank per GPU  -> 8 ranks for 8x A100
+USE_CUDA     = TRUE      # CUDA backend
+USE_OMP      = FALSE     # never mix OMP with CUDA
+USE_GPIBM    = FALSE     # set TRUE only for immersed-boundary cases (auto-uses BVH on GPU)
+AMREX_NO_PROBINIT = TRUE
+CUDA_ARCH    = 8.9   # LOCAL Ada test only (deliverable uses 8.0 for A100)
+NVCC_CCBIN   = g++-11
+CXXFLAGS    += -mno-avx512f
+AMR_SOLVER   = $(abspath ../../)
+AMREX_HOME   = $(abspath ../../lib/amrex)
+CEXE_headers += prob.h
+include $(AMR_SOLVER)/src/Make.CNS

@@ -1,12 +1,14 @@
 #ifndef IBM_SOLVER_H_
 #define IBM_SOLVER_H_
 
+#include <AMReX_ParmParse.H>
 #include <AMReX_Scan.H>
 #include <AMReX_Reduce.H>
 
 #include "ibm_containers.h"
 
 #include <iomanip>  // std::setprecision, std::fixed
+#include <sstream>
 
 //===================================================================================
 ///-------------------------------- main class --------------------------------------
@@ -22,6 +24,10 @@ public:
   // constant factor for image point
   static constexpr int  iorder_tparm = param::interp_order; // number of weighted points used for image point construction
   static constexpr int  eorder_tparm = param::extrap_order; // number of image points used for ghost point extrapolation
+  static_assert(param::interp_order == 1 || param::interp_order == 2,
+      "IBM interp_order: 1 = bi/trilinear, 2 = WLS quadratic; no other value is implemented");
+  static_assert(param::interp_order_surf == 1 || param::interp_order_surf == 2,
+      "IBM interp_order_surf: 1 = bi/trilinear, 2 = WLS quadratic; no other value is implemented");
   static constexpr Real cim = param::alpha;
   
   static constexpr int  iorder_tparm_surf = param::interp_order_surf; // number of weighted points used for image point construction
@@ -40,15 +46,14 @@ public:
   static constexpr int  N_InterP      = ipow(iorder_tparm + 1, AMREX_SPACEDIM);
   static constexpr int  N_InterP_surf = ipow(iorder_tparm_surf + 1, AMREX_SPACEDIM);
 
-  using GPDATA = gpData_t<eorder_tparm, iorder_tparm>;
   using SURFIMP = surfImp_t<eorder_tparm_surf, iorder_tparm_surf>;
   using GPSTORE = GPStore<eorder_tparm, iorder_tparm>;
   using GPSTOREVIEW = GPStoreView<eorder_tparm, iorder_tparm>;
 
   // MultiFabs pointer to Amr class instance
-  Amr* amr_p;                                             
-  // Immersed boundary MultiFab array (uint8_t multifab array)
-  Vector<IBMultiFab<uint8_t, GPDATA>*> bmf_a;  
+  Amr* amr_p;
+  // Per-level marker MultiFabs (uint8_t, 2 components: solid + ghost)
+  Vector<IBMultiFab<uint8_t>*> bmf_a;
   // Level-wide flattened ghost-point storage (CSR indexed by local FAB)
   Vector<GPSTORE> gpstore_a;
 
@@ -189,6 +194,27 @@ public:
     read_geom();
     t_geom = amrex::second() - t_geom;
     amrex::Print() << "  IBM init: read_geom       = " << t_geom << " s\n";
+
+    // One-time notice: at extrap_order>=2 a custom wall model that only
+    // implements a legacy compute_surfIB signature never receives disIM /
+    // n_valid, so its Neumann quantities (zero-grad P/T, slip u_t) silently
+    // stay 1st-order while ghost extrapolation runs at 2nd. Make that loud.
+    if constexpr (eorder_tparm >= 2) {
+      using eo_tag  = std::integral_constant<int, eorder_tparm>;
+      using Vec1D   = Array1D<Real, 0, AMREX_SPACEDIM - 1>;
+      using DisArr  = Array1D<Real, 0, eorder_tparm - 1>;
+      using Prims2D = Array2D<Real, 0, eorder_tparm + 1, 0, cls_t::NPRIM - 1>;
+      constexpr bool wm_2nd = ibm_detail::is_detected_v<
+          ibm_detail::compute_surfIB_expr, wallmodel,
+          eo_tag, const Vec1D&, const Vec1D&, const Vec1D&, const Vec1D&,
+          const DisArr&, int, Prims2D&, const int, const cls_t*>;
+      if constexpr (!wm_2nd) {
+        amrex::Print() << "  IBM note: extrap_order=" << eorder_tparm
+                       << " but the wall model has only a legacy compute_surfIB signature;\n"
+                       << "            wall Neumann BC stays 1st-order (see ibm_walltypes.h for the\n"
+                       << "            disIM-aware template to adopt).\n";
+      }
+    }
   }
 
   /**
@@ -210,7 +236,7 @@ public:
     }
 
     // Use default MFInfo (configured to use The_Managed_Arena in IBMultiFab.h)
-    bmf_a[lev] = new IBMultiFab<uint8_t, GPDATA>(bxa, dm, 2, cls_t::NGHOST);
+    bmf_a[lev] = new IBMultiFab<uint8_t>(bxa, dm, 2, cls_t::NGHOST);
   }
 
   /**
@@ -258,6 +284,93 @@ public:
       transform_a[geomIdx] = T;
       // Update world-frame bounding box from body-frame bbox + new transform
       bbox_a[geomIdx] = T.transform_bbox(bbox_body_a[geomIdx]);
+  }
+
+  /**
+   * \brief Sanity-check that surface normals point from solid to fluid.
+   *
+   * Samples N faces per geometry, computes a probe point at
+   * centroid + eps*normal (body frame), and tests inside/outside.  If the
+   * probe lands inside the body, the normal is pointing the wrong way,
+   * which usually means the user's `interior_is_solid` parameter does not
+   * match the mesh's actual orientation (e.g., STL exported with reversed
+   * face winding, or polygon file in the wrong CCW/CW convention).
+   *
+   * Warns on any failure; aborts if the majority of samples fail (clear
+   * miscofiguration vs. occasional boundary-grazing false positive).
+   *
+   * Called once at the end of rebuildGeometryData() — after convert_inout
+   * has had its chance to flip normals based on `interior_is_solid`.
+   */
+  void verify_normal_orientation()
+  {
+    BL_PROFILE("IBM::verify_normal_orientation");
+    constexpr int N_SAMPLES_PER_GEOM = 20;
+    constexpr Real EPS_FACTOR        = Real(0.01);  // 1% of body diagonal
+
+    for (int ii = 0; ii < ngeom; ++ii) {
+      const int n_faces = geom_offsets[ii + 1] - geom_offsets[ii];
+      if (n_faces == 0) continue;
+
+      // Length scale: body-frame bounding box diagonal.
+      Real diag2 = Real(0.0);
+      for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+        const Real ext = bbox_max_d(bbox_body_a[ii], d)
+                       - bbox_min_d(bbox_body_a[ii], d);
+        diag2 += ext * ext;
+      }
+      const Real eps = EPS_FACTOR * std::sqrt(diag2);
+
+      const int n_samples = std::min(N_SAMPLES_PER_GEOM, n_faces);
+      const int step      = std::max(1, n_faces / n_samples);
+
+      int n_failures = 0;
+      int n_checked  = 0;
+      for (int local_f = 0; local_f < n_faces; local_f += step) {
+        const int f_idx = geom_offsets[ii] + local_f;
+        const auto& se  = SurfElem_a[f_idx];
+        const auto& lf  = LocalFrame_a[f_idx];
+
+        Point probe;
+#ifdef AMREX_USE_CGAL
+#if (AMREX_SPACEDIM == 2)
+        probe = Point(se.centroid[0] + eps * lf.normal[0],
+                      se.centroid[1] + eps * lf.normal[1]);
+#else
+        probe = Point(se.centroid[0] + eps * lf.normal[0],
+                      se.centroid[1] + eps * lf.normal[1],
+                      se.centroid[2] + eps * lf.normal[2]);
+#endif
+#else
+        for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+          probe[d] = se.centroid[d] + eps * lf.normal[d];
+        }
+#endif
+
+        BoundedSide side = (*inout_fa[ii])(probe);
+        if (side == BoundedSide::Inside) ++n_failures;
+        ++n_checked;
+      }
+
+      if (n_failures > 0) {
+        amrex::Print()
+            << "[IBM] WARNING: normal-orientation sanity check failed for geometry " << ii
+            << ": " << n_failures << "/" << n_checked
+            << " sample probes (centroid + eps*normal) landed inside the body.\n"
+            << "       eps = " << eps << " (body-frame, ~"
+            << int(EPS_FACTOR * Real(100)) << "% of diag).\n"
+            << "       Likely cause: the 'interior_is_solid' parameter does not match\n"
+            << "       the mesh's actual outward-normal orientation. STL files with\n"
+            << "       inverted face windings, or polygon files in the wrong CCW/CW\n"
+            << "       convention, will trigger this. Visualise the mesh in ParaView\n"
+            << "       and verify face normals point away from the solid interior.\n";
+
+        if (n_failures > n_checked / 2) {
+          amrex::Abort("[IBM] verify_normal_orientation: majority of samples failed; "
+                       "check `interior_is_solid` parameter and mesh orientation.");
+        }
+      }
+    }
   }
 
   /**
@@ -312,241 +425,260 @@ public:
     if (!interior_is_solid) {
       convert_inout(LocalFrame_a);
     }
+
+    // Defensive check: detect mismatched `interior_is_solid` setting or
+    // reversed mesh winding before downstream IBM machinery reads
+    // LocalFrame_a / inout_fa.
+    verify_normal_orientation();
   }
 
   /**
-   * \brief Computes the solid/fluid markers and identifies ghost points for the Immersed Boundary Method.
+   * \brief Compute solid/fluid markers and identify ghost points on a level.
    *
-   * This function iterates over the grid points per level to determine if they are inside (solid) or outside (fluid)
-   * the immersed boundary geometry using BVH-accelerated inside/outside tests. It populates the ibMarkers where:
-   * - Component 0 indicates if a point is solid (true) or fluid (false).
-   * - Component 1 indicates if a solid point is a ghost point (neighbor to a fluid point).
+   * Per cell, writes two uint8_t components into the IBMultiFab:
+   *   comp 0 — solid marker:  0 = fluid, ii+1 = solid in geometry ii
+   *   comp 1 — ghost marker:  0 = not a ghost point, otherwise carries the
+   *                           geometry id of the owning solid cell
    *
-   * \param lev The current AMR level.
+   * Pipeline (per FAB):
+   *   FAST-SKIP : reject FABs whose working region misses every body bbox.
+   *   Step 1    : solid markers via fast bbox-reject + BVH inside test.
+   *   Step 2    : ghost markers + ghost-point count (fused reduction).
+   *
+   * Per-FAB ghost-point counts feed the level-wide CSR GPStore allocation
+   * at the end of the function.
+   *
+   * \param lev AMR level to process.
    */
   void computeMarkers(int lev)
   {
     BL_PROFILE("IBM::computeMarkers");
-    auto& mfab = *bmf_a[lev];
-    GpuArray<Real, AMREX_SPACEDIM> prob_lo = amr_p->Geom(lev).ProbLoArray();
 
-    // Collect per-FAB ghost-point counts for CSR allocation
+    // Step 2 reads markers in grow(bx, GP_BOX_EXTRA) that were written by
+    // Step 1 in grow(bx, NGHOST). If GP_BOX_EXTRA > NGHOST, Step 2 would
+    // read uninitialised marker memory — guard the invariant at compile time.
+    static_assert(GP_BOX_EXTRA <= cls_t::NGHOST,
+        "GP_BOX_EXTRA must not exceed cls_t::NGHOST: Step 2 would read "
+        "marker cells that Step 1 never initialised.");
+
+    // ---- Level-wide handles ----------------------------------------------
+    auto& mfab        = *bmf_a[lev];
+    const auto prob_lo = amr_p->Geom(lev).ProbLoArray();
+    const auto dx_lev  = dx_a[lev];
+
+    // ---- Per-FAB GP counts (drive level-wide CSR allocation below) -------
     const int nfabs_local = mfab.local_size();
     Vector<int> gp_counts(nfabs_local, 0);
     int ifab_local = 0;
 
-    // Cache level dx for fast-skip bbox intersection test (avoids per-FAB re-fetch)
-    const auto dx_lev_cached = dx_a[lev];
+#ifdef AMREX_USE_GPU
+    // Batched per-FAB GP counters: Step 2 accumulates into one device array
+    // and a single D2H copy after the MFIter loop replaces the previous
+    // blocking ReduceData::value() (4 B D2H + stream sync) per FAB.
+    // Pre-zeroed from gp_counts (all zeros) so fast-skipped FABs, whose
+    // slot no kernel ever touches, read back 0.
+    Gpu::DeviceVector<int> d_gp_counts(nfabs_local);
+    Gpu::copyAsync(Gpu::hostToDevice, gp_counts.begin(), gp_counts.end(),
+                   d_gp_counts.begin());
+    int* const p_gp_counts = d_gp_counts.data();
+#endif
 
     for (MFIter mfi(mfab, false); mfi.isValid(); ++mfi, ++ifab_local) {
-      auto& ibFab = mfab.get(mfi);
-      const Box& bx = mfi.tilebox();
+      const Box&  bx        = mfi.tilebox();
       const auto& ibMarkers = mfab.array(mfi);
 
-      // Clear legacy per-fab ghost-point data
-      ibFab.gpData.clear();
-
-      // =================================================================
-      // FAST-SKIP: if the FAB's working region (valid box + required ghost
-      // cells) does not intersect ANY geometry's world-frame AABB, then all
-      // cells are fluid (marker 0, not ghost point) and no BVH query is
-      // needed. This is mathematically equivalent to running the full
-      // computeMarkers kernel for FABs far from any body, but skips the
-      // GPU kernel launch and per-cell bbox test entirely.
+      // ===================================================================
+      // FAST-SKIP — short-circuit FABs that are entirely freestream.
       //
-      // Working region: valid box grown by max(NGHOST, GP_BOX_EXTRA) + 2.
-      //   - NGHOST: stencil width read by compute_rhs
-      //   - GP_BOX_EXTRA: extra growth for ghost-point detection
-      //   - +2: safety margin for moving-geometry bbox inflation
+      // If the FAB's working region (valid box + the ghost cells consumed
+      // downstream) is disjoint from every body's world-frame AABB, every
+      // cell must be fluid; setVal(0) is mathematically equivalent to the
+      // full kernel but skips the GPU launch and per-cell BVH query.
       //
-      // The check uses AABB-vs-AABB intersection in physical (world-frame)
-      // coordinates. For static geometry, bbox_a[ii] is the body bbox in
-      // world frame; for FSI, it is updated every regrid by the caller
-      // before computeMarkers runs, so this test uses the current body
-      // position.
-      // =================================================================
+      // Working region grows valid box by max(NGHOST, GP_BOX_EXTRA) + 2:
+      //   NGHOST       — stencil width read by compute_rhs
+      //   GP_BOX_EXTRA — extra growth for ghost-point detection (Step 2)
+      //   +2           — safety margin for moving-geometry bbox inflation
+      //
+      // bbox_a[ii] is in the world frame: built once for static geometry,
+      // refreshed by the caller every regrid for FSI before this runs.
+      // ===================================================================
       {
-        const int check_grow = std::max(int(cls_t::NGHOST), GP_BOX_EXTRA) + 2;
+        constexpr int check_grow = std::max(int(cls_t::NGHOST), GP_BOX_EXTRA) + 2;
         const Box bxcheck = amrex::grow(bx, check_grow);
+
         bool any_touches = false;
         for (int ii = 0; ii < ngeom; ++ii) {
           bool intersects = true;
           for (int d = 0; d < AMREX_SPACEDIM; ++d) {
-            const amrex::Real box_lo_d =
-                prob_lo[d] + bxcheck.smallEnd(d) * dx_lev_cached[d];
-            const amrex::Real box_hi_d =
-                prob_lo[d] + (bxcheck.bigEnd(d) + 1) * dx_lev_cached[d];
-            if (box_hi_d < bbox_min_d(bbox_a[ii], d) || box_lo_d > bbox_max_d(bbox_a[ii], d)) {
+            const Real box_lo_d = prob_lo[d] +  bxcheck.smallEnd(d)      * dx_lev[d];
+            const Real box_hi_d = prob_lo[d] + (bxcheck.bigEnd(d) + 1)   * dx_lev[d];
+            if (box_hi_d < bbox_min_d(bbox_a[ii], d) ||
+                box_lo_d > bbox_max_d(bbox_a[ii], d)) {
               intersects = false;
               break;
             }
           }
           if (intersects) { any_touches = true; break; }
         }
+
         if (!any_touches) {
-          // Entire FAB is in pure freestream — mark every cell as fluid,
-          // no ghost points. setVal(0) covers both components (solid flag
-          // and ghost-point flag) across the FAB's full allocated region,
-          // matching the default state expected downstream.
-          mfab.get(mfi).template setVal<amrex::RunOn::Device>(typename std::remove_reference_t<decltype(mfab.get(mfi))>::value_type(0));
-          ibFab.gpData.ngps = 0;
+          // Pure freestream: clear both marker components over the FAB's
+          // full allocated region (valid + ghost), then move on.
+          mfab.get(mfi).template setVal<amrex::RunOn::Device>(uint8_t(0));
           gp_counts[ifab_local] = 0;
           continue;
         }
       }
 
 #ifdef AMREX_USE_GPU
-      // ================================================================
-      // GPU path: ParallelFor for solid + ghost markers
-      // ================================================================
+      // ===================================================================
+      // GPU path
+      // ===================================================================
       AMREX_ALWAYS_ASSERT_WITH_MESSAGE(ngeom <= MAX_NGEOM,
-          "ngeom exceeds MAX_NGEOM; increase MAX_NGEOM in ibm_containers.h");
+          "ngeom exceeds MAX_NGEOM; raise MAX_NGEOM in ibm_containers.h");
 
-      // Pre-extract GPU-friendly views (trivially-copyable POD structs)
+      // Pre-pack trivially-copyable POD views for device capture.
       GpuArray<InsideTesterView, MAX_NGEOM> inout_views;
-      GpuArray<AABB, MAX_NGEOM> bboxes;
-      GpuArray<RigidTransform, MAX_NGEOM> transforms;
-      for (int ii = 0; ii < ngeom; ii++) {
-          inout_views[ii] = inout_fa[ii]->view();
-          bboxes[ii] = bbox_a[ii];           // world-frame bbox
-          transforms[ii] = transform_a[ii];  // body→world transform
+      GpuArray<AABB,             MAX_NGEOM> bboxes;
+      GpuArray<RigidTransform,   MAX_NGEOM> transforms;
+      for (int ii = 0; ii < ngeom; ++ii) {
+        inout_views[ii] = inout_fa[ii]->view();
+        bboxes[ii]      = bbox_a[ii];          // world-frame bbox
+        transforms[ii]  = transform_a[ii];     // body→world transform
       }
-
       const int ngeom_local = ngeom;
-      const auto dx_lev = dx_a[lev];
 
-      // --- Step 1: Compute solid markers (component 0) ---
-      // Query points are in world frame; we fast-reject with world-frame bbox,
-      // then inverse-transform to body frame for the BVH inside/outside test.
+      // --- Step 1: solid markers (comp 0) over grow(bx, NGHOST) ----------
+      // Query points are in world frame: fast-reject vs world bbox, then
+      // inverse-transform to body frame for the BVH inside/outside test.
       const Box& bxg = amrex::grow(bx, cls_t::NGHOST);
       amrex::ParallelFor(bxg,
         [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
       {
-        ibMarkers(i, j, k, 0) = static_cast<uint8_t>(0);
-        ibMarkers(i, j, k, 1) = static_cast<uint8_t>(0);
+        ibMarkers(i, j, k, 0) = uint8_t(0);
+        ibMarkers(i, j, k, 1) = uint8_t(0);
 
         Point gridpoint = make_grid_point(prob_lo, dx_lev, i, j, k);
-
-        for (int ii = 0; ii < ngeom_local; ii++) {
-          // Fast rejection with world-frame bounding box
-          if (!bbox_contains(bboxes[ii], gridpoint)) {
-              continue;
-          }
-
-          // Transform query point to body frame for BVH query
+        for (int ii = 0; ii < ngeom_local; ++ii) {
+          if (!bbox_contains(bboxes[ii], gridpoint)) continue;
           Point gp_body = transforms[ii].to_body(gridpoint);
           BoundedSide result = inout_views[ii](gp_body);
-
           if (result == BoundedSide::Inside || result == BoundedSide::OnBoundary) {
             ibMarkers(i, j, k, 0) = static_cast<uint8_t>(ii + 1);
             break;
           }
         }
-      }); // end ParallelFor for solid markers
+      });
 
-      // --- Step 2: Compute ghost markers + count ghost points (fused) ---
-      constexpr int gl = ghost_layers;
-      const Box& bxgp = amrex::grow(bx, GP_BOX_EXTRA);
+      // --- Step 2: ghost markers (comp 1) + count ------------------------
+      // A solid cell is a ghost point iff at least one neighbour within
+      // ±ghost_layers along an axis is fluid. Comp 1 stores the geometry id
+      // (== comp 0) on ghost points; non-ghost cells keep the comp-1 zero
+      // written by Step 1 (relies on GP_BOX_EXTRA <= NGHOST static_assert).
+      // Count via per-FAB device atomic slot instead of a fused ReduceOps:
+      // ReduceData::value() forced a blocking D2H + stream sync per FAB;
+      // the slots are read back once for all FABs after the loop.
       {
-        ReduceOps<ReduceOpSum> reduce_op;
-        ReduceData<int> reduce_data(reduce_op);
-        using ReduceTuple = typename decltype(reduce_data)::Type;
-        reduce_op.eval(bxgp, reduce_data,
-          [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept -> ReduceTuple
+        constexpr int gl   = ghost_layers;
+        const Box&    bxgp = amrex::grow(bx, GP_BOX_EXTRA);
+        int* const p_count_fab = p_gp_counts + ifab_local;
+
+        amrex::ParallelFor(bxgp,
+          [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
-          if (!ibMarkers(i, j, k, 0)) return { 0 };
+          if (!ibMarkers(i, j, k, 0)) return;  // fluid: not a candidate
 
           bool ghost = false;
-          for (int d = 1; d <= gl; d++) {
-            ghost = ghost || (!ibMarkers(i-d, j,   k,   0));
-            ghost = ghost || (!ibMarkers(i+d, j,   k,   0));
-            ghost = ghost || (!ibMarkers(i,   j-d, k,   0));
-            ghost = ghost || (!ibMarkers(i,   j+d, k,   0));
+          for (int d = 1; d <= gl; ++d) {
+            ghost = ghost || (!ibMarkers(i-d, j,   k,   0))
+                          || (!ibMarkers(i+d, j,   k,   0))
+                          || (!ibMarkers(i,   j-d, k,   0))
+                          || (!ibMarkers(i,   j+d, k,   0));
 #if (AMREX_SPACEDIM == 3)
-            ghost = ghost || (!ibMarkers(i,   j,   k-d, 0));
-            ghost = ghost || (!ibMarkers(i,   j,   k+d, 0));
+            ghost = ghost || (!ibMarkers(i,   j,   k-d, 0))
+                          || (!ibMarkers(i,   j,   k+d, 0));
 #endif
             if (ghost) break;
           }
 
           if (ghost) {
             ibMarkers(i, j, k, 1) = ibMarkers(i, j, k, 0);
-            return { 1 };
+            Gpu::Atomic::Add(p_count_fab, 1);
           }
-          return { 0 };
         });
-        ReduceTuple hv = reduce_data.value(reduce_op);
-        int ngps_fab = amrex::get<0>(hv);
-        ibFab.gpData.ngps = ngps_fab;
-        gp_counts[ifab_local] = ngps_fab;
       }
 
 #else
-      // ================================================================
-      // CPU path: original LoopOnCpu implementation
-      // ================================================================
+      // ===================================================================
+      // CPU path — semantically identical to GPU. CPU additionally emits
+      // an OnBoundary diagnostic via IB_WarnOnBoundary (cannot print on GPU).
+      // ===================================================================
 
-      // compute solid markers
-      amrex::LoopOnCpu(amrex::grow(bx, cls_t::NGHOST), [&](int i, int j, int k) {
-        ibMarkers(i, j, k, 0) = static_cast<uint8_t>(0);
-        ibMarkers(i, j, k, 1) = static_cast<uint8_t>(0);
+      // --- Step 1: solid markers (comp 0) over grow(bx, NGHOST) ----------
+      amrex::LoopOnCpu(amrex::grow(bx, cls_t::NGHOST),
+        [&](int i, int j, int k)
+      {
+        ibMarkers(i, j, k, 0) = uint8_t(0);
+        ibMarkers(i, j, k, 1) = uint8_t(0);
 
-        Point gridpoint = make_grid_point(prob_lo, dx_a[lev], i, j, k);
-
-        for (int ii = 0; ii < ngeom; ii++) {
-          if (!bbox_contains(bbox_a[ii], gridpoint)) {
-              continue;
-          }
-
-          // Transform to body frame for inside/outside test
+        Point gridpoint = make_grid_point(prob_lo, dx_lev, i, j, k);
+        for (int ii = 0; ii < ngeom; ++ii) {
+          if (!bbox_contains(bbox_a[ii], gridpoint)) continue;
           Point gp_body = transform_a[ii].to_body(gridpoint);
           inside_t& inside = *inout_fa[ii];
           BoundedSide result = inside(gp_body);
           IB_WarnOnBoundary(ii, lev, i, j, k, result, gridpoint);
-
           if (result == BoundedSide::Inside || result == BoundedSide::OnBoundary) {
             ibMarkers(i, j, k, 0) = static_cast<uint8_t>(ii + 1);
             break;
           }
         }
-      }); // end LoopOnCpu for solid markers
+      });
 
-      // compute ghost markers
+      // --- Step 2: ghost markers (comp 1) + count ------------------------
       int ngps_fab = 0;
-      amrex::LoopOnCpu(amrex::grow(bx, GP_BOX_EXTRA), [&](int i, int j, int k) {
-        bool ghost = false;
-        if (ibMarkers(i, j, k, 0)) {
-          for(int d = 1; d <= ghost_layers; d++) {
-            ghost = ghost || (!ibMarkers(i-d, j,   k,   0));
-            ghost = ghost || (!ibMarkers(i+d, j,   k,   0));
-            ghost = ghost || (!ibMarkers(i,   j-d, k,   0));
-            ghost = ghost || (!ibMarkers(i,   j+d, k,   0));
-#if (AMREX_SPACEDIM == 3)
-            ghost = ghost || (!ibMarkers(i,   j,   k-d, 0));
-            ghost = ghost || (!ibMarkers(i,   j,   k+d, 0));
-#endif
-            if (ghost) break;
-          }
-          ngps_fab += ghost;
+      amrex::LoopOnCpu(amrex::grow(bx, GP_BOX_EXTRA),
+        [&](int i, int j, int k)
+      {
+        if (!ibMarkers(i, j, k, 0)) return;  // fluid: not a candidate
 
-          if (ghost) {
-            ibMarkers(i, j, k, 1) = ibMarkers(i, j, k, 0);
-          } else {
-            ibMarkers(i, j, k, 1) = static_cast<uint8_t>(0);
-          }
+        bool ghost = false;
+        for (int d = 1; d <= ghost_layers; ++d) {
+          ghost = ghost || (!ibMarkers(i-d, j,   k,   0))
+                        || (!ibMarkers(i+d, j,   k,   0))
+                        || (!ibMarkers(i,   j-d, k,   0))
+                        || (!ibMarkers(i,   j+d, k,   0));
+#if (AMREX_SPACEDIM == 3)
+          ghost = ghost || (!ibMarkers(i,   j,   k-d, 0))
+                        || (!ibMarkers(i,   j,   k+d, 0));
+#endif
+          if (ghost) break;
         }
-      }); // end LoopOnCpu for ghost markers
-      ibFab.gpData.ngps = ngps_fab;
+
+        if (ghost) {
+          ibMarkers(i, j, k, 1) = ibMarkers(i, j, k, 0);
+          ++ngps_fab;
+        }
+        // Non-ghost solid cells keep the comp-1 zero from Step 1 init
+        // (relies on GP_BOX_EXTRA <= NGHOST static_assert).
+      });
       gp_counts[ifab_local] = ngps_fab;
 
 #endif // AMREX_USE_GPU
 
     } // end MFIter
 
-    // Pre-allocate level-wide flattened GPStore from per-FAB counts (CSR)
-    gpstore_a[lev].allocate(gp_counts);
+#ifdef AMREX_USE_GPU
+    // Single batched readback of all per-FAB GP counts (one sync for the
+    // whole level; replaces one blocking readback per FAB).
+    Gpu::copy(Gpu::deviceToHost, d_gp_counts.begin(), d_gp_counts.end(),
+              gp_counts.begin());
+#endif
 
-  } // end computeMarkers
+    // ---- Build the level-wide flattened GPStore (CSR layout) -------------
+    gpstore_a[lev].allocate(gp_counts);
+  }
 
   /**
    * \brief Initialises geometric and interpolation data for Ghost Points (GPs).
@@ -575,46 +707,116 @@ public:
     // GPU path: ParallelFor with atomic counter for GP index
     // ================================================================
 
-    // Pre-build GPU-capturable BVH4QueryViews for each geometry
+    // ------------------------------------------------------------------
+    // Pack per-geometry data into trivially-copyable POD GpuArrays so the
+    // device lambda can capture-by-value.  Stack-allocated, fixed length
+    // MAX_NGEOM (16) — multi-body limit; raise in ibm_containers.h if hit.
+    // ------------------------------------------------------------------
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(ngeom <= MAX_NGEOM,
         "ngeom exceeds MAX_NGEOM; increase MAX_NGEOM in ibm_containers.h");
+
+    // bqv[ii] : BVH4 query view for geometry ii (POD: raw ptrs to nodes/
+    //           verts/faces). Used on device for closest-point queries in
+    //           body frame. Owning BVH lives in bvh_a[ii].
     GpuArray<BVH4QueryView, MAX_NGEOM> bqv;
+
+    // geom_off[ii] : level-wide flat-id offset for geometry ii's elements.
+    //                Body-local prim_id + geom_off[ii] = global element id
+    //                (used to index into LocalFrame_a / SurfElem_a).
+    //                geom_off[ngeom] is the sentinel = total #elements.
     GpuArray<int, MAX_NGEOM + 1> geom_off;
+
+    // transforms[ii] : rigid-body transform (body→world) for geometry ii.
+    //                  Identity for static bodies; refreshed by FSI before
+    //                  this kernel via updateRigidTransform().
     GpuArray<RigidTransform, MAX_NGEOM> transforms;
+
     for (int ii = 0; ii < ngeom; ii++) {
         bqv[ii]        = bvh_a[ii].query_view(geom_a[ii]);
         geom_off[ii]   = geom_offsets[ii];
         transforms[ii] = transform_a[ii];
     }
-    geom_off[ngeom] = geom_offsets[ngeom];
+    geom_off[ngeom] = geom_offsets[ngeom];   // sentinel for total elem count
 
+    // ------------------------------------------------------------------
+    // Level-scalar constants captured by value into the device lambda.
+    // ------------------------------------------------------------------
+
+    // Cell sizes on this level (dx, dy[, dz]).
     const auto dx_lev       = dx_a[lev];
+
+    // Image-point spacing along the surface normal (= alpha * cell_diagonal).
+    // search_*_image_point uses multiples of this to place IPs.
     const Real di_lev       = di_a[lev];
+
+    // Cell diagonal length on this level — used as upper-bound sanity
+    // check for ghost-point ↔ closest-surface-point distance.
     const Real diag_lev     = diag_a[lev];
+
+    // Local copy of geometry count: members can't be referenced inside
+    // a device lambda directly, so we capture a stack int by value.
     const int  ngeom_local  = ngeom;
+
+    // Raw pointer to level-wide LocalFrame array (per-element body-frame
+    // normal + tangents). Indexed by global f_idx = prim_id + geom_off[ii].
     const auto* lf_ptr      = LocalFrame_a.data();
 
-    auto gpview = gpstore.view();  // GPU-capturable POD with writable _w pointers
+    // GPU-capturable POD view of the CSR GPStore. Holds both const read
+    // pointers and writable _w pointers used during this init pass only.
+    auto gpview = gpstore.view();
+
+    // All host-visible counters batched into ONE device array read back with
+    // a single copy+sync after the MFIter loop (previously: one blocking
+    // dataValue() readback + stream sync PER FAB for the count verification,
+    // plus a reset kernel per FAB):
+    //   slots [0, nfabs)  — per-FAB atomic GP counters (assign GP slots);
+    //                       pre-zeroed here, so no per-FAB reset is needed.
+    //   slot  nfabs       — first-IP stencil-out-of-box failure count
+    //   slot  nfabs+1     — first-IP below-threshold placement failure count
+    // (failure counters give GPU parity with the CPU path's abort/print
+    // semantics: device printf is lossy and asserts are stripped in release,
+    // so failures are aggregated and reported host-side).
+    const int nfabs_local = mfab.local_size();
+
+    // Host mirror of the managed CSR offsets. fab_offsets is managed memory,
+    // and on devices with concurrentManagedAccess==0 (WSL) ANY host touch of
+    // managed memory while device work is in flight faults. The old per-FAB
+    // blocking readbacks serialized the device before every host read by
+    // accident; with batched counters the launch loops below run ahead
+    // asynchronously, so every host-side offset read must go through this
+    // plain host copy instead (device kernels keep the managed copy via
+    // gpview). The one sync here replaces this function's former 2-per-FAB.
+    Gpu::streamSynchronize();
+    Vector<int> h_fab_offsets(nfabs_local + 1);
+    std::copy(gpstore.fab_offsets.begin(), gpstore.fab_offsets.end(),
+              h_fab_offsets.begin());
+
+    Vector<int> h_counts(nfabs_local + 2, 0);
+    Gpu::DeviceVector<int> d_counts(nfabs_local + 2);
+    Gpu::copyAsync(Gpu::hostToDevice, h_counts.begin(), h_counts.end(),
+                   d_counts.begin());
+    int* p_gp_count    = d_counts.data();                    // per-FAB slots
+    int* p_err_stencil = d_counts.data() + nfabs_local;      // first-IP stencil out of box
+    int* p_err_place   = d_counts.data() + nfabs_local + 1;  // first-IP below threshold
 
     int ifab_local = 0;
     for (MFIter mfi(mfab, false); mfi.isValid(); ++mfi, ++ifab_local) {
-      auto& ibFab = mfab.get(mfi);
+      const int gp_offset = h_fab_offsets[ifab_local];
+      const int ngps_fab  = h_fab_offsets[ifab_local + 1] - gp_offset;
 
-      const int gp_offset = gpstore.fab_offsets[ifab_local];
-      const int ngps_fab  = gpstore.fab_offsets[ifab_local + 1] - gp_offset;
+      if (ngps_fab == 0) continue;
 
-      if (ngps_fab == 0) {
-          ibFab.gpData.ngps = 0;
-          continue;
-      }
-
+      // bxg = valid box + NGHOST ghost layers. Used as the bounds container
+      // for image-point stencil checks: the 2x2 (2D) or 2x2x2 (3D) bilinear
+      // stencil corner cells must lie inside bxg, so that their markers
+      // (written by computeMarkers in this same range) are valid reads.
       const Box& bxg = mfi.growntilebox(cls_t::NGHOST);
       const Box& bx = mfi.tilebox();
       auto const ibMarkers = mfab.array(mfi);
 
-      // Atomic counter for assigning GP flat indices
-      Gpu::DeviceScalar<int> d_gp_count(0);
-      int* p_gp_count = d_gp_count.dataPtr();
+      // This FAB's dedicated counter slot (pre-zeroed at allocation above,
+      // so the old per-FAB single-thread reset kernel is gone).
+      int* const p_fab_count = p_gp_count + ifab_local;
 
       const Box bxgp = amrex::grow(bx, GP_BOX_EXTRA);
       amrex::ParallelFor(bxgp,
@@ -622,12 +824,18 @@ public:
       {
         if (!ibMarkers(i, j, k, 1)) return;
 
-        // Atomically claim a slot in the flat GP array
-        int local_idx = Gpu::Atomic::Add(p_gp_count, 1);
+        // Atomically claim a slot in the flat GP array.
+        // Note: local_idx assignment order is non-deterministic on GPU —
+        // the GP at the same physical cell (i,j,k) may receive different
+        // gidx across runs. This does not affect physics: downstream reads
+        // gpview.gp_ijk[ii] to recover (i,j,k), and final ghost-cell
+        // primitives are written back to those cells regardless of how
+        // gidx is permuted.
+        int local_idx = Gpu::Atomic::Add(p_fab_count, 1);
         const int gidx = gp_offset + local_idx;
 
         Point gp = make_grid_point(prob_lo, dx_lev, i, j, k);
-        gpview.gp_ijk_w[gidx] = make_vec<int>(i, j, k);
+        gpview.gp_ijk_w[gidx] = make_vec<int>(i, j, k);  // dim-aware: 2D ignores k
 
         int geomIdx = static_cast<int>(ibMarkers(i, j, k, 0)) - 1;
         AMREX_ASSERT(geomIdx >= 0 && geomIdx < ngeom_local);
@@ -645,6 +853,15 @@ public:
 
         // Distance (invariant under rigid transform, but computed in world frame)
         Real disGP_val = std::sqrt(point_distance_sq(gp, cp));
+
+        // Sanity: ghost points are solid cells with at least one fluid
+        // neighbour within ghost_layers, so the closest surface point must
+        // be within roughly one cell diagonal. Failure here means one of:
+        //   (a) BVH returned a wrong primitive (geometry data corruption)
+        //   (b) marker comp 1 was set on a cell not adjacent to fluid
+        //   (c) FAB layout / DistributionMapping inconsistency between
+        //       computeMarkers and initialiseGPs (shouldn't happen, but
+        //       would manifest here first if a regrid slipped between).
         AMREX_ASSERT(disGP_val < diag_lev);
         gpview.disGP_w[gidx] = disGP_val;
         gpview.ib_xyz_w[gidx] = make_vec<Real>(cp);
@@ -658,41 +875,30 @@ public:
         T.rotate_to_world(lf_body.tangent2, localframe.tangent2);
 #endif
 
-        // Image points
-        Array2D<Real, 0, eorder_tparm - 1, 0, AMREX_SPACEDIM - 1> imp_xyz;
-        Array2D< int, 0, eorder_tparm - 1, 0, AMREX_SPACEDIM - 1> imp_ijk;
-        Array1D<Real, 0, eorder_tparm - 1> disIM;
-        Array1D< int, 0, eorder_tparm - 1> imp_ninterp;
+        // Image points: stack-local SoA, written into GPStore once at the end.
+        // Value-initialised ({}): search_optimal_image_point writes slot 0 only
+        // when an attempt finds fluid; on total placement failure the arrays
+        // would otherwise be persisted uninitialised (imp_ninterp(0)=0 keeps
+        // the GP below INTERP_THRESHOLD -> deterministic 0th-order fallback).
+        Array2D<Real, 0, eorder_tparm - 1, 0, AMREX_SPACEDIM - 1> imp_xyz{};
+        Array2D< int, 0, eorder_tparm - 1, 0, AMREX_SPACEDIM - 1> imp_ijk{};
+        Array1D<Real, 0, eorder_tparm - 1> disIM{};
+        Array1D< int, 0, eorder_tparm - 1> imp_ninterp{};
 
-        for (int jj = 0; jj < eorder_tparm; jj++) {
-          Point cp_start;
-          if (jj == 0) {
-            cp_start = cp;
-          } else {
-            for (int d = 0; d < AMREX_SPACEDIM; ++d) cp_start[d] = imp_xyz(jj - 1, d);
-          }
-
-          if (jj == 0) {
-            search_optimal_image_point<eorder_tparm, iorder_tparm>(
-                cp_start, localframe,
-                lev, prob_lo, dx_lev, di_lev,
-                bxg, ibMarkers,
-                gpview, gidx,
-                imp_xyz, imp_ijk, disIM, imp_ninterp);
-          } else {
-            search_image_point<eorder_tparm, iorder_tparm>(
-                jj, cp_start, localframe,
-                lev, prob_lo, dx_lev, di_lev,
-                bxg, ibMarkers,
-                gpview, gidx,
-                imp_xyz, imp_ijk, disIM, imp_ninterp);
-          }
-        }
+        // Chained walk along the outward normal — jj=0 from IB point,
+        // jj>=1 from previous IP. Shared with CPU path.
+        const int place_status = place_image_points<eorder_tparm, iorder_tparm>(
+            cp, localframe,
+            lev, prob_lo, dx_lev, di_lev,
+            bxg, ibMarkers,
+            gpview, gidx,
+            imp_xyz, imp_ijk, disIM, imp_ninterp);
+        if (place_status & 1) { Gpu::Atomic::Add(p_err_stencil, 1); }
+        if (place_status & 2) { Gpu::Atomic::Add(p_err_place, 1); }
 
         gpview.imp_xyz_w[gidx]       = imp_xyz;
         gpview.imp_ijk_w[gidx]       = imp_ijk;
         gpview.disIM_w[gidx]         = disIM;
-        gpview.imp_ninterp_w[gidx]   = imp_ninterp;
 
         Array2D<Real, 0, eorder_tparm - 1, 0, N_InterP - 1> imp_ipweights;
         Array3D< int, 0, eorder_tparm - 1, 0, N_InterP - 1, 0, AMREX_SPACEDIM - 1> imp_ip_ijk;
@@ -702,25 +908,60 @@ public:
             imp_xyz, imp_ijk, imp_ninterp,
             prob_lo, dx_lev, ibMarkers);
 
+        // Store imp_ninterp AFTER computeIPweights: the iorder=2 WLS path
+        // demotes an unfittable image point by setting imp_ninterp(iim)=0,
+        // and n_valid/eff_order downstream must see that demotion.
+        gpview.imp_ninterp_w[gidx]   = imp_ninterp;
         gpview.imp_ipweights_w[gidx] = imp_ipweights;
         gpview.imp_ip_ijk_w[gidx]    = imp_ip_ijk;
 
         ibMarkers(i, j, k, 1) = static_cast<uint8_t>(imp_ninterp(0));
       }); // end ParallelFor
 
-      // Verify count matches
-      int h_gp_count = d_gp_count.dataValue();
-      if (h_gp_count != ngps_fab) {
+    } // end MFIter
+
+    // Single batched readback of per-FAB counts + error counters (one sync
+    // for the whole level). Verifying after all FABs launched instead of
+    // per-FAB does not add risk: any CSR overflow from a miscounted FAB
+    // already happened inside that FAB's own kernel (the atomic claims
+    // slots during the launch, before any readback could run), and in both
+    // versions we abort before the GP data is consumed.
+    Gpu::copy(Gpu::deviceToHost, d_counts.begin(), d_counts.end(),
+              h_counts.begin());
+    for (int f = 0; f < nfabs_local; ++f) {
+      const int gp_offset = h_fab_offsets[f];
+      const int ngps_fab  = h_fab_offsets[f + 1] - gp_offset;
+      // Fast-skipped FABs (ngps_fab==0) never touch their pre-zeroed slot.
+      if (h_counts[f] != ngps_fab) {
         amrex::Print() << "Error in initialiseGPs (GPU): GP count mismatch\n"
                        << "  level=" << lev
-                       << "  FAB=" << ifab_local
+                       << "  FAB=" << f
                        << "  expected=" << ngps_fab
-                       << "  got=" << h_gp_count
+                       << "  got=" << h_counts[f]
                        << "  gp_offset=" << gp_offset << "\n";
         amrex::Abort("initialiseGPs: ghost point count mismatch");
       }
-      ibFab.gpData.ngps = ngps_fab;
-    } // end MFIter
+    }
+
+    // Aggregated failure report (parity with the CPU path, which aborts on a
+    // first-IP stencil escape and prints per-GP placement failures).
+    // Counters were read back in the batched copy above — no extra sync.
+    {
+      const int n_stencil = h_counts[nfabs_local];
+      const int n_place   = h_counts[nfabs_local + 1];
+      if (n_stencil > 0) {
+        amrex::Print() << "initialiseGPs (GPU): " << n_stencil
+                       << " ghost point(s) on level " << lev
+                       << " have their first image-point stencil outside the grown box.\n";
+        amrex::Abort("initialiseGPs: interpolation stencil out of box (GPU)");
+      }
+      if (n_place > 0) {
+        amrex::Print() << "IBM WARNING (GPU): " << n_place
+                       << " ghost point(s) on level " << lev
+                       << " failed first image-point placement (below threshold);"
+                       << " they fall back to low-order reconstruction.\n";
+      }
+    }
 
 #else
     // ================================================================
@@ -728,16 +969,13 @@ public:
     // ================================================================
     int ifab_local = 0;
     for (MFIter mfi(mfab, false); mfi.isValid(); ++mfi, ++ifab_local) {
-      auto& ibFab = mfab.get(mfi);
-
-      // Get the pre-allocated range in the flattened GPStore for this FAB
+      // Get the pre-allocated range in the flattened GPStore for this FAB.
+      // (CPU build: ManagedVector is plain host memory — direct read is safe;
+      //  the h_fab_offsets host mirror exists only in the GPU branch above.)
       const int gp_offset = gpstore.fab_offsets[ifab_local];
       const int ngps_fab  = gpstore.fab_offsets[ifab_local + 1] - gp_offset;
 
-      if (ngps_fab == 0) {
-          ibFab.gpData.ngps = 0;
-          continue;
-      }
+      if (ngps_fab == 0) continue;
 
       const Box& bxg = mfi.growntilebox(cls_t::NGHOST);
       const Box& bx = mfi.tilebox();
@@ -759,19 +997,26 @@ public:
                   "Invalid geometry index in initialiseGPs");
           gpstore.geomIdx[gidx] = geomIdx;
 
+          // Rigid-body transform: geometry trees/frames live in BODY frame;
+          // query in body frame, return results to world frame (mirrors the
+          // GPU path — previously missing here, which made CPU builds use
+          // wrong closest points/normals once an FSI body moved).
+          const auto& T = transform_a[geomIdx];
+          Point gp_body = T.to_body(gp);
+
 #ifdef AMREX_USE_CGAL
           ClosestPointResult closest_elem =
               cgal_closest_point_query(tree_a[geomIdx], idxmap_a[geomIdx],
-                                       gp, this->geom_offsets[geomIdx]);
+                                       gp_body, this->geom_offsets[geomIdx]);
 #else
           ClosestPointResult closest_elem =
-              bvh_a[geomIdx].closest_point_query(gp, geom_a[geomIdx]);
+              bvh_a[geomIdx].closest_point_query(gp_body, geom_a[geomIdx]);
 #endif
 
           int f_idx = closest_elem.prim_id + this->geom_offsets[geomIdx];
           gpstore.elemIdx[gidx] = f_idx;
 
-          Point cp = closest_elem.point;
+          Point cp = T.to_world(closest_elem.point);
 
           Real disGP = std::sqrt(point_distance_sq(gp, cp));
 
@@ -780,52 +1025,34 @@ public:
           gpstore.disGP[gidx] = disGP;
 
           gpstore.ib_xyz[gidx] = make_vec<Real>(cp);
-          
-          const auto& localframe = LocalFrame_a[f_idx];
 
-          Array2D<Real, 0, eorder_tparm - 1, 0, AMREX_SPACEDIM - 1> imp_xyz;
-          Array2D< int, 0, eorder_tparm - 1, 0, AMREX_SPACEDIM - 1> imp_ijk;
-          Array1D<Real, 0, eorder_tparm - 1> disIM;
-          Array1D< int, 0, eorder_tparm - 1> imp_ninterp;
+          const LocalFrame& lf_body = LocalFrame_a[f_idx];
+          LocalFrame localframe;
+          T.rotate_to_world(lf_body.normal,   localframe.normal);
+          T.rotate_to_world(lf_body.tangent1, localframe.tangent1);
+#if (AMREX_SPACEDIM == 3)
+          T.rotate_to_world(lf_body.tangent2, localframe.tangent2);
+#endif
 
-          for (int jj = 0; jj < eorder_tparm; jj++) {
-            Point cp_start;
-            if (jj == 0) {
-              cp_start = cp;
-            } else {
-#ifdef AMREX_USE_CGAL
-#if (AMREX_SPACEDIM == 2)
-              cp_start = Point(imp_xyz(jj - 1, 0), imp_xyz(jj - 1, 1));
-#else
-              cp_start = Point(imp_xyz(jj - 1, 0), imp_xyz(jj - 1, 1), imp_xyz(jj - 1, 2));
-#endif
-#else
-              for (int d = 0; d < AMREX_SPACEDIM; ++d) cp_start[d] = imp_xyz(jj - 1, d);
-#endif
-            }
-          
-            if (jj == 0) {
-              search_optimal_image_point<eorder_tparm, iorder_tparm>(
-                                      cp_start, localframe, 
-                                      lev, prob_lo, dx_a[lev], di_a[lev],
-                                      bxg, ibMarkers, 
-                                      gpstore, gidx,
-                                      imp_xyz, imp_ijk, disIM, imp_ninterp);
-            } 
-            else {
-              search_image_point<eorder_tparm, iorder_tparm>(
-                                      jj, cp_start, localframe, 
-                                      lev, prob_lo, dx_a[lev], di_a[lev],
-                                      bxg, ibMarkers, 
-                                      gpstore, gidx,
-                                      imp_xyz, imp_ijk, disIM, imp_ninterp);
-            }
-          }
+          // Value-initialised ({}) — see GPU-path note: keeps total placement
+          // failure deterministic (imp_ninterp(0)=0 -> 0th-order fallback).
+          Array2D<Real, 0, eorder_tparm - 1, 0, AMREX_SPACEDIM - 1> imp_xyz{};
+          Array2D< int, 0, eorder_tparm - 1, 0, AMREX_SPACEDIM - 1> imp_ijk{};
+          Array1D<Real, 0, eorder_tparm - 1> disIM{};
+          Array1D< int, 0, eorder_tparm - 1> imp_ninterp{};
+
+          // Chained walk along the outward normal — shared with GPU path.
+          // (return status ignored: the CPU host path aborts/prints inside.)
+          (void) place_image_points<eorder_tparm, iorder_tparm>(
+              cp, localframe,
+              lev, prob_lo, dx_a[lev], di_a[lev],
+              bxg, ibMarkers,
+              gpstore, gidx,
+              imp_xyz, imp_ijk, disIM, imp_ninterp);
 
           gpstore.imp_xyz[gidx] = imp_xyz;
           gpstore.imp_ijk[gidx] = imp_ijk;
           gpstore.disIM[gidx] = disIM;
-          gpstore.imp_ninterp[gidx] = imp_ninterp;
 
           Array2D<Real, 0, eorder_tparm - 1 , 0, N_InterP -1 > imp_ipweights;
           Array3D< int, 0, eorder_tparm - 1 , 0, N_InterP -1, 0, AMREX_SPACEDIM - 1> imp_ip_ijk;
@@ -838,6 +1065,8 @@ public:
               imp_ninterp,
               prob_lo, dx_a[lev], ibMarkers);
           
+          // Store imp_ninterp AFTER computeIPweights (WLS demotion visibility).
+          gpstore.imp_ninterp[gidx] = imp_ninterp;
           gpstore.imp_ipweights[gidx] = imp_ipweights;
           gpstore.imp_ip_ijk[gidx] = imp_ip_ijk;
 
@@ -849,7 +1078,6 @@ public:
       if(gp_count != ngps_fab) {
         amrex::Abort("Error in initialiseGPs: mismatch in ghost point count");
       }
-      ibFab.gpData.ngps = ngps_fab;
     } //end MFIter
 
 #endif // AMREX_USE_GPU
@@ -857,8 +1085,15 @@ public:
     // NOTE: gpstore.shrink() disabled — shrink_to_fit() on PODVector
     // corrupts data on some platforms (observed with AMReX ManagedVector on CPU).
 
-    // Print GP reconstruction quality diagnostics
-    // reportGPDiagnostics(lev);
+    bool ib_diag = false;
+    bool gp_diag = false;
+    {
+      ParmParse pp("ib");
+      pp.query("diag", ib_diag);
+      gp_diag = ib_diag;
+      pp.query("gp_diag", gp_diag);
+    }
+    if (gp_diag) reportGPDiagnostics(lev);
   }
 
   // ========================================================================
@@ -883,17 +1118,8 @@ public:
     const int ngps = gpstore.total_ngps;
     const int istep = amr_p->levelSteps(0);
 
-    if (ngps == 0) {
-      amrex::Print() << "[GP-Diag] Step " << istep << " Level " << lev << ": 0 ghost points\n";
-      return;
-    }
-
     // Ensure GPU data is accessible on host
     Gpu::streamSynchronize();
-
-    // Grid metadata for coordinate conversion
-    const auto prob_lo = amr_p->Geom(lev).ProbLoArray();
-    const auto& dx = dx_a[lev];
 
     constexpr int IDEAL = N_InterP;
     int hist[IDEAL + 1] = {};
@@ -904,7 +1130,7 @@ public:
     int sev_ideal = 0, sev_mild = 0, sev_severe = 0;
     int sev_mild_order[3] = {}, sev_severe_order[3] = {};  // indexed by eff_order
 
-    int order_0 = 0, order_1 = 0, order_2 = 0;
+    int order_counts[3] = {};
 
     Real disGP_min = std::numeric_limits<Real>::max();
     Real disGP_max = Real(0.0);
@@ -926,9 +1152,7 @@ public:
           eff = k; break;
         }
       }
-      if      (eff == 0) order_0++;
-      else if (eff == 1) order_1++;
-      else               order_2++;
+      order_counts[amrex::min(eff, 2)]++;
 
       // Severity classification
       if (n0 == IDEAL) {
@@ -960,6 +1184,31 @@ public:
       }
     }
 
+    int ngps_global = ngps;
+    int sev_counts[3] = {sev_ideal, sev_mild, sev_severe};
+    ParallelDescriptor::ReduceIntSum(ngps_global);
+    ParallelDescriptor::ReduceIntSum(hist, IDEAL + 1);
+    ParallelDescriptor::ReduceIntSum(sev_counts, 3);
+    ParallelDescriptor::ReduceIntSum(sev_mild_order, 3);
+    ParallelDescriptor::ReduceIntSum(sev_severe_order, 3);
+    ParallelDescriptor::ReduceIntSum(order_counts, 3);
+    ParallelDescriptor::ReduceIntSum(n_low_stencil);
+
+    ParallelDescriptor::ReduceRealMin(disGP_min);
+    ParallelDescriptor::ReduceRealMax(disGP_max);
+    ParallelDescriptor::ReduceRealSum(disGP_sum);
+    ParallelDescriptor::ReduceRealMax(max_single_weight);
+    ParallelDescriptor::ReduceRealSum(sum_weight_deficit);
+
+    sev_ideal  = sev_counts[0];
+    sev_mild   = sev_counts[1];
+    sev_severe = sev_counts[2];
+
+    if (ngps_global == 0) {
+      amrex::Print() << "[GP-Diag] Step " << istep << " Level " << lev << ": 0 ghost points\n";
+      return;
+    }
+
     Real diag = diag_a[lev];
     Real inv_diag = (diag > Real(1e-30)) ? Real(1.0) / diag : Real(1.0);
 
@@ -973,17 +1222,17 @@ public:
       << "\n";
 
     amrex::Print()
-      << "[GP-Diag]   Total GPs: " << ngps << "\n";
+      << "[GP-Diag]   Total GPs: " << ngps_global << "\n";
 
     // Fluid stencil histogram (layered)
     amrex::Print() << "[GP-Diag]   Stencil quality (ideal=" << IDEAL << "):\n";
     amrex::Print() << "[GP-Diag]     IDEAL  (" << IDEAL << "/" << IDEAL << "): "
                    << sev_ideal << " GPs (" << std::fixed << std::setprecision(1)
-                   << Real(100.0) * Real(sev_ideal) / Real(ngps) << "%)\n";
+                   << Real(100.0) * Real(sev_ideal) / Real(ngps_global) << "%)\n";
     if (sev_mild > 0) {
       amrex::Print() << "[GP-Diag]     MILD   (>" << IDEAL/2 << "/" << IDEAL << "): "
                      << sev_mild << " GPs (" << std::setprecision(1)
-                     << Real(100.0) * Real(sev_mild) / Real(ngps) << "%)";
+                     << Real(100.0) * Real(sev_mild) / Real(ngps_global) << "%)";
       // Detail per n_fluid
       for (int k = IDEAL - 1; k > IDEAL / 2; --k) {
         if (hist[k] > 0) amrex::Print() << "  [" << k << "/" << IDEAL << "]=" << hist[k];
@@ -993,7 +1242,7 @@ public:
     if (sev_severe > 0) {
       amrex::Print() << "[GP-Diag]     SEVERE (<=" << IDEAL/2 << "/" << IDEAL << "): "
                      << sev_severe << " GPs (" << std::setprecision(1)
-                     << Real(100.0) * Real(sev_severe) / Real(ngps) << "%)";
+                     << Real(100.0) * Real(sev_severe) / Real(ngps_global) << "%)";
       for (int k = IDEAL / 2; k >= 0; --k) {
         if (hist[k] > 0) amrex::Print() << "  [" << k << "/" << IDEAL << "]=" << hist[k];
       }
@@ -1018,7 +1267,8 @@ public:
         amrex::Print() << "\n";
       }
       // Weight stats
-      Real avg_wmax = sum_weight_deficit / Real(n_low_stencil);
+      Real avg_wmax = (n_low_stencil > 0)
+        ? sum_weight_deficit / Real(n_low_stencil) : Real(0.0);
       amrex::Print()
         << "[GP-Diag]   Weight: avg_max=" << std::setprecision(3) << avg_wmax
         << "  worst_max=" << std::setprecision(3) << max_single_weight
@@ -1027,18 +1277,176 @@ public:
 
     // Effective order distribution
     amrex::Print() << "[GP-Diag]   Effective order:";
-    if (order_0 > 0) amrex::Print() << "  0th=" << order_0;
-    if (order_1 > 0) amrex::Print() << "  1st=" << order_1;
-    if (order_2 > 0) amrex::Print() << "  2nd=" << order_2;
+    if (order_counts[0] > 0) amrex::Print() << "  0th=" << order_counts[0];
+    if (order_counts[1] > 0) amrex::Print() << "  1st=" << order_counts[1];
+    if (order_counts[2] > 0) amrex::Print() << "  2nd+=" << order_counts[2];
     amrex::Print() << "\n";
 
     // disGP statistics
     amrex::Print()
       << "[GP-Diag]   disGP (diag units): min="
       << std::setprecision(4) << disGP_min * inv_diag
-      << "  mean=" << std::setprecision(4) << (disGP_sum / Real(ngps)) * inv_diag
+      << "  mean=" << std::setprecision(4) << (disGP_sum / Real(ngps_global)) * inv_diag
       << "  max=" << std::setprecision(4) << disGP_max * inv_diag
       << "  (diag=" << std::setprecision(6) << diag << ")\n";
+
+    amrex::Print() << "\n";
+  }
+
+  /**
+   * \brief Report statistics on surface image-point reconstruction quality.
+   *
+   * This is the surface counterpart of reportGPDiagnostics(). It measures how
+   * many surface elements actually have enough leading valid image points to
+   * use the requested extrap_order_surf branch.
+   */
+  void reportSurfDiagnostics(int lev)
+  {
+    const int istep = amr_p->levelSteps(0);
+    Gpu::streamSynchronize();
+
+    constexpr int IDEAL = N_InterP_surf;
+    int hist[IDEAL + 1] = {};
+    int sev_counts[3] = {};      // ideal, mild, severe
+    int order_counts[3] = {};    // 0th, 1st, 2nd+
+    int surf_faces = 0;
+    int low_stencil_faces = 0;
+
+    Real dis1_min = std::numeric_limits<Real>::max();
+    Real dis1_max = Real(0.0);
+    Real dis1_sum = Real(0.0);
+
+    int ratio_count = 0;
+    Real ratio_min = std::numeric_limits<Real>::max();
+    Real ratio_max = Real(0.0);
+    Real ratio_sum = Real(0.0);
+
+    for (int f = 0; f < ntotalfaces; ++f) {
+      if (surfphys_soa.elemfound[f] != 1) continue;
+      if (surfphys_soa.lev[f] != lev) continue;
+
+      surf_faces++;
+
+      const int n0 = surfimp_soa.imp_ninterp[f](0);
+      const int idx = amrex::max(0, amrex::min(IDEAL, n0));
+      hist[idx]++;
+
+      int eff = eorder_tparm_surf;
+      for (int k = 0; k < eorder_tparm_surf; ++k) {
+        if (surfimp_soa.imp_ninterp[f](k) < INTERP_THRESHOLD_SURF) {
+          eff = k;
+          break;
+        }
+      }
+      order_counts[amrex::min(eff, 2)]++;
+
+      if (n0 == IDEAL) {
+        sev_counts[0]++;
+      } else if (n0 > IDEAL / 2) {
+        sev_counts[1]++;
+      } else {
+        sev_counts[2]++;
+      }
+      if (n0 < IDEAL) low_stencil_faces++;
+
+      const Real d1 = surfimp_soa.disIM[f](0);
+      dis1_min = amrex::min(dis1_min, d1);
+      dis1_max = amrex::max(dis1_max, d1);
+      dis1_sum += d1;
+
+      if constexpr (eorder_tparm_surf >= 2) {
+        if (eff >= 2 && d1 > Real(0.0)) {
+          const Real r = surfimp_soa.disIM[f](1) / d1;
+          ratio_min = amrex::min(ratio_min, r);
+          ratio_max = amrex::max(ratio_max, r);
+          ratio_sum += r;
+          ratio_count++;
+        }
+      }
+    }
+
+    ParallelDescriptor::ReduceIntSum(surf_faces);
+    ParallelDescriptor::ReduceIntSum(low_stencil_faces);
+    ParallelDescriptor::ReduceIntSum(hist, IDEAL + 1);
+    ParallelDescriptor::ReduceIntSum(sev_counts, 3);
+    ParallelDescriptor::ReduceIntSum(order_counts, 3);
+    ParallelDescriptor::ReduceIntSum(ratio_count);
+
+    ParallelDescriptor::ReduceRealMin(dis1_min);
+    ParallelDescriptor::ReduceRealMax(dis1_max);
+    ParallelDescriptor::ReduceRealSum(dis1_sum);
+    ParallelDescriptor::ReduceRealMin(ratio_min);
+    ParallelDescriptor::ReduceRealMax(ratio_max);
+    ParallelDescriptor::ReduceRealSum(ratio_sum);
+
+    if (surf_faces == 0) {
+      amrex::Print() << "[Surf-Diag] Step " << istep << " Level " << lev
+                     << ": 0 owned surface faces\n";
+      return;
+    }
+
+    const Real diag = diag_a[lev];
+    const Real inv_diag = (diag > Real(1e-30)) ? Real(1.0) / diag : Real(1.0);
+
+    amrex::Print()
+      << "\n[Surf-Diag] Step " << istep << " Level " << lev
+      << "  |  eorder_surf=" << eorder_tparm_surf
+      << "  iorder_surf=" << iorder_tparm_surf
+      << "  alpha_surf=" << cim_surf
+      << "\n";
+    amrex::Print() << "[Surf-Diag]   Owned faces: " << surf_faces << "\n";
+
+    amrex::Print() << "[Surf-Diag]   Stencil quality (ideal=" << IDEAL << "):\n";
+    amrex::Print() << "[Surf-Diag]     IDEAL  (" << IDEAL << "/" << IDEAL << "): "
+                   << sev_counts[0] << " faces (" << std::fixed << std::setprecision(1)
+                   << Real(100.0) * Real(sev_counts[0]) / Real(surf_faces) << "%)\n";
+    if (sev_counts[1] > 0) {
+      amrex::Print() << "[Surf-Diag]     MILD   (>" << IDEAL / 2 << "/" << IDEAL << "): "
+                     << sev_counts[1] << " faces (" << std::setprecision(1)
+                     << Real(100.0) * Real(sev_counts[1]) / Real(surf_faces) << "%)";
+      for (int k = IDEAL - 1; k > IDEAL / 2; --k) {
+        if (hist[k] > 0) amrex::Print() << "  [" << k << "/" << IDEAL << "]=" << hist[k];
+      }
+      amrex::Print() << "\n";
+    }
+    if (sev_counts[2] > 0) {
+      amrex::Print() << "[Surf-Diag]     SEVERE (<=" << IDEAL / 2 << "/" << IDEAL << "): "
+                     << sev_counts[2] << " faces (" << std::setprecision(1)
+                     << Real(100.0) * Real(sev_counts[2]) / Real(surf_faces) << "%)";
+      for (int k = IDEAL / 2; k >= 0; --k) {
+        if (hist[k] > 0) amrex::Print() << "  [" << k << "/" << IDEAL << "]=" << hist[k];
+      }
+      amrex::Print() << "\n";
+    }
+
+    amrex::Print() << "[Surf-Diag]   Effective order:";
+    if (order_counts[0] > 0) amrex::Print() << "  0th=" << order_counts[0];
+    if (order_counts[1] > 0) amrex::Print() << "  1st=" << order_counts[1];
+    if (order_counts[2] > 0) amrex::Print() << "  2nd+=" << order_counts[2];
+    amrex::Print() << "\n";
+
+    if constexpr (eorder_tparm_surf >= 2) {
+      amrex::Print() << "[Surf-Diag]   2nd-order eligible: " << order_counts[2]
+                     << " faces (" << std::fixed << std::setprecision(1)
+                     << Real(100.0) * Real(order_counts[2]) / Real(surf_faces) << "%)\n";
+    }
+
+    amrex::Print()
+      << "[Surf-Diag]   IP1 distance (diag units): min="
+      << std::setprecision(4) << dis1_min * inv_diag
+      << "  mean=" << std::setprecision(4) << (dis1_sum / Real(surf_faces)) * inv_diag
+      << "  max=" << std::setprecision(4) << dis1_max * inv_diag
+      << "  (diag=" << std::setprecision(6) << diag << ")\n";
+
+    if constexpr (eorder_tparm_surf >= 2) {
+      if (ratio_count > 0) {
+        amrex::Print()
+          << "[Surf-Diag]   IP spacing ratio x2/x1 on 2nd-order faces: min="
+          << std::setprecision(4) << ratio_min
+          << "  mean=" << std::setprecision(4) << (ratio_sum / Real(ratio_count))
+          << "  max=" << std::setprecision(4) << ratio_max << "\n";
+      }
+    }
 
     amrex::Print() << "\n";
   }
@@ -1159,9 +1567,20 @@ public:
           copy->template global2local<eorder_tparm>(iip, primsNormal, nvec, t1vec, t2vec);
       }
 
-      // 5) Apply wall model at IB surface
+      // 5) Apply wall model at IB surface.
+      //    n_valid_bc = number of leading valid image points. The wall model
+      //    uses the 2nd-order one-sided form only when >=2 are available and
+      //    extrap_order>=2; otherwise it degrades to the 1st-order single-IP
+      //    form (identical to the previous behaviour at extrap_order=1).
+      int n_valid_bc = 0;
+      for (int kk = 0; kk < eorder_tparm; ++kk) {
+          if (gpview.imp_ninterp[ii](kk) < INTERP_THRESHOLD_GP) break;
+          n_valid_bc = kk + 1;
+      }
+      gpview.n_valid_w[ii] = n_valid_bc;
       ibm_detail::dispatch_compute_surfIB<eorder_tparm, wallmodel>(
-          gpview.ib_xyz[ii], nvec, t1vec, t2vec, primsNormal, type_solid_bc, cls);
+          gpview.ib_xyz[ii], nvec, t1vec, t2vec, gpview.disIM[ii], n_valid_bc,
+          primsNormal, type_solid_bc, cls);
 
       // 6) Extrapolate from surface/image points back to ghost point
       copy->template extrapolate<eorder_tparm>(
@@ -1193,6 +1612,17 @@ public:
       // 9) Enforce thermodynamic consistency
       Real Q[cls_t::NPRIM];
       cls->ensurePTYfillq(P, T, Y, ux, uy, uz, Q);
+
+      gpview.recon_prim_w[ii](0) = Q[cls_t::QRHO];
+      gpview.recon_prim_w[ii](1) = ux;
+      gpview.recon_prim_w[ii](2) = uy;
+#if (AMREX_SPACEDIM == 3)
+      gpview.recon_prim_w[ii](3) = uz;
+#else
+      gpview.recon_prim_w[ii](3) = Real(0.0);
+#endif
+      gpview.recon_prim_w[ii](4) = P;
+      gpview.recon_prim_w[ii](5) = T;
 
       // 10) Write ghost-cell primitive variables back into prims
       int i = gpview.gp_ijk[ii](0);
@@ -1511,6 +1941,29 @@ public:
 
         // Convert body-frame centroid to world frame, then to cell index
         const SurfElem& surfelem = SurfElem_a[f_idx];
+        // RZ fix: skip non-physical surface faces lying on the symmetry axis
+        // (r~0).  Where a closed axisymmetric contour runs along r=0 through the
+        // solid interior (e.g. a long centre body / plenum), those faces have
+        // zero circumference (2*pi*r -> 0) and their image point falls inside
+        // the solid, so the stencil search always fails and the failed-search
+        // host printf floods stdout -- serializing one rank and stalling
+        // refinement of long on-axis geometries.  They carry no valid surface
+        // data, so skip them.  (RZ-gated: no effect on Cartesian.)
+        //
+        // FORCE-INTEGRAL NOTE (verified for the SRP center-nozzle cases): the
+        // skipped faces are the contour's axis-closure segment (centroid r==0 to
+        // ~0.5dx); for a body whose nose is a nozzle bore there is NO solid
+        // on-axis apex, so no real surface is lost and the missing 2*pi*r force
+        // contribution is negligible (-> 0 as r -> 0).  CAVEAT: a body with a
+        // SOLID on-axis apex (e.g. a forebody-only sphere-cone, no centre
+        // nozzle) WOULD have a real stagnation-apex surface element here; that
+        // case needs the face KEPT with 2*pi*r weighting + a symmetry/mirror
+        // fallback for the (in-solid) image point, NOT this blanket skip.
+        if (amr_p->Geom(lev).IsRZ()
+            && surfelem.centroid[0] < Real(0.5) * dx_a[lev][0]) {
+            faces_out_domain++;
+            continue;
+        }
         int gIdx = getGeomIdx(f_idx);
         const auto& T = transform_a[gIdx];
 #ifdef AMREX_USE_CGAL
@@ -1620,11 +2073,14 @@ public:
 #endif
         Point surf_centroid = T.to_world(c_body);
 
-        // Temporary storage for this face's image point data
-        Array2D<Real, 0, eorder_tparm_surf - 1, 0, IDIM> imp_xyz;
-        Array2D< int, 0, eorder_tparm_surf - 1, 0, IDIM> imp_ijk;
-        Array1D<Real, 0, eorder_tparm_surf - 1> disIM;
-        Array1D< int, 0, eorder_tparm_surf - 1> imp_ninterp;
+        // Temporary storage for this face's image point data.
+        // Value-initialised ({}) — see initialiseGPs note: keeps total
+        // placement failure deterministic (imp_ninterp(0)=0 -> face degrades
+        // to the guarded 1st-order/invalid path instead of reading garbage).
+        Array2D<Real, 0, eorder_tparm_surf - 1, 0, IDIM> imp_xyz{};
+        Array2D< int, 0, eorder_tparm_surf - 1, 0, IDIM> imp_ijk{};
+        Array1D<Real, 0, eorder_tparm_surf - 1> disIM{};
+        Array1D< int, 0, eorder_tparm_surf - 1> imp_ninterp{};
 
         for (int jj = 0; jj < eorder_tparm_surf; jj++) {
           Point cp_start;
@@ -1663,8 +2119,6 @@ public:
         surfimp_soa.imp_xyz[f_idx]     = imp_xyz;
         surfimp_soa.imp_ijk[f_idx]     = imp_ijk;
         surfimp_soa.disIM[f_idx]       = disIM;
-        surfimp_soa.imp_ninterp[f_idx] = imp_ninterp;
-        surfphys_soa.ip_quality[f_idx] = imp_ninterp(0);
 
         Array3D< int, 0, eorder_tparm_surf - 1, 0, N_InterP_surf - 1, 0, IDIM> imp_ip_ijk;
         Array2D<Real, 0, eorder_tparm_surf - 1, 0, N_InterP_surf - 1> imp_ipweights;
@@ -1674,6 +2128,9 @@ public:
             imp_xyz, imp_ijk, imp_ninterp,
             prob_lo, dx_a[lev], ibMarkers);
 
+        // Store imp_ninterp / ip_quality AFTER computeIPweights (WLS demotion).
+        surfimp_soa.imp_ninterp[f_idx] = imp_ninterp;
+        surfphys_soa.ip_quality[f_idx] = imp_ninterp(0);
         surfimp_soa.imp_ip_ijk[f_idx]    = imp_ip_ijk;
         surfimp_soa.imp_ipweights[f_idx] = imp_ipweights;
       } // end loop over faces in this FAB
@@ -1682,6 +2139,15 @@ public:
     // Build CSR at the coarsest level (surface is built from finest to coarsest)
     if (lev == 0) buildCSR();
 
+    bool ib_diag = false;
+    bool surf_diag = false;
+    {
+      ParmParse pp("ib");
+      pp.query("diag", ib_diag);
+      surf_diag = ib_diag;
+      pp.query("surf_diag", surf_diag);
+    }
+    if (surf_diag) reportSurfDiagnostics(lev);
   }
 
   /**
@@ -1744,6 +2210,7 @@ public:
     const auto* si_imp_ip_ijk    = surfimp_soa.imp_ip_ijk.data();
     const auto* si_imp_ipweights = surfimp_soa.imp_ipweights.data();
     const auto* si_disIM         = surfimp_soa.disIM.data();
+    const auto* si_imp_ninterp   = surfimp_soa.imp_ninterp.data();
 
     auto const* lf_ptr = LocalFrame_a.data();
     auto const* se_ptr = SurfElem_a.data();
@@ -1835,26 +2302,40 @@ public:
           copy->template global2local<eorder_tparm_surf>(iip, primsNormal, nvec, t1vec, t2vec);
       }
 
-      // 5) Apply wall model at IB surface (fills primsNormal slot 1)
+      // 5) Apply wall model at IB surface (fills primsNormal slot 1).
+      //    n_valid_surf = number of leading valid image points; the wall model
+      //    and the wall-flux stencils below use the 2nd-order one-sided form
+      //    only when >=2 are valid (extrap_order_surf>=2), else degrade to the
+      //    1st-order single-image-point form.
+      int n_valid_surf = 0;
+      for (int kk = 0; kk < eorder_tparm_surf; ++kk) {
+          if (si_imp_ninterp[f_idx](kk) < INTERP_THRESHOLD_SURF) break;
+          n_valid_surf = kk + 1;
+      }
       int type_solid_bc = 0;
       ibm_detail::dispatch_compute_surfIB<eorder_tparm_surf, wallmodel>(
-          xyz, nvec, t1vec, t2vec, primsNormal, type_solid_bc, cls);
+          xyz, nvec, t1vec, t2vec, si_disIM[f_idx], n_valid_surf,
+          primsNormal, type_solid_bc, cls);
 
       // 6) Extract surface quantities
       Real P_surf = primsNormal(1, cls_t::QPRES);
       Real T_surf = primsNormal(1, cls_t::QT);
 
-      // One-sided gradient: dT/dn = (T_image - T_surface) / distance
-      Real dis = si_disIM[f_idx](0);
-      Real inv_dis = (dis > Real(0.0)) ? Real(1.0) / dis : Real(0.0);
-      Real dTdn = (primsNormal(2, cls_t::QT) - T_surf) * inv_dis;
+      // Wall-normal gradients via 2nd-order one-sided stencil (surface + IP1 +
+      // IP2, general spacing) when >=2 image points are valid; else 1st-order
+      // one-sided (= the previous (IP1 - surface)/dis formula).
+      //   dT/dn = grad(T)·n   (heat flux)
+      //   tau   = mu * d(u_tangential)/dn   (local frame: QU=normal,
+      //           QV=tangent1, QW=tangent2)
+      Real dTdn = ibm_wall_normal_deriv<eorder_tparm_surf>(
+          primsNormal, cls_t::QT, si_disIM[f_idx], n_valid_surf);
 
-      // Wall shear stress: tau = mu * du_tangential / dn
-      // (in local frame: QU=normal, QV=tangent1, QW=tangent2)
       Real mu = cls->visc(T_surf);
-      Real tau1 = mu * (primsNormal(2, cls_t::QV) - primsNormal(1, cls_t::QV)) * inv_dis;
+      Real tau1 = mu * ibm_wall_normal_deriv<eorder_tparm_surf>(
+          primsNormal, cls_t::QV, si_disIM[f_idx], n_valid_surf);
 #if (AMREX_SPACEDIM == 3)
-      Real tau2 = mu * (primsNormal(2, cls_t::QW) - primsNormal(1, cls_t::QW)) * inv_dis;
+      Real tau2 = mu * ibm_wall_normal_deriv<eorder_tparm_surf>(
+          primsNormal, cls_t::QW, si_disIM[f_idx], n_valid_surf);
 #else
       Real tau2 = Real(0.0);
 #endif

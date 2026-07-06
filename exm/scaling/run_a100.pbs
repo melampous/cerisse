@@ -1,0 +1,8 @@
+#!/bin/bash
+#PBS -N cerisse_a100
+#PBS -l select=1:ncpus=64:mem=256gb:ngpus=8:gpu_type=A100   # <<< 1 node x 8 A100; adjust to your cluster's select syntax
+#PBS -l walltime=00:30:00
+#PBS -j oe
+cd $PBS_O_WORKDIR
+module load __CUDA_MODULE__ __CUDA_AWARE_MPI_MODULE__       # <<< FILL: e.g. CUDA/12.2  and a CUDA-aware MPI
+mpiexec -n 8 ./main3d.gnu.MPI.CUDA.ex input_bench256 amrex.use_gpu_aware_mpi=1

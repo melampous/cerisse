@@ -1,0 +1,316 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.4cm]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue]{hyperref}
+\usepackage{enumitem}
+\usepackage{siunitx}
+
+\newcommand{\pd}[2]{\frac{\partial #1}{\partial #2}}
+\newcommand{\ur}{u_r}
+\newcommand{\uz}{u_z}
+\newcommand{\rhalf}{r_{\mathrm{c}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\definecolor{seedred}{RGB}{180,30,30}
+
+\title{\bfseries Axisymmetric (RZ) Navier--Stokes in Cerisse:\\
+Mathematical Analysis of the Near-Axis Discretization\\ and the Missing Viscous Geometric Terms}
+\author{Cerisse SRP validation --- internal technical note}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+We derive the compressible Navier--Stokes equations in cylindrical
+$(r,z)$ coordinates without swirl, cast them into the finite-volume
+``metric divergence $+$ geometric source'' form that Cerisse uses, and
+compare term-by-term against the implementation
+(\code{src/tim/compute\_rhs.cpp}, \code{src/rhs/viscous.h}).  Two distinct
+issues are identified and proven mathematically.
+\textbf{(i) Euler level:} no physical term is missing --- the inviscid
+geometric source $+p/r$ is present and is \emph{well balanced} for uniform
+pressure.  However, the discrete radial-momentum balance is
+\emph{not} well balanced \emph{across a shock}: the cell-centre pressure
+used in the $+p/r$ source is inconsistent with the reconstructed face
+pressures inside the flux, leaving a spurious radial-momentum source whose
+amplitude is
+$\bigl[p_{\mathrm{c}}-\tfrac12(p^{f}_{-}+p^{f}_{+})\bigr]/\rhalf$ and which
+is amplified by $1/\rhalf=2/\Delta r$ in the on-axis cell. This seeds the
+spurious near-axis velocity at on-axis shocks and scales like
+$1/\Delta r$.
+\textbf{(ii) Navier--Stokes level:} the cylindrical viscous geometric
+terms are genuinely absent --- the dilatation omits $\ur/r$, the hoop
+stress $\tau_{\theta\theta}$ is never formed, and the radial-momentum
+source $-\tau_{\theta\theta}/r$ is not added (\code{rz\_geometric\_source}
+is a no-op, and is additionally skipped for IBM/EB cases).  This does not
+\emph{seed} the artifact (it is present in inviscid runs) but removes the
+only physical sink that would damp it.  The defect lies in the NS/RZ
+discretization, not in the IBM machinery.
+\end{abstract}
+
+\section{Governing equations in cylindrical coordinates}
+Assume axisymmetry ($\partial/\partial\theta = 0$) and no swirl
+($u_\theta=0$).  The velocity is $\bm u = \ur(r,z,t)\,\bm e_r +
+\uz(r,z,t)\,\bm e_z$.  The compressible Navier--Stokes system reads
+\begin{align}
+\pd{\rho}{t} &+ \frac1r\pd{(r\rho\ur)}{r} + \pd{(\rho\uz)}{z} = 0,
+\label{eq:cont}\\[2pt]
+\pd{(\rho\ur)}{t} &+ \frac1r\pd{(r\rho\ur^2)}{r} + \pd{(\rho\ur\uz)}{z}
+   + \pd{p}{r}
+   = \underbrace{\frac1r\pd{(r\tau_{rr})}{r} + \pd{\tau_{rz}}{z}
+     - \frac{\tau_{\theta\theta}}{r}}_{(\nabla\cdot\bm\tau)_r},
+\label{eq:rmom}\\[2pt]
+\pd{(\rho\uz)}{t} &+ \frac1r\pd{(r\rho\ur\uz)}{r} + \pd{(\rho\uz^2+p)}{z}
+   = \frac1r\pd{(r\tau_{rz})}{r} + \pd{\tau_{zz}}{z},
+\label{eq:zmom}\\[2pt]
+\pd{E}{t} &+ \frac1r\pd{\bigl(r\ur(E+p)\bigr)}{r}
+   + \pd{\bigl(\uz(E+p)\bigr)}{z}
+   = \frac1r\pd{\bigl(r(\ur\tau_{rr}+\uz\tau_{rz}-q_r)\bigr)}{r}
+   + \pd{\bigl(\ur\tau_{rz}+\uz\tau_{zz}-q_z\bigr)}{z}.
+\label{eq:ene}
+\end{align}
+The Newtonian stress tensor (Stokes hypothesis, bulk viscosity $\xi$) has
+the cylindrical components
+\begin{equation}
+\tau_{rr}=2\mu\,\pd{\ur}{r}+\lambda\Theta,\quad
+\tau_{zz}=2\mu\,\pd{\uz}{z}+\lambda\Theta,\quad
+\boxed{\;\tau_{\theta\theta}=2\mu\,\frac{\ur}{r}+\lambda\Theta\;},\quad
+\tau_{rz}=\mu\Bigl(\pd{\ur}{z}+\pd{\uz}{r}\Bigr),
+\label{eq:stress}
+\end{equation}
+with $\lambda=\xi-\tfrac23\mu$ and the \textbf{cylindrical dilatation}
+\begin{equation}
+\boxed{\;\Theta \;=\; \nabla\!\cdot\!\bm u
+   \;=\; \pd{\ur}{r} + \frac{\ur}{r} + \pd{\uz}{z}\;}.
+\label{eq:div}
+\end{equation}
+
+\paragraph{Where the geometric source terms come from.}
+Because $\bm e_r$ rotates with $\theta$, the divergence operator carries
+the metric factor $1/r$, and two terms in the radial momentum
+equation~\eqref{eq:rmom} are \emph{not} expressible as a flux divergence
+over the $(r,z)$ faces:
+\begin{enumerate}[leftmargin=2.2em,itemsep=2pt]
+\item the \textbf{inviscid pressure source} $+p/r$, obtained by writing the
+      pressure inside the radial flux,
+      $\tfrac1r\partial_r(rp)=\partial_r p + p/r$, so that
+      \begin{equation}
+      \pd{p}{r} \;=\; \frac1r\pd{(rp)}{r} \;-\; \frac{p}{r};
+      \label{eq:psplit}
+      \end{equation}
+\item the \textbf{viscous hoop source} $-\tau_{\theta\theta}/r$ in
+      $(\nabla\cdot\bm\tau)_r$.
+\end{enumerate}
+Continuity~\eqref{eq:cont}, axial momentum~\eqref{eq:zmom} and
+energy~\eqref{eq:ene} are \emph{pure} flux divergences in cylindrical FV
+form (the $\bm e_z$ direction and $u_\theta\!\equiv\!0$ produce no extra
+source).  \emph{All} geometric source terms therefore live in the radial
+momentum equation: one inviscid ($+p/r$) and one viscous
+($-\tau_{\theta\theta}/r$).
+
+\section{Finite-volume formulation used by Cerisse}
+On a cell $[r_-,r_+]\times[z_-,z_+]$ with $r_\pm=r_0+(i,\,i{+}1)\Delta r$,
+$\rhalf=\tfrac12(r_-+r_+)$, the cylindrical control volume is
+$V=\pi(r_+^2-r_-^2)\Delta z$ and the radial face area is $A_r=2\pi r\Delta z$.
+The metric-consistent radial divergence is
+\begin{equation}
+-\frac1r\pd{(rF_r)}{r}\;\Big|_{\text{cell}}
+   \;\approx\;
+   \frac{2\,(r_-F_- - r_+F_+)}{r_+^2-r_-^2}
+   \;=\;
+   \frac{r_-F_- - r_+F_+}{\rhalf\,\Delta r},
+\label{eq:metricdiv}
+\end{equation}
+which is exactly \code{compute\_rhs.cpp:261}.  Cerisse builds the face
+fluxes $F_\pm$ with the ordinary \emph{Cartesian} momentum flux
+(WENO-Z5 characteristic Lax--Friedrichs); the RZ weighting is applied only
+in \eqref{eq:metricdiv}.  The radial-momentum geometric source is then
+added as
+\begin{equation}
+\Bigl(\pd{(\rho\ur)}{t}\Bigr)_{\!\text{source}} \mathrel{+}= \frac{p_{\mathrm c}}{\rhalf},
+\qquad \frac{1}{\rhalf}=\frac{2}{\Delta r}\ \text{in the axis cell }(i{=}0),
+\label{eq:psource}
+\end{equation}
+(\code{compute\_rhs.cpp:264--269}).  The viscous geometric hook
+\code{rz\_geometric\_source} (\code{compute\_rhs.cpp:311}) is called only
+when \emph{not} \code{AMREX\_USE\_GPIBM}/\code{CNS\_USE\_EB}, and its body is
+empty (\code{src/rhs/viscous.h:587}, \code{viscousLES.h:628}).
+
+\section{Euler level: correct, but not well balanced across a shock}
+\label{sec:euler}
+Write the discrete radial-momentum pressure contribution to the RHS,
+using the face pressures $p^{f}_{\pm}$ that the flux actually carries
+(from \eqref{eq:metricdiv}--\eqref{eq:psource}):
+\begin{equation}
+\mathcal R_p \;=\; \frac{r_-\,p^{f}_- - r_+\,p^{f}_+}{\rhalf\,\Delta r}
+                 \;+\; \frac{p_{\mathrm c}}{\rhalf}.
+\label{eq:Rp}
+\end{equation}
+The exact physical term is $-\partial p/\partial r \approx
+-(p^{f}_+-p^{f}_-)/\Delta r$.
+
+\paragraph{(a) Uniform pressure $\Rightarrow$ exactly balanced.}
+With $p^{f}_-=p^{f}_+=p_{\mathrm c}=p$ and $r_--r_+=-\Delta r$,
+\begin{equation}
+\mathcal R_p = \frac{p\,(r_--r_+)}{\rhalf\Delta r} + \frac{p}{\rhalf}
+             = -\frac{p}{\rhalf} + \frac{p}{\rhalf} = 0
+             = -\pd{p}{r}\Big|_{\text{uniform}} .
+\end{equation}
+The $+p/r$ source exactly cancels the spurious $p/r$ generated by putting
+$p$ in the radial flux (cf.\ \eqref{eq:psplit}).  Good.
+
+\paragraph{(b) General pressure: the residual.}
+Substituting $r_\pm=\rhalf\pm\tfrac12\Delta r$ into \eqref{eq:Rp} and
+adding the exact $-\partial p/\partial r$, the discrete \emph{error}
+(the spurious radial-momentum source) is, after cancellation,
+\begin{equation}
+\boxed{\;
+\mathcal E \;\equiv\; \mathcal R_p - \Bigl(-\pd{p}{r}\Bigr)
+   \;=\; \frac{\,p_{\mathrm c}-\tfrac12\bigl(p^{f}_-+p^{f}_+\bigr)\,}{\rhalf}\;}
+\label{eq:residual}
+\end{equation}
+\emph{Derivation.}  Form $\mathcal R_p+(p^{f}_+-p^{f}_-)/\Delta r$ and
+multiply by $\rhalf\Delta r$:
+\[
+r_-p^{f}_- - r_+p^{f}_+ + p_{\mathrm c}\Delta r + \rhalf\,(p^{f}_+-p^{f}_-)
+= \tfrac12(r_--r_+)(p^{f}_-+p^{f}_+) + p_{\mathrm c}\Delta r
+= \Delta r\Bigl[p_{\mathrm c}-\tfrac12(p^{f}_-+p^{f}_+)\Bigr],
+\]
+using $r_-p^{f}_- - r_+p^{f}_+ + \tfrac12(r_-+r_+)(p^{f}_+-p^{f}_-)
+=\tfrac12(r_--r_+)(p^{f}_-+p^{f}_+)$ and $r_--r_+=-\Delta r$.  Dividing by
+$\rhalf\Delta r$ gives \eqref{eq:residual}. \hfill$\square$
+
+\paragraph{Consequence.}
+\begin{itemize}[leftmargin=1.6em,itemsep=2pt]
+\item \textbf{Smooth flow:} a (near-)central reconstruction gives
+      $p_{\mathrm c}\approx\tfrac12(p^{f}_-+p^{f}_+)$, so
+      $\mathcal E=\mathcal O(\Delta r^2)$ --- negligible.
+\item \textbf{At a shock:} WENO reconstruction is upwind-biased and limited,
+      so $p_{\mathrm c}\neq\tfrac12(p^{f}_-+p^{f}_+)$ and
+      $\mathcal E=\mathcal O(\Delta p_{\text{shock}})/\rhalf$.  In the axis
+      cell $\rhalf=\tfrac12\Delta r$, hence
+      \begin{equation}
+      \mathcal E_{\text{axis}} \;\sim\;
+      \frac{2\,\bigl[p_{\mathrm c}-\overline{p^{f}}\bigr]}{\Delta r}
+      \;\propto\; \frac{1}{\Delta r}.
+      \label{eq:axisseed}
+      \end{equation}
+\end{itemize}
+\textcolor{seedred}{This is the seed.}  A spurious radial-momentum source
+of size $\mathcal O(\Delta p)/\Delta r$ appears wherever a strong shock
+(the Mach disk, the bow shock) crosses the axis.  It violates the
+symmetry condition $\ur(r{=}0)=0$, generates a near-axis radial velocity
+and, through $\partial \ur/\partial z$, azimuthal vorticity.  No physical
+PDE term is missing: \eqref{eq:axisseed} is a purely \emph{discrete}
+well-balancedness defect of the singular coordinate, and it is
+\emph{worse on finer grids}, $\propto 1/\Delta r$.
+
+\section{Navier--Stokes level: the genuinely missing physics}
+\label{sec:visc}
+Cerisse evaluates the viscous stresses with the \emph{Cartesian}
+dilatation (\code{viscous.h:256,472})
+\begin{equation}
+\Theta_{\text{code}} = \pd{\ur}{r}+\pd{\uz}{z}
+   \;=\; \Theta - \frac{\ur}{r},
+\end{equation}
+i.e.\ the cylindrical $\ur/r$ term of \eqref{eq:div} is \textbf{dropped}.
+Consequently every normal stress is in error by $\lambda\,\ur/r$:
+\begin{equation}
+\tau_{rr}^{\text{code}}=\tau_{rr}-\lambda\frac{\ur}{r},\quad
+\tau_{zz}^{\text{code}}=\tau_{zz}-\lambda\frac{\ur}{r},\quad
+\tau_{\theta\theta}^{\text{code}}=\text{(not formed)}.
+\end{equation}
+Moreover the hoop geometric source of \eqref{eq:rmom} is absent:
+\begin{equation}
+\boxed{\;\Bigl(\pd{(\rho\ur)}{t}\Bigr)_{\!\text{viscous-geom}}
+  \mathrel{+}= -\frac{\tau_{\theta\theta}}{r}
+  = -\frac{1}{r}\Bigl(2\mu\frac{\ur}{r}+\lambda\Theta\Bigr)
+  \quad\text{is missing.}\;}
+\label{eq:hoopmissing}
+\end{equation}
+Both omitted contributions carry a factor $1/r$ (directly, or through
+$\ur/r$), so they are negligible in the bulk but become significant only
+in the immediate neighbourhood of the axis.  The energy
+equation~\eqref{eq:ene} needs \emph{no} separate geometric source --- the
+viscous-work vector $\bm\tau\!\cdot\!\bm u$ has no $\theta$-component, so
+$\nabla\!\cdot(\bm\tau\!\cdot\!\bm u)$ is captured by the metric divergence
+--- but it inherits the wrong $\Theta_{\text{code}}$ in $\tau$.
+
+\paragraph{Role.}  Equation~\eqref{eq:hoopmissing} is the \emph{only}
+physical mechanism that diffuses near-axis azimuthal vorticity.  Its
+absence does not create the artifact (the seed \eqref{eq:axisseed} is
+inviscid), but it removes the sink that would otherwise damp it.
+
+\section{Which defect causes the observed near-axis vortices?}
+\label{sec:diag}
+The two defects are independent and their roles are distinct:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+ & \textbf{Euler seed \eqref{eq:axisseed}} & \textbf{Missing viscous hoop \eqref{eq:hoopmissing}}\\
+\midrule
+Nature & discrete well-balancedness defect & missing physical term \\
+Active in & Euler \emph{and} NS runs & NS runs only \\
+Effect & \emph{creates} spurious $\ur$ at on-axis shocks & \emph{fails to damp} it \\
+Scaling & amplitude $\propto 1/\Delta r$ & --- \\
+Fix & well-balanced pressure (route A) & implement \eqref{eq:div},\eqref{eq:hoopmissing} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent\textbf{Numerical evidence consistent with this analysis:}
+\begin{itemize}[leftmargin=1.6em,itemsep=1pt]
+\item Inviscid RZ jets (\code{no\_diffusive\_t}) already show a non-zero
+      near-axis $\ur$ at the on-axis Mach disk $\Rightarrow$ the seed is
+      \emph{inviscid}, ruling out \eqref{eq:hoopmissing} as the cause.
+\item A Cartesian $M{=}6$ cylinder with the \emph{same} WENO-LF flux has a
+      smooth, clean bow shock (HLLC, by contrast, carbuncles) $\Rightarrow$
+      the flux family is not the culprit; the distinguishing factor is the
+      RZ axis.
+\item The artifact is stronger at finer resolution (prominent at $L4$,
+      weak at $L2$), matching the $1/\Delta r$ scaling of
+      \eqref{eq:axisseed}.
+\end{itemize}
+The bow-shock / Mach-disk \emph{stand-off distances} are unaffected,
+because \eqref{eq:axisseed} perturbs the on-axis momentum balance, not the
+global shock position.  The defect is in the NS/Euler RZ discretization;
+the IBM ghost-point machinery acts in the solid-adjacent cells, away from
+the open subsonic pocket where the vortices sit, and is not the driver.
+
+\section{Implied corrections}
+\begin{description}[leftmargin=1.4em,style=nextline]
+\item[Route A --- well-balanced pressure (removes the seed).]
+Discretize the radial pressure term so that \eqref{eq:residual} vanishes
+by construction, i.e.\ remove $p$ from the radial-momentum flux and add a
+\emph{cell-centred, consistent} gradient,
+\begin{equation}
+\Bigl(\pd{(\rho\ur)}{t}\Bigr)_{\!\text{pressure}}
+  = -\,\frac{p^{f}_+-p^{f}_-}{\Delta r},
+  \qquad p^{f}_\pm \ \text{the same face pressures used in the flux,}
+\end{equation}
+which is well balanced for arbitrary $p$ and carries no $1/r$
+amplification.
+\item[Route C --- complete the RZ viscous operator (restores physics).]
+Use the cylindrical dilatation \eqref{eq:div} in all stresses, form
+$\tau_{\theta\theta}$, add the hoop source \eqref{eq:hoopmissing} to the
+radial momentum, and remove the \code{AMREX\_USE\_GPIBM}/\code{CNS\_USE\_EB}
+gate at \code{compute\_rhs.cpp:311}.  This provides the physical damping of
+near-axis vorticity and makes RZ runs true Navier--Stokes.
+\end{description}
+
+\paragraph{Summary.}
+At the Euler level nothing physical is missing; the spurious near-axis
+velocity is a discrete \emph{well-balancedness} failure of the $+p/r$
+geometric source across shocks, eq.~\eqref{eq:residual}, amplified by
+$2/\Delta r$ on the axis.  At the Navier--Stokes level the cylindrical
+viscous terms ($\ur/r$ in $\Theta$, $\tau_{\theta\theta}$, and
+$-\tau_{\theta\theta}/r$) are genuinely absent, eq.~\eqref{eq:hoopmissing},
+removing the physical sink for the seeded perturbation.  Both are
+properties of the NS/RZ discretization, not of the immersed boundary.
+
+\end{document}

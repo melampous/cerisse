@@ -5,16 +5,20 @@
 // ibm_containers.h — Container types, constants, and helper types for the IBM solver
 //
 // Contains:
-//   0. IBFab / IBMultiFab  : IBM-specific AMR containers
+//   0. IBFab / IBMultiFab  : IBM-specific AMR containers (marker storage only)
 //   1. ibm_detail namespace: SFINAE helpers for wall-model dispatch
 //   2. ipow()              : Constexpr integer power
 //   3. Constants           : Dimension indices, thresholds, image-point factors
-//   4. gpData_t            : SoA storage for ghost-point data
-//   5. surfImp_t           : SoA storage for surface image-point data
-//   6. surfPhys_t          : SoA storage for reconstructed surface fields
-//   7. is_gpData_t         : Type trait detecting gpData_t
+//   4. surfImp_t           : SoA storage for surface image-point data
+//   5. surfPhys_t          : SoA storage for reconstructed surface fields
+//   6. is_gp_store_view    : Type trait selecting GP vs surface interp paths
+//   7. GPStoreView/GPStore : Level-wide flattened ghost-point storage (CSR)
 //   8. FaceCSR             : CSR structure for per-FAB face iteration
 //   9. CheckMode           : Interpolation stencil check policy
+//
+// Per-FAB ghost-point data lived in a now-removed ``gpData_t`` member of
+// ``IBFab``.  All ghost-point geometry/interpolation data is now flattened
+// into the level-wide CSR ``GPStore``; ``IBFab`` only owns the marker FAB.
 // ============================================================================
 
 #include <algorithm>
@@ -37,26 +41,25 @@
 // 0. IBFab / IBMultiFab — IBM-specific AMR containers
 // ============================================================================
 
-/// \brief IBFab holds marker data and ghost point data
+/// \brief IBFab holds the marker data for a single AMR box.
 /// \tparam marker_t Type of the marker data (typically uint8_t)
-/// \tparam gp_t     Type of the ghost point data (gpData_t)
-template<typename marker_t, typename gp_t>
+///
+/// Ghost-point geometry/interpolation data is NOT stored here — it lives in
+/// the level-wide CSR ``GPStore``.  IBFab is a thin wrapper over
+/// ``amrex::BaseFab<marker_t>`` that disables implicit deep-copy.
+template<typename marker_t>
 class IBFab : public amrex::BaseFab<marker_t> {
 public:
-  gp_t gpData;
-
-  // Primary ctor: allocates marker array, gpData starts empty.
   explicit IBFab(const amrex::Box& b, int ncomp,
                  bool alloc = true, bool shared = false, amrex::Arena* ar = nullptr)
       : amrex::BaseFab<marker_t>(b, ncomp, alloc, shared, ar) {}
 
-  // MakeType ctor (alias/deep-copy): gpData is NOT carried — aliases are marker-only.
-  explicit IBFab(const IBFab<marker_t, gp_t>& rhs, amrex::MakeType make_type, int scomp, int ncomp)
+  // MakeType ctor (alias/deep-copy): forwarded straight to BaseFab.
+  explicit IBFab(const IBFab<marker_t>& rhs, amrex::MakeType make_type, int scomp, int ncomp)
       : amrex::BaseFab<marker_t>(rhs, make_type, scomp, ncomp) {}
 
   ~IBFab() = default;
 
-  // Prevent expensive implicit deep-copy of gpData (contains Gpu::ManagedVector arrays)
   IBFab(const IBFab&) = delete;
   IBFab& operator=(const IBFab&) = delete;
 
@@ -66,11 +69,10 @@ public:
 
 /// \brief IBMultiFab holds an array of IBFab on a level
 /// \tparam marker_t Type of the marker data
-/// \tparam gp_t     Type of the ghost point data
-template<typename marker_t, typename gp_t>
-class IBMultiFab : public amrex::FabArray<IBFab<marker_t, gp_t>> {
+template<typename marker_t>
+class IBMultiFab : public amrex::FabArray<IBFab<marker_t>> {
 public:
-  using Fab  = IBFab<marker_t, gp_t>;
+  using Fab  = IBFab<marker_t>;
   using Base = amrex::FabArray<Fab>;
 
   /// \brief Default MFInfo that routes allocation to managed (CPU+GPU) memory.
@@ -120,30 +122,55 @@ namespace ibm_detail {
 template <class...>
 using void_t = void;
 
-template <template <class...> class Op, class, class... Args>
+// Robust detection idiom: the void_t<Op<Args...>> probe lives ONLY in the
+// partial-specialisation's template-argument list (a deduced/SFINAE context),
+// so a fully-failing probe (Op<Args...> ill-formed — e.g. a wall model that
+// lacks the signature being probed) resolves to false_type instead of a hard
+// error.  The _v alias passes a plain `void` for the AlwaysVoid slot.
+template <class AlwaysVoid, template <class...> class Op, class... Args>
 struct is_detected_impl : std::false_type {};
 
 template <template <class...> class Op, class... Args>
-struct is_detected_impl<Op, void_t<Op<Args...>>, Args...> : std::true_type {};
+struct is_detected_impl<void_t<Op<Args...>>, Op, Args...> : std::true_type {};
 
 template <template <class...> class Op, class... Args>
-constexpr bool is_detected_v = is_detected_impl<Op, void_t<Op<Args...>>, Args...>::value;
+constexpr bool is_detected_v = is_detected_impl<void, Op, Args...>::value;
 
 template <class WM, class... Args>
 using compute_surfIB_expr = decltype(WM::compute_surfIB(std::declval<Args>()...));
 
-/// nvcc workaround: dispatch compute_surfIB outside constexpr-if in __device__ lambda
-template <int eorder, class wallmodel_t, class cls_type, class PointArr, class Vec1D, class Prims2D>
+/// nvcc workaround: dispatch compute_surfIB outside constexpr-if in __device__ lambda.
+/// Priority: disIM-aware (2nd-order Neumann) > full (xyz,n,t1,t2,q,...) >
+/// reduced (xyz,n,q,...).  Custom wall models that define only the full or
+/// reduced signature keep working unchanged (they simply ignore disIM/n_valid).
+///
+/// The disIM-aware overload is order-templated; its extrapolation order EO
+/// appears only as EO+1 / EO-1 in the parameter array bounds (non-deduced
+/// contexts), so it is made deducible by a leading std::integral_constant<int,EO>
+/// tag.  This keeps detection on the standard argument-deduction path (no
+/// `::template` on a possibly-non-template member, which is not portably
+/// SFINAE-friendly).
+template <int eorder, class wallmodel_t, class cls_type,
+          class PointArr, class Vec1D, class DisArr, class Prims2D>
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 void dispatch_compute_surfIB(
     const PointArr& xyz,
     const Vec1D& nvec,
     const Vec1D& t1vec,
     const Vec1D& t2vec,
+    const DisArr& disIM,
+    int n_valid,
     Prims2D& primsNormal,
     int type_solid_bc,
     const cls_type* cls)
 {
+    using eo_tag = std::integral_constant<int, eorder>;
+    constexpr bool has_disim = is_detected_v<
+        compute_surfIB_expr,
+        wallmodel_t,
+        eo_tag,
+        const Vec1D&, const Vec1D&, const Vec1D&, const Vec1D&,
+        const DisArr&, int, Prims2D&, const int, const cls_type*>;
     constexpr bool has_full = is_detected_v<
         compute_surfIB_expr,
         wallmodel_t,
@@ -154,10 +181,14 @@ void dispatch_compute_surfIB(
         Prims2D&,
         const int,
         const cls_type*>;
-    if constexpr (has_full) {
+    if constexpr (has_disim) {
+        wallmodel_t::compute_surfIB(
+            eo_tag{}, xyz, nvec, t1vec, t2vec, disIM, n_valid, primsNormal, type_solid_bc, cls);
+    } else if constexpr (has_full) {
+        amrex::ignore_unused(disIM, n_valid);
         wallmodel_t::compute_surfIB(xyz, nvec, t1vec, t2vec, primsNormal, type_solid_bc, cls);
     } else {
-        amrex::ignore_unused(t1vec, t2vec);
+        amrex::ignore_unused(t1vec, t2vec, disIM, n_valid);
         wallmodel_t::compute_surfIB(xyz, nvec, primsNormal, type_solid_bc, cls);
     }
 }
@@ -170,6 +201,143 @@ void dispatch_compute_surfIB(
 
 AMREX_GPU_HOST_DEVICE constexpr int ipow(int base, int exp) {
     return (exp == 0) ? 1 : base * ipow(base, exp - 1);
+}
+
+// ============================================================================
+// 2b. Second-order one-sided wall-normal helpers (image-point IBM)
+//
+// Geometry along the outward wall normal: the surface (boundary intercept) sits
+// at normal-distance x = 0, the image points IP1, IP2 at x1 = disIM(0),
+// x2 = disIM(1).  Slot layout in the primsNormal array:
+//   q(1,.) = surface (wall)   q(2,.) = IP1   q(3,.) = IP2
+//
+//   ibm_zero_grad_surface : surface value enforcing dphi/dn|_0 = 0 to 2nd order
+//   ibm_wall_normal_deriv : one-sided dphi/dn|_0 to 2nd order (heat flux, shear)
+//
+// Both use the general (non-uniform) spacing x1, x2 and reduce *exactly* to the
+// previous 1st-order single-image-point form when EO < 2, when fewer than two
+// image points are valid (n_valid < 2), or when the two image points are nearly
+// coincident.  q(3,.)/disIM(1) are read only inside `if constexpr (EO >= 2)`,
+// so they are never instantiated (no out-of-bounds) for EO = 1.
+//
+// Coefficients are the derivatives of the Lagrange basis through {0, x1, x2}:
+//   cs = -(x1+x2)/(x1 x2),  c1 = x2/(x1 (x2-x1)),  c2 = -x1/(x2 (x2-x1))
+// Zero-gradient surface value: phi_s = -(c1 phi1 + c2 phi2)/cs,
+// with -1/cs = x1 x2/(x1+x2).  For x2 = 2 x1 this collapses to (4 phi1 - phi2)/3.
+// ============================================================================
+
+template <int EO, typename QArr, typename DisArr>
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real ibm_zero_grad_surface(const QArr& q, int n, const DisArr& disIM, int n_valid)
+{
+    const Real u1 = q(2, n);   // IP1
+    constexpr Real eps = Real(1.0e-12);
+    if constexpr (EO >= 3) {
+        // 3rd-order form: enforce dphi/dn|_0 = 0 with the three-point one-sided
+        // derivative on {0, x1, x2, x3} (Lagrange-basis derivatives at s=0):
+        //   cs = -(1/x1 + 1/x2 + 1/x3)
+        //   c1 = x2 x3/(x1 (x1-x2)(x1-x3)),  c2/c3 by cyclic index swap.
+        // phi_s = -(c1 u1 + c2 u2 + c3 u3)/cs. Exact for cubics; O(h^4) value
+        // when the exact solution satisfies dphi/dn = 0 (verified numerically).
+        if (n_valid >= 3) {
+            const Real x1 = disIM(0);
+            const Real x2 = disIM(1);
+            const Real x3 = disIM(2);
+            const bool distinct =
+                x1 > Real(0.0) &&
+                amrex::Math::abs(x2 - x1) > eps * amrex::max(x1, x2) &&
+                amrex::Math::abs(x3 - x2) > eps * amrex::max(x2, x3) &&
+                amrex::Math::abs(x3 - x1) > eps * amrex::max(x1, x3);
+            if (distinct) {
+                const Real u2 = q(3, n);
+                const Real u3 = q(4, n);
+                const Real cs = -(Real(1.0)/x1 + Real(1.0)/x2 + Real(1.0)/x3);
+                const Real c1 = x2 * x3 / (x1 * (x1 - x2) * (x1 - x3));
+                const Real c2 = x1 * x3 / (x2 * (x2 - x1) * (x2 - x3));
+                const Real c3 = x1 * x2 / (x3 * (x3 - x1) * (x3 - x2));
+                return -(c1 * u1 + c2 * u2 + c3 * u3) / cs;
+            }
+        }
+    }
+    if constexpr (EO >= 2) {
+        if (n_valid >= 2) {
+            const Real x1 = disIM(0);
+            const Real x2 = disIM(1);
+            if (x1 > Real(0.0) && amrex::Math::abs(x2 - x1) > eps * amrex::max(x1, x2)) {
+                const Real u2 = q(3, n);   // IP2
+                const Real c1 =  x2 / (x1 * (x2 - x1));
+                const Real c2 = -x1 / (x2 * (x2 - x1));
+                return (x1 * x2 / (x1 + x2)) * (c1 * u1 + c2 * u2);
+            }
+        }
+    } else {
+        amrex::ignore_unused(disIM, n_valid);
+    }
+    return u1;   // 1st-order zero-gradient: copy nearest image point
+}
+
+/// Positivity-guarded variant for positive-definite primitives (P, T, Y).
+/// The 2nd-order two-point form (x2^2 u1 - x1^2 u2)/(x2^2 - x1^2) goes
+/// non-positive when u2/u1 > (x2/x1)^2 — a strong gradient between IP1 and IP2
+/// (e.g. a shock crossing the stencil). Fall back to the 1st-order value u1,
+/// which is a convex combination of fluid-cell values and therefore positive.
+/// Mirrors the documented ghost positivity floor in extrapolate(); exact no-op
+/// at EO=1 (base helper already returns u1). NOT for velocities (legitimately
+/// signed).
+template <int EO, typename QArr, typename DisArr>
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real ibm_zero_grad_surface_pos(const QArr& q, int n, const DisArr& disIM, int n_valid)
+{
+    const Real v = ibm_zero_grad_surface<EO>(q, n, disIM, n_valid);
+    return (v > Real(0.0)) ? v : q(2, n);
+}
+
+template <int EO, typename QArr, typename DisArr>
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real ibm_wall_normal_deriv(const QArr& q, int n, const DisArr& disIM, int n_valid)
+{
+    const Real phi_s = q(1, n);   // surface
+    const Real phi1  = q(2, n);   // IP1
+    const Real x1    = disIM(0);
+    constexpr Real eps = Real(1.0e-12);
+    if constexpr (EO >= 3) {
+        // 3rd-order one-sided derivative on {0, x1, x2, x3} (exact for cubics;
+        // coefficients are the Lagrange-basis derivatives at s = 0).
+        if (n_valid >= 3) {
+            const Real x2 = disIM(1);
+            const Real x3 = disIM(2);
+            const bool distinct =
+                x1 > Real(0.0) &&
+                amrex::Math::abs(x2 - x1) > eps * amrex::max(x1, x2) &&
+                amrex::Math::abs(x3 - x2) > eps * amrex::max(x2, x3) &&
+                amrex::Math::abs(x3 - x1) > eps * amrex::max(x1, x3);
+            if (distinct) {
+                const Real phi2 = q(3, n);
+                const Real phi3 = q(4, n);
+                const Real cs = -(Real(1.0)/x1 + Real(1.0)/x2 + Real(1.0)/x3);
+                const Real c1 = x2 * x3 / (x1 * (x1 - x2) * (x1 - x3));
+                const Real c2 = x1 * x3 / (x2 * (x2 - x1) * (x2 - x3));
+                const Real c3 = x1 * x2 / (x3 * (x3 - x1) * (x3 - x2));
+                return cs * phi_s + c1 * phi1 + c2 * phi2 + c3 * phi3;
+            }
+        }
+    }
+    if constexpr (EO >= 2) {
+        if (n_valid >= 2) {
+            const Real x2 = disIM(1);
+            if (x1 > Real(0.0) && amrex::Math::abs(x2 - x1) > eps * amrex::max(x1, x2)) {
+                const Real phi2 = q(3, n);   // IP2
+                const Real cs = -(x1 + x2) / (x1 * x2);
+                const Real c1 =  x2 / (x1 * (x2 - x1));
+                const Real c2 = -x1 / (x2 * (x2 - x1));
+                return cs * phi_s + c1 * phi1 + c2 * phi2;
+            }
+        }
+    } else {
+        amrex::ignore_unused(n_valid);
+    }
+    const Real inv = (x1 > Real(0.0)) ? Real(1.0) / x1 : Real(0.0);
+    return (phi1 - phi_s) * inv;   // 1st-order one-sided
 }
 
 // ============================================================================
@@ -209,23 +377,7 @@ static constexpr int N_ATTEMPTS_GP   = 3;
 static constexpr int N_ATTEMPTS_SURF = 5;   
 
 // ============================================================================
-// 4. gpData_t — Per-FAB ghost-point count (legacy wrapper)
-//
-// Ghost-point geometry and interpolation data are stored in the level-wide
-// GPStore (CSR layout).  gpData_t only retains the per-FAB GP count used
-// during computeMarkers / initialiseGPs bookkeeping.
-// ============================================================================
-
-template <int eorder_tparm, int iorder_tparm>
-struct gpData_t {
-  gpData_t() : ngps(0) {}
-  int ngps;
-
-  void clear() { ngps = 0; }
-};
-
-// ============================================================================
-// 5. surfImp_t — Surface image-point data (SoA)
+// 4. surfImp_t — Surface image-point data (SoA)
 // ============================================================================
 
 template <int eorder_tparm_surf, int iorder_tparm_surf>
@@ -397,10 +549,15 @@ struct surfPhys_t {
 };
 
 // ============================================================================
-// 7. Type traits and helpers
+// 6. Type traits and helpers
 // ============================================================================
 
-// Type trait to detect if a type is gpData_t (has gp_ijk member)
+// Detects the ghost-point storage view (has ``gp_ijk``) vs the surface storage
+// (no ``gp_ijk``).  Used by interp templates in ibm_solver_interp.h to pick
+// GP vs surface code paths at compile time.
+//
+// The historical name ``is_gpData_t`` predates the CSR refactor that removed
+// the per-FAB gpData_t struct; it now matches GPStoreView (the live storage).
 template <typename T, typename = void>
 struct is_gpData_t : std::false_type {};
 
@@ -408,7 +565,7 @@ template <typename T>
 struct is_gpData_t<T, std::void_t<decltype(std::declval<T>().gp_ijk)>> : std::true_type {};
 
 // ============================================================================
-// 8. GPStoreView / GPStore — Level-wide flattened ghost-point storage (CSR)
+// 7. GPStoreView / GPStore — Level-wide flattened ghost-point storage (CSR)
 // ============================================================================
 
 /// \brief GPU-capturable POD view into GPStore.  Holds raw pointers only.
@@ -434,6 +591,8 @@ struct GPStoreView {
   const Array1D< int, 0, eorder_tparm - 1>*           imp_ninterp;
   const Array3D< int, 0, eorder_tparm - 1, 0, N_InterP - 1, 0, IDIM>* imp_ip_ijk;
   const Array2D<Real, 0, eorder_tparm - 1, 0, N_InterP - 1>*          imp_ipweights;
+  const int*                    n_valid;
+  const Array1D<Real, 0, 5>*    recon_prim;              // rho,u,v,w,p,T at reconstructed GP
 
   // Non-const data pointers for initialiseGPs (write pass)
   Array1D< int, 0, IDIM>* gp_ijk_w;
@@ -447,6 +606,8 @@ struct GPStoreView {
   Array1D< int, 0, eorder_tparm - 1>*           imp_ninterp_w;
   Array3D< int, 0, eorder_tparm - 1, 0, N_InterP - 1, 0, IDIM>* imp_ip_ijk_w;
   Array2D<Real, 0, eorder_tparm - 1, 0, N_InterP - 1>*          imp_ipweights_w;
+  int*                    n_valid_w;
+  Array1D<Real, 0, 5>*    recon_prim_w;
 
   /// Get GP range for a local FAB index
   AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
@@ -484,6 +645,8 @@ struct GPStore {
   Gpu::ManagedVector<Array1D< int, 0, eorder_tparm - 1>>           imp_ninterp;
   Gpu::ManagedVector<Array3D< int, 0, eorder_tparm - 1, 0, N_InterP - 1, 0, IDIM>> imp_ip_ijk;
   Gpu::ManagedVector<Array2D<Real, 0, eorder_tparm - 1, 0, N_InterP - 1>>          imp_ipweights;
+  Gpu::ManagedVector<int>                    n_valid;
+  Gpu::ManagedVector<Array1D<Real, 0, 5>>    recon_prim; // rho,u,v,w,p,T at reconstructed GP
 
   /// Allocate flat arrays from per-fab counts.
   /// \param counts  Vector of GP counts per local FAB (size = nfabs_in).
@@ -518,6 +681,8 @@ struct GPStore {
     imp_ninterp.resize(total_ngps);
     imp_ip_ijk.resize(total_ngps);
     imp_ipweights.resize(total_ngps);
+    n_valid.resize(total_ngps);
+    recon_prim.resize(total_ngps);
   }
 
   /// Return a GPU-capturable read/write view of this store.
@@ -539,6 +704,8 @@ struct GPStore {
     v.imp_ninterp   = imp_ninterp.data();
     v.imp_ip_ijk    = imp_ip_ijk.data();
     v.imp_ipweights = imp_ipweights.data();
+    v.n_valid       = n_valid.data();
+    v.recon_prim    = recon_prim.data();
 
     // const_cast for writable pointers (initialiseGPs write pass)
     v.gp_ijk_w        = const_cast<Array1D< int, 0, IDIM>*>(gp_ijk.data());
@@ -552,6 +719,8 @@ struct GPStore {
     v.imp_ninterp_w   = const_cast<Array1D< int, 0, eorder_tparm - 1>*>(imp_ninterp.data());
     v.imp_ip_ijk_w    = const_cast<Array3D< int, 0, eorder_tparm - 1, 0, N_InterP - 1, 0, IDIM>*>(imp_ip_ijk.data());
     v.imp_ipweights_w = const_cast<Array2D<Real, 0, eorder_tparm - 1, 0, N_InterP - 1>*>(imp_ipweights.data());
+    v.n_valid_w       = const_cast<int*>(n_valid.data());
+    v.recon_prim_w    = const_cast<Array1D<Real, 0, 5>*>(recon_prim.data());
 
     return v;
   }
@@ -572,6 +741,8 @@ struct GPStore {
     imp_ninterp.clear();
     imp_ip_ijk.clear();
     imp_ipweights.clear();
+    n_valid.clear();
+    recon_prim.clear();
   }
 
   void shrink() {
@@ -590,6 +761,8 @@ struct GPStore {
       imp_ninterp.shrink_to_fit();
       imp_ip_ijk.shrink_to_fit();
       imp_ipweights.shrink_to_fit();
+      n_valid.shrink_to_fit();
+      recon_prim.shrink_to_fit();
     }
   }
 };

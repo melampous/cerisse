@@ -18,6 +18,7 @@
 template <typename param, typename cls_t>
 class skew_t {
   public:
+  static constexpr bool rz_pressure_split_capable = false;  // RZ pressure-split is WENO-only
 
   AMREX_GPU_HOST_DEVICE
   skew_t() {
@@ -460,7 +461,7 @@ class skew_t {
         nv = NSEN[l];       
         p1 =  prims(i1[0],i1[1],i1[2],nv);
         p2 =  prims(i2[0],i2[1],i2[2],nv);
-        p3 =  prims(i3[0],i2[1],i2[2],nv);    
+        p3 =  prims(i3[0],i3[1],i3[2],nv);
         sen  = disconSensor(p1,p2,p3);
         sen_num += sen*sen;sen_denom +=sen;      
       }

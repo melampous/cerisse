@@ -22,6 +22,9 @@ namespace CNSConstants {
     
     // Tiny functions to avoid reference  device vars (better for GPU)
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static constexpr Real small_rho() noexcept { return Real(smallr); }
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
     static constexpr Real min_press() noexcept { return Real(min_euler_press); }
 
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE

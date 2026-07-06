@@ -1,0 +1,227 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue]{hyperref}
+\newcommand{\D}{\mathrm{D}}
+\newcommand{\dd}{\partial}
+\newcommand{\er}{\bm{e}_r}
+\newcommand{\etheta}{\bm{e}_\theta}
+\newcommand{\ez}{\bm{e}_z}
+\newcommand{\om}{\bm{\omega}}
+\newcommand{\ub}{\bm{u}}
+\title{Two theoretical limits of the underexpanded-jet campaign:\\
+(i) the NPR lower bound, and (ii) why the axisymmetric (RZ) model\\
+is valid only in the near field --- a vorticity-equation argument}
+\author{Cerisse U\_jet campaign notes}
+\date{2 July 2026}
+\begin{document}
+\maketitle
+
+%=====================================================================
+\section{The lower bound of NPR: the choking threshold}
+
+For a convergent (sonic) nozzle discharging into quiescent ambient at
+$p_\infty$, the jet is \emph{underexpanded} only if the nozzle is
+choked. Isentropic flow gives the exit static pressure of a choked
+nozzle, $p_e/p_0 = \left(\tfrac{2}{\gamma+1}\right)^{\gamma/(\gamma-1)}$,
+so the exit is exactly pressure-matched ($p_e = p_\infty$) when
+\begin{equation}
+  \mathrm{NPR} \equiv \frac{p_0}{p_\infty}
+  = \left(\frac{\gamma+1}{2}\right)^{\frac{\gamma}{\gamma-1}}
+  = 1.892\,93 \qquad (\gamma = 1.4).
+  \label{eq:choke}
+\end{equation}
+This is the ``$1.8\mathrm{xx}$'' bound quoted in the literature
+(e.g.\ Franquet \emph{et al.}, \emph{Prog.\ Aerosp.\ Sci.} 2015):
+\begin{itemize}
+\item $\mathrm{NPR} < 1.893$: nozzle unchoked, exit subsonic, ordinary
+  subsonic jet --- no shock-cell train exists at all;
+\item $\mathrm{NPR} = 1.893$: perfectly expanded sonic jet
+  ($p_e/p_\infty = 1$, $M_j = 1$);
+\item $\mathrm{NPR} > 1.893$: underexpanded sonic jet, with the
+  fully-expanded Mach number
+  $M_j = \sqrt{\tfrac{2}{\gamma-1}\!\left[\mathrm{NPR}^{(\gamma-1)/\gamma}-1\right]}$.
+\end{itemize}
+
+Our campaign uses $\mathrm{NPR}=p_0/p_\infty$ directly, so the current
+case matrix sits as follows:
+\begin{center}
+\begin{tabular}{lccl}
+\toprule
+NPR & $p_e/p_\infty$ & $M_j$ & regime \\
+\midrule
+1.893 & 1.000 & 1.000 & threshold (perfectly expanded) \\
+2     & 1.057 & 1.046 & \textbf{+5.7\% above the limit} --- weakest possible wave train \\
+3     & 1.585 & 1.358 & moderately underexpanded, regular reflection \\
+3.8   & 2.0   & 1.53  & empirical Mach-disk onset ($p_e/p_\infty \simeq 2$) \\
+4--5  & 2.1--2.6 & 1.56--1.71 & Mach disk established \\
+\bottomrule
+\end{tabular}
+\end{center}
+Thus \textbf{NPR $=2$ is essentially at the lower boundary of the
+underexpanded regime}: the exit over-pressure is only $5.7\%$, the
+wave train consists of weak isentropic compression/expansion waves in
+regular reflection (no embedded shocks strong enough for a Mach disk),
+and all density gradients are smooth --- which is also why
+gradient-based AMR tagging self-limits for this case.
+
+%=====================================================================
+\section{Why RZ-axisymmetry is a near-field model: the vorticity equation}
+
+\subsection{Setup}
+Compressible vorticity transport (curl of the momentum equation):
+\begin{equation}
+  \frac{\D\om}{\D t}
+  \;=\;
+  \underbrace{(\om\!\cdot\!\nabla)\ub}_{\text{stretching/tilting}}
+  \;-\;
+  \underbrace{\om(\nabla\!\cdot\!\ub)}_{\text{dilatation}}
+  \;+\;
+  \underbrace{\frac{\nabla\rho\times\nabla p}{\rho^{2}}}_{\text{baroclinic}}
+  \;+\;
+  \underbrace{\nabla\times\!\Big(\tfrac{1}{\rho}\nabla\!\cdot\!\bm{\tau}\Big)}_{\text{viscous}} .
+  \label{eq:vort3d}
+\end{equation}
+In cylindrical coordinates with the axisymmetric, swirl-free ansatz of
+the RZ solver ($\dd_\theta \equiv 0$, $u_\theta \equiv 0$):
+\begin{equation}
+  \ub = u_r\,\er + u_z\,\ez,
+  \qquad
+  \om = \nabla\times\ub = \omega_\theta\,\etheta,
+  \qquad
+  \omega_\theta = \frac{\dd u_r}{\dd z}-\frac{\dd u_z}{\dd r}.
+\end{equation}
+\emph{All vorticity is azimuthal}: vortex lines are perfect circles
+around the axis (ring vortices), by construction and forever.
+
+\subsection{The stretching term collapses to ring dilation}
+Evaluate the 3-D production term under the ansatz. Since the scalar
+components are $\theta$-independent but $\dd_\theta\er=\etheta$,
+\begin{equation}
+  (\om\!\cdot\!\nabla)\ub
+  = \frac{\omega_\theta}{r}\,\dd_\theta\!\left(u_r\er+u_z\ez\right)
+  = \frac{u_r\,\omega_\theta}{r}\,\etheta .
+  \label{eq:stretchRZ}
+\end{equation}
+The tensorial stretching $(\om\!\cdot\!\nabla)\ub = \mathsf{S}\om + \tfrac12\om\times\om\dots$
+degenerates into the single scalar $u_r/r$: the only way an
+axisymmetric vortex ring can ``stretch'' is by increasing its own
+radius. Substituting \eqref{eq:stretchRZ} into \eqref{eq:vort3d} and
+using continuity $\D\rho/\D t=-\rho\nabla\!\cdot\!\ub$ together with
+$\D r/\D t = u_r$ gives the scalar transport law
+\begin{equation}
+  \boxed{\;
+  \frac{\D}{\D t}\!\left(\frac{\omega_\theta}{\rho\, r}\right)
+  = \frac{1}{\rho^{3} r}\left(\nabla\rho\times\nabla p\right)_\theta
+  + \frac{1}{\rho r}\Big[\nabla\times\big(\tfrac1\rho\nabla\!\cdot\!\bm\tau\big)\Big]_\theta
+  \;}
+  \label{eq:invariant}
+\end{equation}
+i.e.\ \textbf{for inviscid, barotropic flow $\omega_\theta/(\rho r)$ is a
+material invariant} (the compressible generalisation of the classical
+axisymmetric invariant $\omega_\theta/r$).
+
+\subsection{Consequences: no amplification, no cascade}
+\paragraph{(a) Algebraic bound on vorticity.}
+Integrating \eqref{eq:invariant} along a particle path,
+\begin{equation}
+  \omega_\theta(t)
+  = \omega_\theta(0)\,\frac{\rho(t)\,r(t)}{\rho(0)\,r(0)}
+  \;+\; \text{(baroclinic integral)} .
+\end{equation}
+Both $\rho$ and $r$ are bounded, so vorticity can grow only
+\emph{algebraically}, through ring dilation or compression. Contrast
+3-D: writing $\om=\omega\,\bm e_\omega$, the stretching term gives
+$\D\omega/\D t = (\bm e_\omega\!\cdot\!\mathsf{S}\,\bm e_\omega)\,\omega + \dots$,
+and the well-known preferential alignment of $\bm e_\omega$ with the
+extensional strain eigenvector makes the growth rate positive on
+average --- \emph{exponential} amplification, terminated only at the
+Kolmogorov scale. This is the engine of the direct energy cascade; RZ
+removes it identically.
+
+\paragraph{(b) Enstrophy budget.}
+The inviscid enstrophy production in 3-D is
+$\int \om\,\mathsf{S}\,\om\,\mathrm dV$, positive on average
+($\propto -\langle S^3\rangle$, velocity-derivative skewness
+$\simeq -0.4$ in real turbulence). Under the RZ ansatz
+\begin{equation}
+  \om\,\mathsf{S}\,\om = \omega_\theta^{2}\,S_{\theta\theta}
+  = \omega_\theta^{2}\,\frac{u_r}{r},
+\end{equation}
+which is sign-indefinite and tied to the \emph{mean} radial motion ---
+there is no self-amplification mechanism. Enstrophy is (up to
+baroclinicity and viscosity) a Casimir-constrained quantity, exactly
+as in 2-D turbulence.
+
+\paragraph{(c) Wrong cascade direction.}
+With stretching absent, the $(r,z)$-plane dynamics possess two
+quadratic inviscid invariants (kinetic energy and the family
+$\int \rho f(\omega_\theta/\rho r)\,\mathrm dV$). By the standard
+Fj\o rtoft/Kraichnan argument this forces a \emph{dual cascade}:
+energy flows to \emph{large} scales (vortex pairing and merging),
+enstrophy to small scales. The phenomenology in our RZ solutions ---
+shear-layer rings that pair, grow, and form large coherent ``puffing''
+structures instead of breaking down --- is not a numerical artefact
+but the \emph{correct} solution of the axisymmetric equations, which
+are simply the wrong equations for a turbulent far field. A real jet
+obeys the single-invariant 3-D Richardson--Kolmogorov direct cascade.
+
+\paragraph{(d) Modal truncation.}
+Decomposing any disturbance as $\sum_m \hat q(r,z)\,e^{im\theta}$, the
+RZ solver retains only $m=0$. Linear stability theory of round jets
+(Batchelor \& Gill 1962; Michalke 1971) shows: for the thin annular
+shear layer near the lip ($\delta_\omega/R \ll 1$) the $m=0$ and
+$|m|=1$ modes have comparable growth rates --- so the \emph{initial}
+roll-up into rings is genuinely captured; but for the thick,
+developed profile downstream the \emph{only} unstable mode is the
+helical $|m|=1$, and the dominant secondary instabilities of the ring
+street (Widnall-type azimuthal core waves, elliptic instability of
+the cores, braid streamwise vortices) are all $m\neq0$. The RZ model
+therefore \emph{cannot even represent linearly} the instabilities
+that govern transition and far-field dynamics.
+
+\subsection{Why the near field survives}
+The same decomposition explains the region of validity:
+\begin{enumerate}
+\item \textbf{Wave-system gasdynamics is $m=0$ physics.} The
+  Prandtl--Meyer fan, intercepting/barrel shock, Mach disk and
+  reflected shock are steady solutions of the axisymmetric Euler
+  equations (method of characteristics + Rankine--Hugoniot); the real
+  jet's near-field wave train \emph{is} axisymmetric to leading order.
+\item \textbf{Near-field vorticity is baroclinic, and its $m=0$ part
+  is retained.} Equation \eqref{eq:invariant} keeps the full
+  axisymmetric baroclinic source $(\nabla\rho\times\nabla p)_\theta$:
+  vorticity generated at curved shocks and at the Mach-disk slip line
+  is captured --- these set the shear layers that bound the first
+  cells.
+\item \textbf{Initial K--H roll-up is quasi-planar.} With
+  $\delta_\omega \ll R$ the annular layer behaves locally like a plane
+  mixing layer whose primary instability is two-dimensional
+  (Michalke); rings are indeed observed in real jets for the first
+  1--2 pairings.
+\item \textbf{Failure begins at the first 3-D secondary instability.}
+  After $\mathcal O(1)$ pairings the Widnall instability grows on the
+  ring-turnover timescale; beyond that station stretching, azimuthal
+  modes and the direct cascade --- all absent in RZ --- control the
+  physics.
+\end{enumerate}
+Empirically, in this campaign (NPR $=3$): centerline and field data
+agree between RZ and full 3-D to $<3\%$ up to $z\approx1.8\,D_e$
+(through the first shock cell and Mach disk), while at $z=20\,D_e$
+the RZ centerline velocity is $1.8\times$ the 3-D value and the
+high-NPR RZ far field exhibits $25$--$40\%$ rms coherent puffing ---
+precisely the inverse-cascade signature predicted above.
+
+\paragraph{Summary.}
+RZ axisymmetry deletes exactly the two ingredients that make jet
+turbulence three-dimensional --- exponential vortex stretching
+(replaced by the material invariant $\omega_\theta/\rho r$,
+Eq.~\ref{eq:invariant}) and all $m\neq0$ azimuthal modes --- while
+retaining everything that fixes the near-field wave structure
+(axisymmetric gasdynamics and $m=0$ baroclinicity). It is therefore a
+quantitatively reliable \emph{near-field} model (first few shock
+cells) and a qualitatively wrong \emph{far-field} model, independent
+of grid resolution.
+
+\end{document}

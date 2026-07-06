@@ -76,7 +76,9 @@ class viscousLES_t {
 
     // mesh sizes
     const GpuArray<Real, AMREX_SPACEDIM> dxinv = geom.InvCellSizeArray();
-    const GpuArray<Real, AMREX_SPACEDIM> dx = geom.CellSizeArray(); 
+    const GpuArray<Real, AMREX_SPACEDIM> dx = geom.CellSizeArray();
+    const GpuArray<Real, AMREX_SPACEDIM> prob_lo = geom.ProbLoArray();
+    const bool is_rz = geom.IsRZ();
 
     // grid
     // const Box& bx = mfi.tilebox();        
@@ -233,12 +235,14 @@ class viscousLES_t {
 #if (AMREX_USE_GPIBM || CNS_USE_EB )   
       amrex::ParallelFor(bxgnodal,
                   [=,*this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {                                       
-                    this->cns_diff_ibm(i, j, k,dir, prims,flx,coeftrans, dxinv, cls_d,ibMarkers);
+                    this->cns_diff_ibm(i, j, k,dir, prims,flx,coeftrans,
+                                       dxinv, dx, prob_lo, is_rz, cls_d,ibMarkers);
                   });                      
 #else    
       amrex::ParallelFor(bxgnodal,
                   [=,*this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {                   
-                    this->cns_diff(i, j, k,dir, prims,flx,coeftrans, dxinv, cls_d);
+                    this->cns_diff(i, j, k,dir, prims,flx,coeftrans,
+                                   dxinv, dx, prob_lo, is_rz, cls_d);
                   });                  
 #endif
         
@@ -264,9 +268,12 @@ class viscousLES_t {
       const int i, const int j, const int k, const int d1,
       amrex::Array4<const amrex::Real> const& q,
       amrex::Array4<amrex::Real> const& flx,
-      amrex::Array4<const amrex::Real> const& coeffs,
-      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv,
-      const cls_t* /*cls*/) const {
+	      amrex::Array4<const amrex::Real> const& coeffs,
+	      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv,
+	      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dx,
+	      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& prob_lo,
+	      const bool is_rz,
+	      const cls_t* /*cls*/) const {
     
     using amrex::Real;
     const amrex::IntVect iv{AMREX_D_DECL(i, j, k)};
@@ -295,7 +302,18 @@ class viscousLES_t {
     const Real u13  = tangent_diff<param::order>(iv, d1, d3, QU1, q, dxinv);
     const Real u33  = tangent_diff<param::order>(iv, d1, d3, QU3, q, dxinv);
 #endif
-    const Real divu   = AMREX_D_TERM(u11, +u22, +u33);
+	    Real divu = AMREX_D_TERM(u11, +u22, +u33);
+#if (AMREX_SPACEDIM == 2)
+	    if (is_rz) {
+	      const Real r_face = (d1 == 0)
+	          ? prob_lo[0] + Real(i) * dx[0]
+	          : prob_lo[0] + (Real(i) + Real(0.5)) * dx[0];
+	      const Real dudr_face = (d1 == 0) ? u11 : u22;
+	      const Real ur_face = interp<param::order>(iv, d1, cls_t::QU, q);
+	      const Real tiny_r = Real(1.0e-14) * dx[0];
+	      divu += (r_face > tiny_r) ? (ur_face / r_face) : dudr_face;
+	    }
+#endif
     
     const Real muf    = interp<param::order>(iv, d1, cls_t::CMU, coeffs);
     const Real xif    = interp<param::order>(iv, d1, cls_t::CXI, coeffs);    
@@ -431,9 +449,12 @@ class viscousLES_t {
       const int i, const int j, const int k, const int d1,
       amrex::Array4<const amrex::Real> const& q,
       amrex::Array4<amrex::Real> const& flx,
-      amrex::Array4<const amrex::Real> const& coeffs,
-      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv,
-      const cls_t* cls, const Array4<uint8_t>& marker) const {
+	      amrex::Array4<const amrex::Real> const& coeffs,
+	      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv,
+	      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dx,
+	      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& prob_lo,
+	      const bool is_rz,
+	      const cls_t* cls, const Array4<uint8_t>& marker) const {
     
     using amrex::Real;
     const amrex::IntVect iv{AMREX_D_DECL(i, j, k)};
@@ -452,7 +473,10 @@ class viscousLES_t {
 
     if (intersolid_flx) return;  // flux =0  inside solid   
 
-    Real u11,dTdn,u21,u12,u22,u31,u13,u33,muf,xif,lamf;
+	    Real u11,dTdn,u21,u12,u22,u31,u13,u33,muf,xif,lamf;
+#if (AMREX_SPACEDIM == 2)
+	    Real ur_face = Real(0.0);
+#endif
     
     constexpr int order_default = 2; 
     //int order_local = (close_to_wall ? order_default : param::order);   
@@ -478,7 +502,10 @@ class viscousLES_t {
       // properties
       muf  = interp<order_default>(iv, d1, cls_t::CMU, coeffs);
       xif  = interp<order_default>(iv, d1, cls_t::CXI, coeffs);
-      lamf = interp<order_default>(iv, d1, cls_t::CLAM, coeffs);   
+	      lamf = interp<order_default>(iv, d1, cls_t::CLAM, coeffs);
+#if (AMREX_SPACEDIM == 2)
+	      ur_face = interp<order_default>(iv, d1, cls_t::QU, q);
+#endif
 #if NUM_SPECIES > 1          
       for (int n = 0; n < NUM_SPECIES; ++n) {  
         rhoD_f[n] = interp<order_default>(iv, d1, cls_t::CRHOD + n, coeffs); 
@@ -502,7 +529,10 @@ class viscousLES_t {
       // properties
       muf  = interp<param::order>(iv, d1, cls_t::CMU, coeffs);
       xif  = interp<param::order>(iv, d1, cls_t::CXI, coeffs);
-      lamf = interp<param::order>(iv, d1, cls_t::CLAM, coeffs);
+	      lamf = interp<param::order>(iv, d1, cls_t::CLAM, coeffs);
+#if (AMREX_SPACEDIM == 2)
+	      ur_face = interp<param::order>(iv, d1, cls_t::QU, q);
+#endif
 #if NUM_SPECIES > 1          
       for (int n = 0; n < NUM_SPECIES; ++n) {  
         rhoD_f[n] = interp<param::order>(iv, d1, cls_t::CRHOD + n, coeffs);             
@@ -511,7 +541,17 @@ class viscousLES_t {
 
     }  
     
-    const Real divu   = AMREX_D_TERM(u11, +u22, +u33);
+	    Real divu = AMREX_D_TERM(u11, +u22, +u33);
+#if (AMREX_SPACEDIM == 2)
+	    if (is_rz) {
+	      const Real r_face = (d1 == 0)
+	          ? prob_lo[0] + Real(i) * dx[0]
+	          : prob_lo[0] + (Real(i) + Real(0.5)) * dx[0];
+	      const Real dudr_face = (d1 == 0) ? u11 : u22;
+	      const Real tiny_r = Real(1.0e-14) * dx[0];
+	      divu += (r_face > tiny_r) ? (ur_face / r_face) : dudr_face;
+	    }
+#endif
     
     AMREX_D_TERM(Real tau11 = muf * (2.0 * u11 - (2.0 / 3.0) * divu) + xif * divu;
                , Real tau12 = muf * (u12 + u21);, Real tau13 = muf * (u13 + u31);)
@@ -625,11 +665,45 @@ class viscousLES_t {
   }
 
 
-  // RZ geometric viscous source terms (hoop stress etc.)
-  // TODO: implement proper RZ geometric viscous source
-  void inline rz_geometric_source(const Geometry& /*geom*/, const MFIter& /*mfi*/,
-            const Array4<Real>& /*prims*/, const Array4<Real>& /*state*/,
-            const cls_t* /*cls*/) { }
+	  // RZ viscous hoop-stress source for radial momentum:
+	  //   RHS(rho u_r) += -tau_theta_theta / r.
+	  // This mirrors viscous_t; the face fluxes already carry the remaining
+	  // metric-divergence terms.
+	  void inline rz_geometric_source(const Geometry& geom, const MFIter& mfi,
+	            const Array4<Real>& prims, const Array4<Real>& state,
+	            const cls_t* cls) {
+#if (AMREX_SPACEDIM == 2)
+	    if (!geom.IsRZ()) return;
+
+	    const auto dx = geom.CellSizeArray();
+	    const auto prob_lo = geom.ProbLoArray();
+	    const auto dxinv = geom.InvCellSizeArray();
+	    const Box& bx = mfi.tilebox();
+
+	    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+	      const Real r = prob_lo[0] + (Real(i) + Real(0.5)) * dx[0];
+	      const Real tiny_r = Real(1.0e-14) * dx[0];
+	      const Real ur = prims(i,j,k,cls_t::QU);
+	      const Real ur_over_r = (r > tiny_r)
+	          ? (ur / r)
+	          : normal_diff_cc<param::order>(
+	                amrex::IntVect(AMREX_D_DECL(i,j,k)), 0, cls_t::QU, prims, dxinv);
+
+	      const amrex::IntVect iv(AMREX_D_DECL(i,j,k));
+	      const Real durdr = normal_diff_cc<param::order>(iv, 0, cls_t::QU, prims, dxinv);
+	      const Real duzdz = normal_diff_cc<param::order>(iv, 1, cls_t::QV, prims, dxinv);
+	      const Real theta = durdr + ur_over_r + duzdz;
+
+	      const Real mu = cls->visc(prims(i,j,k,cls_t::QT));
+	      const Real xi = Real(0.0);
+	      const Real tau_tt = mu * (Real(2.0) * ur_over_r - Real(2.0/3.0) * theta)
+	                        + xi * theta;
+	      state(i,j,k,cls_t::UMX) -= tau_tt / amrex::max(r, tiny_r);
+	    });
+#else
+	    amrex::ignore_unused(geom, mfi, prims, state, cls);
+#endif
+	  }
 
   };
 

@@ -61,7 +61,7 @@ static constexpr Real fcw6_1 =  +5.0  / 36.0;
 static constexpr Real fcw6_2 =  -49.0 / 36.0; 
 static constexpr Real fcw6_3 =  +49.0 / 36.0; 
 static constexpr Real fcw6_4 =  -5.0  / 36.0; 
-static constexpr Real fcw6_5 =  +1.0  / 60.0; 
+static constexpr Real fcw6_5 =  +1.0  / 90.0; 
 
 // interpolation coefficients face centred 6th order  (Finite volume) 
 static constexpr Real int_fcw6_0 =  1.0  /  60.0; 
@@ -208,7 +208,7 @@ AMREX_GPU_DEVICE AMREX_FORCE_INLINE amrex::Real normal_diff_cc<2>(
   amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv) noexcept
 {
   const auto ivn = amrex::IntVect::TheDimensionVector(idir);
-  return (ccw2_1*q(iv+ivn, comp) - ccw2_0*q(iv - ivn, comp)) * dxinv[idir];
+  return (ccw2_1 * q(iv + ivn, comp) + ccw2_0 * q(iv - ivn, comp)) * dxinv[idir];
 }
 
 /// @brief 4th order central difference face centred
@@ -348,7 +348,7 @@ tangent_diff<6>(amrex::IntVect iv, int idir, int tdir, int comp,
           
   // Interpolate derivatives using face-centred weights 
   return (d5 * int_fcw6_5 + d4 * int_fcw6_4 + d3 * int_fcw6_3 + 
-          d2 * int_fcw6_4 + d1 * int_fcw6_3 + d0 * int_fcw6_0) * dxinv[tdir];
+          d2 * int_fcw6_2 + d1 * int_fcw6_1 + d0 * int_fcw6_0) * dxinv[tdir];
 }
 
 ////----------Interpolation with variable order using polynomial -------------- ////

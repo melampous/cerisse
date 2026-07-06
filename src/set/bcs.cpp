@@ -6,6 +6,37 @@
 #include <prob.h>
 using namespace amrex;
 
+namespace {
+
+template <typename Array4T, typename GeomDataT, typename ClosuresT,
+          typename ProbParmT>
+AMREX_GPU_DEVICE AMREX_FORCE_INLINE auto
+try_bcnormal_lodi(int, const IntVect& iv, Array4T const& state,
+                  const Real* x, const Real dratio,
+                  const Real* s_int, const Real* s_refl, Real* s_ext,
+                  const int idir, const int sgn, const Real time,
+                  GeomDataT const& geom, ClosuresT const& closures,
+                  ProbParmT const& pparm)
+    -> decltype(bcnormal_lodi(iv, state, x, dratio, s_int, s_refl, s_ext,
+                              idir, sgn, time, geom, closures, pparm))
+{
+  return bcnormal_lodi(iv, state, x, dratio, s_int, s_refl, s_ext,
+                       idir, sgn, time, geom, closures, pparm);
+}
+
+template <typename Array4T, typename GeomDataT, typename ClosuresT,
+          typename ProbParmT>
+AMREX_GPU_DEVICE AMREX_FORCE_INLINE bool
+try_bcnormal_lodi(long, const IntVect&, Array4T const&,
+                  const Real*, const Real, const Real*, const Real*, Real*,
+                  const int, const int, const Real,
+                  GeomDataT const&, ClosuresT const&, ProbParmT const&)
+{
+  return false;
+}
+
+}  // namespace
+
 // This is called per boundary point
 struct CnsFillExtDir {
   // create pointers to device (for gpu) parms
@@ -55,8 +86,13 @@ struct CnsFillExtDir {
         // For uniform grid, first ghost point dratio=1, second ghost point
         // dratio=3, 5...
 
-        bcnormal(x, dratio, s_int, s_refl, s_ext, idir, 1, time, geom,
-                 *lclosures, *lprobparm);  // Call bcnormal from prob.H
+        const bool handled_by_lodi =
+            try_bcnormal_lodi(0, iv, dest, x, dratio, s_int, s_refl, s_ext,
+                              idir, 1, time, geom, *lclosures, *lprobparm);
+        if (!handled_by_lodi) {
+          bcnormal(x, dratio, s_int, s_refl, s_ext, idir, 1, time, geom,
+                   *lclosures, *lprobparm);  // Call bcnormal from prob.H
+        }
 
         for (int nc = 0; nc < numcomp; ++nc) {
           dest(iv, dcomp + nc) =
@@ -77,8 +113,13 @@ struct CnsFillExtDir {
         Real de = x[idir] - prob_hi[idir];
         Real dratio = de / di;  // wall-ghost/wall-first internal distance ratio
 
-        bcnormal(x, dratio, s_int, s_refl, s_ext, idir, -1, time, geom,
-                 *lclosures, *lprobparm);
+        const bool handled_by_lodi =
+            try_bcnormal_lodi(0, iv, dest, x, dratio, s_int, s_refl, s_ext,
+                              idir, -1, time, geom, *lclosures, *lprobparm);
+        if (!handled_by_lodi) {
+          bcnormal(x, dratio, s_int, s_refl, s_ext, idir, -1, time, geom,
+                   *lclosures, *lprobparm);
+        }
 
         for (int nc = 0; nc < numcomp; ++nc) {
           dest(iv, dcomp + nc) = s_ext[dcomp + nc];

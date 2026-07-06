@@ -9,6 +9,7 @@
 template <bool iOption, typename cls_t>
 class riemann_t {
  public:
+  static constexpr bool rz_pressure_split_capable = false;  // RZ pressure-split is WENO-only
   AMREX_GPU_HOST_DEVICE
   riemann_t() {}
 

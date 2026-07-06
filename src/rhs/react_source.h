@@ -85,10 +85,15 @@ class reactor_source_t {
     IArrayBox maskf(bx, 1, The_Async_Arena());
     maskf.setVal<RunOn::Gpu>(1);
 
+#ifndef AMREX_USE_GPU
+    // skip_react is consumed only by the CPU react branch below; on GPU it
+    // cost a streamSynchronize + 4 B D2H per FAB per stage for an unused
+    // result, so the whole mechanism is compiled out there.
     IArrayBox maskf_noreact(bx, 1, The_Async_Arena());
     amrex::Gpu::DeviceScalar<int> skip_react(0);
     int* skip_react_ptr = skip_react.dataPtr();
     auto const& mask_noreact = maskf_noreact.array();
+#endif
 
 
     auto const& mask = maskf.array();  // 1: do reaction, -1: skip reaction
@@ -127,14 +132,20 @@ class reactor_source_t {
       // fill mask      
       mask(i, j, k) = (T(i, j, k) > CNSConstants::min_react_temp) ? 1 : -1; // temp snm 
 
+#ifndef AMREX_USE_GPU
       if (T(i,j,k) > Real(3000)) {
         amrex::Gpu::Atomic::Max(skip_react_ptr, 1);
       }
-      //mask(i, j, k) = (T(i, j, k) > 500) ? 1 : -1; // temp snm 
+#endif
+      //mask(i, j, k) = (T(i, j, k) > 500) ? 1 : -1; // temp snm
     });
 
+#ifndef AMREX_USE_GPU
+    // CPU-only readback (GPU react below runs on the same stream and never
+    // reads skip_react — no sync needed before it).
     amrex::Gpu::streamSynchronize();
     bool skip_reactb = skip_react.dataValue();
+#endif
     // Not necessary to start a stream here, however pelePhysics function only takes a stream. Practically, launch and execution overhead determines  efficiency effect -- https://stackoverflow.com/questions/27038162/how-bad-is-it-to-launch-many-small-kernels-in-cuda#:~:text=Launch%20overhead%3A%20The%20overhead%20of,as%20the%20kernel%20in%20question. Seems unlikely this kernel launch cost will outweigh execution costs.
     /////////////////////////// React ///////////////////////////
     Real current_time = 0.0;

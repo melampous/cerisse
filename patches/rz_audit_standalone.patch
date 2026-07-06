@@ -1,0 +1,215 @@
+diff --git a/src/cls/Thermodynamics.h b/src/cls/Thermodynamics.h
+index c15ef3833..8d06ac63d 100644
+--- a/src/cls/Thermodynamics.h
++++ b/src/cls/Thermodynamics.h
+@@ -146,7 +147,9 @@ class calorifically_perfect_gas_t {
+     Real udir = ux * vdir[0] + uy * vdir[1] + uz * vdir[2];
+ 
+     Real ekin = Real(0.5) * (ux * ux + uy * uy + uz * uz);
+-    Real rhoet = rho * (cp * prims(i, j, k, idx_t::QT) + ekin);
++    // total energy density rho*E = rho*(cv*T + ekin); the +P below then makes the
++    // energy flux (rho*E + P)*udir. (Was cp*T = rho*E + P, which double-counted P.)
++    Real rhoet = rho * (cv * prims(i, j, k, idx_t::QT) + ekin);
+ 
+     fluxes(i, j, k, idx_t::URHO) = rho * udir;
+     fluxes(i, j, k, idx_t::UMX)  = rho * ux * udir + P * vdir[0];
+diff --git a/src/cls/Thermodynamics2.h b/src/cls/Thermodynamics2.h
+index f6aa75c08..a0f069772 100644
+--- a/src/cls/Thermodynamics2.h
++++ b/src/cls/Thermodynamics2.h
+@@ -143,7 +144,9 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE Real get_ei_min() const {
+     Real udir = ux * vdir[0] + uy * vdir[1] + uz * vdir[2];
+ 
+     Real ekin = Real(0.5) * (ux * ux + uy * uy + uz * uz);
+-    Real rhoet = rho * (cp * prims(i, j, k, idx_t::QT) + ekin);
++    // total energy density rho*E = rho*(cv*T + ekin); the +P below makes the energy
++    // flux (rho*E + P)*udir. (Was cp*T = rho*E + P, which double-counted P.)
++    Real rhoet = rho * (cv * prims(i, j, k, idx_t::QT) + ekin);
+ 
+     fluxes(i, j, k, idx_t::URHO) = rho * udir;
+     fluxes(i, j, k, idx_t::UMX)  = rho * ux * udir + P * vdir[0];
+diff --git a/src/ibm/ibm_solver_interp.h b/src/ibm/ibm_solver_interp.h
+index 1f0f6f547..a9edde1bf 100644
+--- a/src/ibm/ibm_solver_interp.h
++++ b/src/ibm/ibm_solver_interp.h
+@@ -358,10 +417,18 @@ static void extrapolate(
+     // temperature then reaches the EOS unclamped (when CLIP_MINTEMP is off) and yields
+     // rho = P/(R T) < 0, which poisons the neighbouring fluid reconstruction (NaN).
+     // We limit the ghost to at least this fraction of the (positive) surface value
+-    // rather than masking the result downstream. This only triggers on genuine
+-    // overshoot; well-resolved boundary layers leave the ghost well above the floor
+-    // and are unaffected.
+-    constexpr Real GP_POS_FLOOR_FRAC = Real(0.1);
++    // rather than masking the result downstream.
++    //
++    // NOTE: this must be a *positivity rescue* only -- a small floor that catches
++    // the genuine overshoot-through-zero, NOT a 10%-of-surface clamp. In an
++    // under-expanded jet / nozzle expansion the near-wall ghost legitimately sits
++    // well below the surface value (the gas is expanding), and the old 0.1 floor
++    // wrongly raised those physical low pressures/temperatures, injecting a
++    // spurious near-wall pressure jump and breaking the extrapolation's
++    // normal-derivative continuity. 1e-3 only triggers on values heading through
++    // zero; at the floor T and P scale together so rho=P/(RT) stays ~surface
++    // density (bounded). Legitimate expansion (>0.1% of surface) is preserved.
++    constexpr Real GP_POS_FLOOR_FRAC = Real(1.0e-3);
+ 
+     // only extrapolate up to QLS (Last Species), skipping aux vars like QC, QG, QEINT.
+     for (int n = 0; n <= cls_t::QLS; ++n) {
+diff --git a/src/ibm/ibm_solver.h b/src/ibm/ibm_solver.h
+index 343320685..a4a1f1f8d 100644
+--- a/src/ibm/ibm_solver.h
++++ b/src/ibm/ibm_solver.h
+@@ -1511,6 +1803,29 @@ public:
+ 
+         // Convert body-frame centroid to world frame, then to cell index
+         const SurfElem& surfelem = SurfElem_a[f_idx];
++        // RZ fix: skip non-physical surface faces lying on the symmetry axis
++        // (r~0).  Where a closed axisymmetric contour runs along r=0 through the
++        // solid interior (e.g. a long centre body / plenum), those faces have
++        // zero circumference (2*pi*r -> 0) and their image point falls inside
++        // the solid, so the stencil search always fails and the failed-search
++        // host printf floods stdout -- serializing one rank and stalling
++        // refinement of long on-axis geometries.  They carry no valid surface
++        // data, so skip them.  (RZ-gated: no effect on Cartesian.)
++        //
++        // FORCE-INTEGRAL NOTE (verified for the SRP center-nozzle cases): the
++        // skipped faces are the contour's axis-closure segment (centroid r==0 to
++        // ~0.5dx); for a body whose nose is a nozzle bore there is NO solid
++        // on-axis apex, so no real surface is lost and the missing 2*pi*r force
++        // contribution is negligible (-> 0 as r -> 0).  CAVEAT: a body with a
++        // SOLID on-axis apex (e.g. a forebody-only sphere-cone, no centre
++        // nozzle) WOULD have a real stagnation-apex surface element here; that
++        // case needs the face KEPT with 2*pi*r weighting + a symmetry/mirror
++        // fallback for the (in-solid) image point, NOT this blanket skip.
++        if (amr_p->Geom(lev).IsRZ()
++            && surfelem.centroid[0] < Real(0.5) * dx_a[lev][0]) {
++            faces_out_domain++;
++            continue;
++        }
+         int gIdx = getGeomIdx(f_idx);
+         const auto& T = transform_a[gIdx];
+ #ifdef AMREX_USE_CGAL
+diff --git a/src/rhs/Weno.h b/src/rhs/Weno.h
+index 157a4033d..9effff782 100644
+--- a/src/rhs/Weno.h
++++ b/src/rhs/Weno.h
+@@ -257,6 +309,12 @@ class weno_t {
+   static_assert(ng <= cls_t::NGHOST);    // ensure enough ghost cells
+ 
+  public:
++  // Only the WENO/TENO eflux implements the RZ pressure-split (it removes the
++  // radial pressure flux to pair with compute_rhs's -dp/dr form). Other flux
++  // schemes do NOT, so enabling cns.rz_pressure_split with them would
++  // double-count pressure. compute_rhs guards on this trait.
++  static constexpr bool rz_pressure_split_capable = true;
++
+   AMREX_GPU_HOST_DEVICE
+   weno_t() {}
+ 
+diff --git a/src/rhs/Riemann.h b/src/rhs/Riemann.h
+index 46c8d64e2..21f370466 100644
+--- a/src/rhs/Riemann.h
++++ b/src/rhs/Riemann.h
+@@ -9,6 +9,7 @@
+ template <bool iOption, typename cls_t>
+ class riemann_t {
+  public:
++  static constexpr bool rz_pressure_split_capable = false;  // RZ pressure-split is WENO-only
+   AMREX_GPU_HOST_DEVICE
+   riemann_t() {}
+ 
+diff --git a/src/rhs/Rusanov.h b/src/rhs/Rusanov.h
+index 0b7a4673d..291feda43 100644
+--- a/src/rhs/Rusanov.h
++++ b/src/rhs/Rusanov.h
+@@ -8,6 +8,7 @@
+ template <typename cls_t>
+ class rusanov_t {
+  public:
++  static constexpr bool rz_pressure_split_capable = false;  // RZ pressure-split is WENO-only
+ 
+   AMREX_GPU_HOST_DEVICE
+   rusanov_t() {}
+diff --git a/src/rhs/Skew.h b/src/rhs/Skew.h
+index 6485af285..e77ff0c1e 100644
+--- a/src/rhs/Skew.h
++++ b/src/rhs/Skew.h
+@@ -18,6 +18,7 @@
+ template <typename param, typename cls_t>
+ class skew_t {
+   public:
++  static constexpr bool rz_pressure_split_capable = false;  // RZ pressure-split is WENO-only
+ 
+   AMREX_GPU_HOST_DEVICE
+   skew_t() {
+diff --git a/src/rhs/CentralDif.h b/src/rhs/CentralDif.h
+index c3946ca9e..aa5552d37 100644
+--- a/src/rhs/CentralDif.h
++++ b/src/rhs/CentralDif.h
+@@ -8,6 +8,7 @@
+ template <bool isAD, bool isIB, int order, typename cls_t>
+ class centraldif_t {
+   public:
++  static constexpr bool rz_pressure_split_capable = false;  // RZ pressure-split is WENO-only
+ 
+   AMREX_GPU_HOST_DEVICE
+   centraldif_t() {
+diff --git a/src/rhs/RHS.h b/src/rhs/RHS.h
+index bc5d51c9a..2f3a0208b 100644
+--- a/src/rhs/RHS.h
++++ b/src/rhs/RHS.h
+@@ -36,6 +36,7 @@ public:
+ class no_euler_t
+ {
+ public:
++  static constexpr bool rz_pressure_split_capable = false;  // RZ pressure-split is WENO-only
+   template<typename... Args>
+ #if (AMREX_USE_GPIBM || CNS_USE_EB )  
+   // void eflux_ibm(Args&&... args){}
+diff --git a/src/tim/compute_rhs.cpp b/src/tim/compute_rhs.cpp
+index abfb61e52..6756c2ab4 100644
+--- a/src/tim/compute_rhs.cpp
++++ b/src/tim/compute_rhs.cpp
+@@ -15,6 +16,42 @@
+ 
+ using namespace amrex;
+ 
++namespace {
++
++// Detection idiom: does the flux scheme advertise rz_pressure_split_capable?
++// Defaults to FALSE for any flux that does not define the trait (keep_euler_t,
++// no_euler_t, and any future flux). Only weno_t opts in (=true). This guards the
++// RZ pressure-split (which removes the radial pressure flux only in weno_t) from
++// being silently enabled with an incompatible flux -> see compute_rhs guard.
++template <typename T, typename = void>
++struct rz_psplit_capable : std::false_type {};
++template <typename T>
++struct rz_psplit_capable<T, std::void_t<decltype(T::rz_pressure_split_capable)>>
++    : std::bool_constant<T::rz_pressure_split_capable> {};
++
++template <typename PrimArrayT, typename RhsArrayT, typename ClosuresT,
++          typename ProbParmT>
++auto try_rhs_nscbc(int, const Geometry& geom, const MFIter& mfi,
++                   PrimArrayT const& prims, RhsArrayT const& rhs,
++                   const ClosuresT* closures, const ProbParmT* pparm,
++                   const Real dt, const Real time)
++    -> decltype(rhs_nscbc(geom, mfi, prims, rhs, closures, pparm, dt, time),
++                void())
++{
++  rhs_nscbc(geom, mfi, prims, rhs, closures, pparm, dt, time);
++}
++
++template <typename PrimArrayT, typename RhsArrayT, typename ClosuresT,
++          typename ProbParmT>
++void try_rhs_nscbc(long, const Geometry&, const MFIter&,
++                   PrimArrayT const&, RhsArrayT const&,
++                   const ClosuresT*, const ProbParmT*,
++                   const Real, const Real)
++{
++}
++
++}  // namespace
++
+ // Since we do not want to use expensive cudaMemCopy, we are storing all our
+ // data on the GPU to begin with. Concurrency on GPU using streams, parallel
+ // computation and data transfer, is not useful then. Therefore, we can have all
