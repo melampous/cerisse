@@ -129,6 +129,40 @@ CASES = {
 
 BCS = {
     "char": BcSpec("char", hi_bc="7 -1", bc_mode=1),
+    "persistent_lodi": BcSpec(
+        "persistent_lodi", hi_bc="2 -1", bc_mode=0,
+        extras=(
+            "cns.nscbc_lo=0 0",
+            "cns.nscbc_hi=2 0",
+            "cns.nscbc_order=2",
+            "cns.nscbc_use_transverse=1",
+            "cns.nscbc_transverse_relax=0.25",
+        ),
+    ),
+    "persistent_lodi_t0": BcSpec(
+        "persistent_lodi_t0", hi_bc="2 -1", bc_mode=0,
+        extras=(
+            "cns.nscbc_lo=0 0", "cns.nscbc_hi=2 0",
+            "cns.nscbc_order=2", "cns.nscbc_use_transverse=1",
+            "cns.nscbc_transverse_relax=0.0",
+        ),
+    ),
+    "persistent_lodi_t025": BcSpec(
+        "persistent_lodi_t025", hi_bc="2 -1", bc_mode=0,
+        extras=(
+            "cns.nscbc_lo=0 0", "cns.nscbc_hi=2 0",
+            "cns.nscbc_order=2", "cns.nscbc_use_transverse=1",
+            "cns.nscbc_transverse_relax=0.25",
+        ),
+    ),
+    "persistent_lodi_t05": BcSpec(
+        "persistent_lodi_t05", hi_bc="2 -1", bc_mode=0,
+        extras=(
+            "cns.nscbc_lo=0 0", "cns.nscbc_hi=2 0",
+            "cns.nscbc_order=2", "cns.nscbc_use_transverse=1",
+            "cns.nscbc_transverse_relax=0.5",
+        ),
+    ),
     "lodi": BcSpec("lodi", hi_bc="7 -1", bc_mode=3),
     "rhs_lodi": BcSpec("rhs_lodi", hi_bc="7 -1", bc_mode=4),
     "rhs_lodi_t0": BcSpec(

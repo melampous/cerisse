@@ -1,0 +1,94 @@
+#==============================================================================
+#  2D Axisymmetric (RZ) Jet — NPR_0=10.0, pe/pa~5.283
+#  Same nozzle (D_e=10mm) and ambient (p=101325 Pa, T=300K) as 3D case
+#  Dimension mapping:  r → x-direction ∈ [0, 0.06]
+#                      z → y-direction ∈ [0, 0.24]
+#==============================================================================
+max_step  = 60000
+stop_time = 6.0e-3
+cfl = 0.3
+
+cns.order_rk  = 3
+cns.stages_rk = 3
+
+# BC: x(r)-lo = Symmetry(3), x(r)-hi = Outflow(2),
+#     y(z)-lo = Inflow(1) = Jet,  y(z)-hi = Outflow(2)
+cns.lo_bc = 3 1
+cns.hi_bc = 2 2
+cns.nstep_screen_output = 100
+cns.verbose = 1
+
+#--------------------------- COMPUTATIONAL DOMAIN ----------------------------#
+geometry.is_periodic = 0 0
+geometry.coord_sys   = 1           # 1 = RZ axisymmetric
+geometry.prob_lo     = 0.0  0.0
+geometry.prob_hi     = 0.06 0.24   # r_max=60mm (6 De), z_max=240mm (24 De)
+amr.n_cell           = 96   384    # base = 3D L0 (0.625 mm)
+
+#------------------------------- REFINEMENT ----------------------------------#
+amr.max_level       = 3         # 3 levels: L1=0.313, L2=0.156, L3=0.078 mm
+amr.ref_ratio       = 2 2 2
+amr.regrid_int      = 20
+amr.blocking_factor = 32
+amr.max_grid_size   = 128 256 256 256
+amr.n_error_buf     = 2 2 2 2
+amr.grid_eff        = 0.85
+
+#-------------------------------- PLOTFILES ----------------------------------#
+amr.plot_files_output = 1
+amr.plot_file         = ./plot/plt
+amr.plot_int          = 250
+amr.derive_plot_vars  = pressure velocity temperature
+amr.v = 1
+
+amr.checkpoint_files_output = 1
+amr.check_int  = 2000
+amr.check_file = ./plot/chk
+
+amrex.the_arena_is_managed = 0
+
+# --- Panda & Seasholtz 1999 benchmark: Mj=1.42, L6 near-field box, fresh ---
+amr.max_level = 3
+amr.ref_ratio = 2 2 2 2 2 2
+amr.max_grid_size = 128 256 256 256 128 64 64
+stop_time = 1.8e-3
+amr.plot_int = 200
+amr.check_int = 4000
+amr.plot_file = ./plot/plt
+amr.check_file = ./plot/chk
+
+cns.record_probe = 0
+amr.data_log = probes.log
+cns.time_probe_lev = 3
+cns.time_probe_int = 50
+cns.time_probes = pb1 pb2 pb3 pb4 pb5 pb6 pb7 pb8 pb9 pb10
+pb1.field_name = pressure
+pb1.box_lo = 0.00498 0.00098
+pb1.box_hi = 0.00502 0.00102
+pb2.field_name = pressure
+pb2.box_lo = 0.00498 0.00248
+pb2.box_hi = 0.00502 0.00252
+pb3.field_name = pressure
+pb3.box_lo = 0.00498 0.00498
+pb3.box_hi = 0.00502 0.00502
+pb4.field_name = pressure
+pb4.box_lo = 0.00498 0.00748
+pb4.box_hi = 0.00502 0.00752
+pb5.field_name = pressure
+pb5.box_lo = 0.00498 0.00998
+pb5.box_hi = 0.00502 0.01002
+pb6.field_name = pressure
+pb6.box_lo = 0.00498 0.01498
+pb6.box_hi = 0.00502 0.01502
+pb7.field_name = pressure
+pb7.box_lo = 0.00498 0.01998
+pb7.box_hi = 0.00502 0.02002
+pb8.field_name = pressure
+pb8.box_lo = 0.00898 0.00998
+pb8.box_hi = 0.00902 0.01002
+pb9.field_name = pressure
+pb9.box_lo = 0.00898 0.01998
+pb9.box_hi = 0.00902 0.02002
+pb10.field_name = pressure
+pb10.box_lo = 0.00008 0.00998
+pb10.box_hi = 0.00012 0.01002

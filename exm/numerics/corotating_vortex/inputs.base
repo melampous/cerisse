@@ -1,0 +1,109 @@
+# =====================================================================
+#  2-D co-rotating Lamb-Oseen vortex pair (CVP) aeroacoustic showcase.
+#  DEFAULT = WIDE-domain "truth" run with characteristic (code-7)
+#  far-field on all 4 faces. Override geometry/n_cell/BC per variant
+#  (see the per-variant override blocks documented at the bottom).
+#
+#  Non-dim: rho0=1, c0=1, gamma=1.4 => p0=1/gamma=0.7142857.
+#  M_rot=0.20, Gamma=1.2566370614, b=1, rc=0.25 (b/rc=4).
+#  Omega=0.40, T_rot=15.708, f_ac=0.12732, lambda=7.854.
+# =====================================================================
+
+max_step  = 1000000
+stop_time = 62.83          # ~4 T_rot, lets the spiral radiate & fill the field
+
+cfl       = 0.30
+
+cns.order_rk            = 3      # RK3 (4 stages) as in the bc_native template
+cns.stages_rk           = 4
+cns.nstep_screen_output = 200
+cns.verbose             = 1
+
+# ----- boundary conditions (DEFAULT: characteristic code-7 all faces) -----
+# code 7 = FarField (ext_dir -> bcnormal -> bc_nscbc_farfield, quiescent)
+# code 2 = foextrap (AMReX-handled; bcnormal NOT called)
+cns.lo_bc = 7 7
+cns.hi_bc = 7 7
+
+# ----- problem parameters -----
+prob.gamma   = 1.4
+prob.rho0    = 1.0
+prob.p0      = 0.7142857142857143
+prob.Gamma   = 1.2566370614359172
+prob.b       = 1.0
+prob.rc      = 0.25
+
+# BC mode: 1 = characteristic far-field; 3 = LODI (also set prob.use_lodi=1)
+prob.bc_mode  = 1
+prob.use_lodi = 0
+prob.lodi_pressure_relax   = 0.0
+prob.lodi_transverse_relax = 0.25
+
+# AMR tagging: refine the two vortex cores only (orbiting disk)
+prob.tag_vort_frac = 0.15
+prob.tag_radius    = 1.5
+prob.tag_graddens  = 0.05
+
+# ----- geometry: WIDE square domain centered on origin, NOT periodic -----
+geometry.is_periodic = 0 0
+geometry.coord_sys   = 0
+geometry.prob_lo     = -16.0 -16.0
+geometry.prob_hi     =  16.0  16.0
+
+# ----- AMR mesh (WIDE): dx0 ~ 0.25 at L0, finest dxf ~ 0.03125 at L3 -----
+amr.n_cell           = 128 128
+amr.max_level        = 3
+amr.ref_ratio        = 2 2 2
+amr.regrid_int       = 4
+amr.blocking_factor  = 8
+amr.max_grid_size    = 64
+amr.n_error_buf      = 2 2 2
+amr.grid_eff         = 0.85
+amr.v                = 1
+
+# ----- output: ~50 frames over the run; dilatation comparison fields -----
+amr.plot_files_output = 1
+amr.plot_file         = ./plot/plt
+amr.plot_int          = 40
+amr.derive_plot_vars  = pressure velocity density
+
+amr.checkpoint_files_output = 0
+amr.check_int               = 0
+amr.check_file              = ./plot/chk
+
+# ----- arena (managed for optional GPU build; harmless on CPU) -----
+amrex.the_arena_init_size         = 8
+amrex.the_device_arena_init_size  = 8
+amrex.the_managed_arena_init_size = 8
+amrex.the_arena_is_managed        = 1
+
+# =====================================================================
+#  PER-VARIANT OVERRIDES (append on the command line or in a derived
+#  inputs file).  All four use the SAME IC and scheme; only domain/BC
+#  differ.  dx0 is matched (WIDE 0.25 / NARROW 0.25) for a clean diff.
+#
+#  (1) wide_char  (BASELINE / TRUTH) -- this file as-is:
+#        geometry.prob_lo=-16 -16  geometry.prob_hi=16 16
+#        amr.n_cell=128 128   cns.lo_bc="7 7"  cns.hi_bc="7 7"
+#        prob.bc_mode=1  prob.use_lodi=0
+#
+#  (2) narrow_foe (foextrap):
+#        geometry.prob_lo=-4 -4    geometry.prob_hi=4 4
+#        amr.n_cell=32 32     cns.lo_bc="2 2"  cns.hi_bc="2 2"
+#        (bcnormal not called; prob.bc_mode/use_lodi irrelevant)
+#
+#  (3) narrow_char (characteristic code-7):
+#        geometry.prob_lo=-4 -4    geometry.prob_hi=4 4
+#        amr.n_cell=32 32     cns.lo_bc="7 7"  cns.hi_bc="7 7"
+#        prob.bc_mode=1  prob.use_lodi=0
+#
+#  (4) narrow_lodi (multidim LODI):
+#        geometry.prob_lo=-4 -4    geometry.prob_hi=4 4
+#        amr.n_cell=32 32     cns.lo_bc="7 7"  cns.hi_bc="7 7"
+#        prob.bc_mode=3  prob.use_lodi=1
+#
+#  Example command line (narrow foextrap):
+#    ./main2d.gnu.MPI.ex inputs.base \
+#        geometry.prob_lo="-4 -4" geometry.prob_hi="4 4" \
+#        amr.n_cell="32 32" cns.lo_bc="2 2" cns.hi_bc="2 2"
+# =====================================================================

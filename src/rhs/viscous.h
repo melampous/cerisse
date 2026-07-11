@@ -9,8 +9,11 @@
 #include <TransPele.h>
 #include <LES.h>
 
+#include <string>
+
 
 #include "diff_ops.H"
+#include "IbmFluxUtils.h"
 
 // param
 //      :: order     spatial order of central derivatives
@@ -73,10 +76,34 @@ class viscous_t {
     const GpuArray<Real, AMREX_SPACEDIM> prob_lo = geom.ProbLoArray();
     const bool is_rz = geom.IsRZ();
 
+#if (AMREX_USE_GPIBM || CNS_USE_EB)
+    // Optional validation mode: fail if any near-wall tangential derivative
+    // cannot form a three-point, formally second-order stencil.  It is off in
+    // production because a device-to-host check per FAB would serialize the
+    // flux loop; enable with ib.viscous_strict_order=1 for MMS/geometry audits.
+    static const bool strict_ibm_viscous_order = [] {
+      int value = 0;
+      amrex::ParmParse pp("ib");
+      pp.query("viscous_strict_order", value);
+      return value != 0;
+    }();
+    amrex::Gpu::DeviceVector<int> degraded_stencil_count;
+    amrex::Vector<int> h_degraded_stencil_count;
+    int* p_degraded_stencil_count = nullptr;
+    if (strict_ibm_viscous_order) {
+      degraded_stencil_count.resize(1);
+      h_degraded_stencil_count.assign(1, 0);
+      amrex::Gpu::copyAsync(amrex::Gpu::hostToDevice,
+                            h_degraded_stencil_count.begin(),
+                            h_degraded_stencil_count.end(),
+                            degraded_stencil_count.begin());
+      p_degraded_stencil_count = degraded_stencil_count.data();
+    }
+#endif
+
     // grid
    // const Box& bx = mfi.tilebox();        
     const Box& bxg = mfi.growntilebox(cls->NGHOST);     // to handle high-order 
-    const Box& bxgnodal = mfi.grownnodaltilebox(-1, 0); // to handle fluxes    
 
     // allocate arrays for transport properties  
     FArrayBox coeffs(bxg, cls_t::NCOEF, The_Async_Arena());
@@ -145,6 +172,15 @@ class viscous_t {
 #else
     amrex::ParallelFor(
         bxg, [=, *this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {        
+#if (AMREX_USE_GPIBM || CNS_USE_EB)
+        const amrex::IntVect iv(AMREX_D_DECL(i, j, k));
+        if (!ibm_flux::is_usable(iv, ibMarkers)) {
+          mu_arr(i,j,k) = 0.0;
+          lam_arr(i,j,k) = 0.0;
+          xi_arr(i,j,k) = 0.0;
+          return;
+        }
+#endif
         mu_arr(i,j,k)  = cls->visc(prims(i,j,k,cls_t::QT));
         lam_arr(i,j,k) = cls->cond(prims(i,j,k,cls_t::QT));       
         xi_arr(i,j,k)  = 0.0;
@@ -185,6 +221,7 @@ class viscous_t {
     for (int dir = 0; dir < AMREX_SPACEDIM; dir++) {
      // GpuArray<int, 3> vdir = {int(dir == 0), int(dir == 1), int(dir == 2)};
       auto const& flx = flxt[dir]->array(); 
+      const Box bxface = mfi.grownnodaltilebox(dir, 0);
 
       // Yosihizawa model  tau_kk
       // if constexpr(useLES)
@@ -198,13 +235,14 @@ class viscous_t {
 
       // compute diffusion fluxes
 #if (AMREX_USE_GPIBM || CNS_USE_EB )   
-      amrex::ParallelFor(bxgnodal,
+      amrex::ParallelFor(bxface,
                   [=,*this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {                                       
                     this->cns_diff_ibm(i, j, k,dir, prims,flx,coeftrans,
-                                       dxinv, dx, prob_lo, is_rz, cls,ibMarkers);
+                                       dxinv, dx, prob_lo, is_rz, cls,ibMarkers,
+                                       p_degraded_stencil_count);
                   });                      
 #else
-      amrex::ParallelFor(bxgnodal,
+      amrex::ParallelFor(bxface,
                   [=,*this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
                     this->cns_diff(i, j, k,dir, prims,flx,coeftrans,
                                    dxinv, dx, prob_lo, is_rz, cls);
@@ -213,6 +251,23 @@ class viscous_t {
 
     }
     // end loop  ------------------------------------------------------
+
+#if (AMREX_USE_GPIBM || CNS_USE_EB)
+    if (strict_ibm_viscous_order) {
+      amrex::Gpu::copy(amrex::Gpu::deviceToHost,
+                       degraded_stencil_count.begin(),
+                       degraded_stencil_count.end(),
+                       h_degraded_stencil_count.begin());
+      if (h_degraded_stencil_count[0] != 0) {
+        amrex::Abort(
+            "IBM viscous stencil audit failed: " +
+            std::to_string(h_degraded_stencil_count[0]) +
+            " near-wall face(s) in one FAB lacked a three-point tangential "
+            "stencil. Refine/smooth the geometry or disable "
+            "ib.viscous_strict_order outside accuracy validation.");
+      }
+    }
+#endif
   }
 
 #if !(AMREX_USE_GPIBM || CNS_USE_EB)
@@ -639,15 +694,54 @@ class viscous_t {
       const amrex::IntVect& iv, int tdir, int comp,
       amrex::Array4<const amrex::Real> const& q,
       amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv,
-      const Array4<uint8_t>& marker) const noexcept {
+      const Array4<uint8_t>& marker,
+      bool& second_order) const noexcept {
     const auto ivt = amrex::IntVect::TheDimensionVector(tdir);
     const amrex::IntVect ivp = iv + ivt;
     const amrex::IntVect ivm = iv - ivt;
+    const amrex::IntVect ivpp = iv + 2 * ivt;
+    const amrex::IntVect ivmm = iv - 2 * ivt;
     const bool okp = ibm_diff_cell_usable(ivp, marker);
     const bool ok0 = ibm_diff_cell_usable(iv, marker);
     const bool okm = ibm_diff_cell_usable(ivm, marker);
+    const bool okpp = ibm_diff_cell_usable(ivpp, marker);
+    const bool okmm = ibm_diff_cell_usable(ivmm, marker);
 
-    if (okp && okm) return Real(0.5) * (q(ivp, comp) - q(ivm, comp)) * dxinv[tdir];
+    second_order = false;
+    if (!ok0) return Real(0.0);
+
+    if (okp && okm) {
+      second_order = true;
+      return Real(0.5) * (q(ivp, comp) - q(ivm, comp)) * dxinv[tdir];
+    }
+    if (okp && okpp) {
+      second_order = true;
+      return Real(0.5) * (-Real(3.0) * q(iv, comp) +
+                          Real(4.0) * q(ivp, comp) - q(ivpp, comp)) * dxinv[tdir];
+    }
+    if (okm && okmm) {
+      second_order = true;
+      return Real(0.5) * (Real(3.0) * q(iv, comp) -
+                          Real(4.0) * q(ivm, comp) + q(ivmm, comp)) * dxinv[tdir];
+    }
+
+    // Non-contiguous three-point alternatives for sharp/grid-aligned corners.
+    // These are the derivatives at x=0 of the quadratic through offsets
+    // {0,+1,-2} and {0,-1,+2}, respectively.
+    if (okp && okmm) {
+      second_order = true;
+      return (-Real(0.5) * q(iv, comp) + Real(2.0 / 3.0) * q(ivp, comp) -
+              Real(1.0 / 6.0) * q(ivmm, comp)) * dxinv[tdir];
+    }
+    if (okm && okpp) {
+      second_order = true;
+      return (Real(0.5) * q(iv, comp) - Real(2.0 / 3.0) * q(ivm, comp) +
+              Real(1.0 / 6.0) * q(ivpp, comp)) * dxinv[tdir];
+    }
+
+    // Geometry can leave only two usable points at an unresolved corner.
+    // Keep a bounded first-order fallback; tangent_diff_ibm2 propagates the
+    // quality flag so strict validation can reject this case explicitly.
     if (okp && ok0) return (q(ivp, comp) - q(iv, comp)) * dxinv[tdir];
     if (ok0 && okm) return (q(iv, comp) - q(ivm, comp)) * dxinv[tdir];
     return Real(0.0);
@@ -657,10 +751,16 @@ class viscous_t {
       const amrex::IntVect& iv, int idir, int tdir, int comp,
       amrex::Array4<const amrex::Real> const& q,
       amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv,
-      const Array4<uint8_t>& marker) const noexcept {
+      const Array4<uint8_t>& marker,
+      bool& second_order) const noexcept {
     const auto ivn = amrex::IntVect::TheDimensionVector(idir);
-    const Real dp = tangent_diff_cell_ibm2(iv, tdir, comp, q, dxinv, marker);
-    const Real dm = tangent_diff_cell_ibm2(iv - ivn, tdir, comp, q, dxinv, marker);
+    bool second_order_p = false;
+    bool second_order_m = false;
+    const Real dp = tangent_diff_cell_ibm2(
+        iv, tdir, comp, q, dxinv, marker, second_order_p);
+    const Real dm = tangent_diff_cell_ibm2(
+        iv - ivn, tdir, comp, q, dxinv, marker, second_order_m);
+    second_order = second_order_p && second_order_m;
     return Real(0.5) * (dp + dm);
   }
 #endif
@@ -688,7 +788,8 @@ class viscous_t {
 	      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dx,
 	      amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& prob_lo,
 	      const bool is_rz,
-	      const cls_t* cls, const Array4<uint8_t>& marker) const {
+	      const cls_t* cls, const Array4<uint8_t>& marker,
+        int* degraded_stencil_count) const {
     
     using amrex::Real;
     const amrex::IntVect iv{AMREX_D_DECL(i, j, k)};
@@ -710,6 +811,7 @@ class viscous_t {
     if (intersolid_flx) return;  // flux =0  inside solid   
 
 	    Real u11,dTdn,u21,u12,u22,u31,u13,u33,muf,xif,lamf;
+	    Real u1f,u2f,u3f;
 #if (AMREX_SPACEDIM == 2)
 	    Real ur_face = Real(0.0);
 #endif
@@ -720,22 +822,43 @@ class viscous_t {
     // reduce interpolation and differentiation to second order across the wall
     if (close_to_wall)
     {        
+      bool tangent_quality = ibm_diff_cell_usable(iv, marker) &&
+                             ibm_diff_cell_usable(ivm, marker);
+      bool deriv_quality = true;
       dTdn = normal_diff_ibm2(iv, d1, cls_t::QT, q, dxinv, marker);
       u11  = normal_diff_ibm2(iv, d1, QU1, q, dxinv, marker);
 #if (AMREX_SPACEDIM >= 2)
       u21  = normal_diff_ibm2(iv, d1, QU2, q, dxinv, marker);
-      u12  = tangent_diff_ibm2(iv, d1, d2, QU1, q, dxinv, marker);
-      u22  = tangent_diff_ibm2(iv, d1, d2, QU2, q, dxinv, marker);
+      u12  = tangent_diff_ibm2(iv, d1, d2, QU1, q, dxinv, marker, deriv_quality);
+      tangent_quality = tangent_quality && deriv_quality;
+      u22  = tangent_diff_ibm2(iv, d1, d2, QU2, q, dxinv, marker, deriv_quality);
+      tangent_quality = tangent_quality && deriv_quality;
 #endif
 #if (AMREX_SPACEDIM == 3)
       u31  = normal_diff_ibm2(iv, d1, QU3, q, dxinv, marker);
-      u13  = tangent_diff_ibm2(iv, d1, d3, QU1, q, dxinv, marker);
-      u33  = tangent_diff_ibm2(iv, d1, d3, QU3, q, dxinv, marker);
+      u13  = tangent_diff_ibm2(iv, d1, d3, QU1, q, dxinv, marker, deriv_quality);
+      tangent_quality = tangent_quality && deriv_quality;
+      u33  = tangent_diff_ibm2(iv, d1, d3, QU3, q, dxinv, marker, deriv_quality);
+      tangent_quality = tangent_quality && deriv_quality;
 #endif  
+      if (!tangent_quality && degraded_stencil_count != nullptr) {
+        amrex::Gpu::Atomic::Add(degraded_stencil_count, 1);
+      }
       // properties
       muf  = interp_ibm2(iv, d1, cls_t::CMU, coeffs, marker);
       xif  = interp_ibm2(iv, d1, cls_t::CXI, coeffs, marker);
 	      lamf = interp_ibm2(iv, d1, cls_t::CLAM, coeffs, marker);
+      u1f = interp_ibm2(iv, d1, QU1, q, marker);
+#if (AMREX_SPACEDIM >= 2)
+      u2f = interp_ibm2(iv, d1, QU2, q, marker);
+#else
+      u2f = Real(0.0);
+#endif
+#if (AMREX_SPACEDIM == 3)
+      u3f = interp_ibm2(iv, d1, QU3, q, marker);
+#else
+      u3f = Real(0.0);
+#endif
 #if (AMREX_SPACEDIM == 2)
 	      ur_face = interp_ibm2(iv, d1, cls_t::QU, q, marker);
 #endif
@@ -763,6 +886,17 @@ class viscous_t {
       muf  = interp<param::order>(iv, d1, cls_t::CMU, coeffs);
       xif  = interp<param::order>(iv, d1, cls_t::CXI, coeffs);
 	      lamf = interp<param::order>(iv, d1, cls_t::CLAM, coeffs);
+      u1f = interp<param::order>(iv, d1, QU1, q);
+#if (AMREX_SPACEDIM >= 2)
+      u2f = interp<param::order>(iv, d1, QU2, q);
+#else
+      u2f = Real(0.0);
+#endif
+#if (AMREX_SPACEDIM == 3)
+      u3f = interp<param::order>(iv, d1, QU3, q);
+#else
+      u3f = Real(0.0);
+#endif
 #if (AMREX_SPACEDIM == 2)
 	      ur_face = interp<param::order>(iv, d1, cls_t::QU, q);
 #endif
@@ -792,11 +926,12 @@ class viscous_t {
     // momentum
     AMREX_D_TERM(flx(iv, UM1) -= tau11;, flx(iv, UM2) -= tau12;, flx(iv, UM3) -= tau13;)
    
-    // energy
-    flx(iv, cls_t::UET) -= 0.5 * (AMREX_D_TERM((q(iv, QU1) + q(ivm, QU1)) * tau11,
-                                              +(q(iv, QU2) + q(ivm, QU2)) * tau12,
-                                              +(q(iv, QU3) + q(ivm, QU3)) * tau13)) +
-                                              + lamf* dTdn;
+    // Energy flux uses the same face interpolation order and IBM mask as the
+    // stress/transport terms.  The old unconditional two-cell average both
+    // capped pure-fluid energy flux at second order and bypassed the IBM mask.
+    flx(iv, cls_t::UET) -= AMREX_D_TERM(u1f * tau11,
+                                      +u2f * tau12,
+                                      +u3f * tau13) + lamf * dTdn;
 #if NUM_SPECIES > 1    
     // --------------------------------------------------------------------------
     // diffusion species  (this array should be order_local)

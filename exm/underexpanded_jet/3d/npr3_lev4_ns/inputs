@@ -1,0 +1,74 @@
+#==============================================================================
+#  3D Underexpanded Jet — NPR_0=3.0  VISCOUS + tanh inflow profile
+#  Extra AMR levels (L3, L4) near nozzle lip for shear-layer resolution
+#  L0 dx=625um, L2=156um, L4=39um  (256 pts/D_e at lip)
+#==============================================================================
+max_step  = 30000
+stop_time = 1.0
+cfl = 0.3
+
+cns.order_rk  = 3
+cns.stages_rk = 3
+
+cns.lo_bc = 1 2 2
+cns.hi_bc = 2 2 2
+cns.nstep_screen_output = 100
+cns.verbose = 1
+
+#------------------------------- STATISTICS ----------------------------------#
+
+amr.data_log = time_probe.log
+
+#------------------------- NEAR-EXIT PRESSURE PROBES -------------------------#
+# D_e = 10 mm; probes in a small box (1 mm) ~ 1 cell on L0 (dx=0.625 mm)
+cns.record_probe = 1
+cns.time_probe_lev = 2
+cns.time_probe_int = 1
+cns.time_probes = P_cl_0p5De P_cl_1De P_cl_2De P_cl_4De P_sh_1De P_sh_2De
+P_cl_0p5De.field_name = pressure
+P_cl_0p5De.box_lo = 0.005  -0.0005 -0.0005
+P_cl_0p5De.box_hi = 0.006   0.0005  0.0005
+P_cl_1De.field_name  = pressure
+P_cl_1De.box_lo  = 0.010  -0.0005 -0.0005
+P_cl_1De.box_hi  = 0.011   0.0005  0.0005
+P_cl_2De.field_name  = pressure
+P_cl_2De.box_lo  = 0.020  -0.0005 -0.0005
+P_cl_2De.box_hi  = 0.021   0.0005  0.0005
+P_cl_4De.field_name  = pressure
+P_cl_4De.box_lo  = 0.040  -0.0005 -0.0005
+P_cl_4De.box_hi  = 0.041   0.0005  0.0005
+P_sh_1De.field_name  = pressure
+P_sh_1De.box_lo  = 0.010   0.0045 -0.0005
+P_sh_1De.box_hi  = 0.011   0.0055  0.0005
+P_sh_2De.field_name  = pressure
+P_sh_2De.box_lo  = 0.020   0.0045 -0.0005
+P_sh_2De.box_hi  = 0.021   0.0055  0.0005
+
+#--------------------------- COMPUTATIONAL DOMAIN ----------------------------#
+geometry.is_periodic = 0 0 0
+geometry.coord_sys   = 0
+geometry.prob_lo     =  0.0   -0.06  -0.06
+geometry.prob_hi     =  0.24    0.06   0.06
+amr.n_cell           = 384    192    192
+
+#------------------------------- REFINEMENT ----------------------------------#
+amr.max_level       = 4
+amr.ref_ratio       = 2 2 2 2
+amr.regrid_int      = 20
+amr.blocking_factor = 32
+amr.max_grid_size   = 128 128 128 64 64
+amr.n_error_buf     = 2 2 2 2
+amr.grid_eff        = 0.85
+
+#-------------------------------- PLOTFILES ----------------------------------#
+amr.plot_files_output = 1
+amr.plot_file         = ./plot/plt
+amr.plot_int          = 500
+amr.derive_plot_vars  = pressure velocity temperature
+amr.v = 1
+
+amr.checkpoint_files_output = 1
+amr.check_int  = 1000
+amr.check_file = ./plot/chk
+
+amrex.the_arena_is_managed = 0

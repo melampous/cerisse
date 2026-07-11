@@ -107,17 +107,30 @@ $$
 
 corresponding to the Euler equations, with skew-symmetric numerical scheme (with order defined in `methodparm_t`, similar to **closures\_dt** .
 
-**euler** options in _**rhs\_dt**_ (October 2024)
+**euler** options in _**rhs\_dt**_ (July 2026)
 
-<table><thead><tr><th width="208">euler</th><th width="90">Options</th><th width="87" align="center">IBM</th><th width="152" align="center">defaults</th><th>Description</th></tr></thead><tbody><tr><td><code>riemann_t</code></td><td>no</td><td align="center">no</td><td align="center">-</td><td><a href="theory/equations/numerical-methods.md#riemann-solver-with-muscl">Second TVD - HLLC Riemann solver</a></td></tr><tr><td><code>skew_t</code></td><td>yes</td><td align="center">yes</td><td align="center">4th order, no dissipation</td><td><a href="theory/equations/numerical-methods.md#skew-symmetric">2/4/6 order Skew-symmetric scheme</a></td></tr><tr><td><code>keep_euler_t</code></td><td>yes</td><td align="center">no</td><td align="center">no default</td><td><a href="theory/equations/numerical-methods.md#keep">2/4/6 order KEEP scheme</a></td></tr><tr><td><code>weno_t</code></td><td>yes</td><td align="center">no</td><td align="center">no default</td><td><a href="theory/equations/numerical-methods.md#weno">WENO</a> or <a href="theory/equations/numerical-methods.md#teno">TENO</a> 5th order scheme</td></tr><tr><td><code>rusanov_t</code></td><td>no</td><td align="center">yes</td><td align="center">-</td><td><a href="theory/equations/numerical-methods.md#rusanov-scheme">Rusanov 2nd order scheme</a></td></tr><tr><td><code>no_euler_t</code></td><td>no</td><td align="center">yes</td><td align="center">-</td><td>0 (not solving Euler)</td></tr></tbody></table>
+| Euler type | Options | GPIBM | Description |
+|---|---:|:---:|---|
+| `centraldif_t` | 2/4/6 | yes | Native central stencil in pure fluid; marker-safe one-sided face closure near IBM. |
+| `riemann_t` | MUSCL-HLLC | yes | TVD MUSCL-HLLC with GP-aware slopes. |
+| `skew_t` | 2/4/6 | yes | Native split form in pure fluid; marker-safe one-sided closure near IBM. |
+| `keep_euler_t` | 2/4/6 | no | KEEP has no `eflux_ibm` implementation. |
+| `weno_t` | WENO-Z5/TENO5 | yes | Candidate masking excludes unreconstructed solid cells. TENO6 remains unsupported with GPIBM. |
+| `afd_hllc_t` | TENO5/WENO-Z5 | yes | Cartesian, single-species ideal gas; masked point reconstruction plus HLLC near IBM. |
+| `rusanov_t` | fixed | yes | Rusanov flux. |
+| `no_euler_t` | fixed | yes | No Euler contribution. |
 
 {% hint style="danger" %}
 Not all options available yet !!
 {% endhint %}
 
-**diffusive** options in _**rhs\_dt**_ (October 2024)
+**diffusive** options in _**rhs\_dt**_ (July 2026)
 
-<table><thead><tr><th width="207">diffusive</th><th width="88">Options</th><th width="81" align="center">IBM</th><th align="center">defaults</th><th>Description</th></tr></thead><tbody><tr><td><code>diffusiveheat_t</code></td><td>yes</td><td align="center">no</td><td align="center">4th order</td><td>2/4/6 central scheme only heat</td></tr><tr><td><code>skew_t</code></td><td>yes</td><td align="center">yes</td><td align="center">4th order</td><td>2/4/6 central scheme</td></tr><tr><td><code>no_diffusive_t</code></td><td>no</td><td align="center">yes</td><td align="center">0</td><td>0 (not diffusive part)</td></tr></tbody></table>
+| Diffusive type | Options | GPIBM | Description |
+|---|---:|:---:|---|
+| `diffusiveheat_t` | 2/4/6 | yes | Heat flux only. Verified second-order IBM heat divergence requires `extrap_order=3` with `ghost_layers=1`; the bulk operator retains its selected order away from the wall. |
+| `viscous_t` | 2/4/6 | yes | Viscous stress, stress work, heat conduction, and species diffusion. For single-species thermal NS use `extrap_order=3`, `ghost_layers=1`, and `cap_velocity_extrap_order_at_two=true`: thermodynamic values use cubic extension while velocity remains quadratic. |
+| `no_diffusive_t` | fixed | yes | No diffusive contribution. |
 
 **source** options in _**rhs\_dt**_ (October 2024)
 

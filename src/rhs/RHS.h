@@ -9,6 +9,7 @@
 #include <CentralKEEP.h>
 #include <CentralDif.h>
 #include <Riemann.h>
+#include <Afd.h>
 #include <Rusanov.h>
 #include <Skew.h>
 

@@ -44,6 +44,10 @@ int CNS::nstep_screen_output = 10;
 int CNS::order_rk = 2;
 int CNS::stages_rk = 2;
 int CNS::overlap_comm = 0;
+bool CNS::use_nscbc = false;
+GpuArray<int, AMREX_SPACEDIM> CNS::nscbc_lo = {AMREX_D_DECL(0, 0, 0)};
+GpuArray<int, AMREX_SPACEDIM> CNS::nscbc_hi = {AMREX_D_DECL(0, 0, 0)};
+nscbc::Parm CNS::nscbc_parm{};
 bool CNS::strict_positivity = false;
 bool CNS::soft_positivity = false;
 bool CNS::pass2_static = false;
@@ -89,6 +93,14 @@ CNS::CNS(Amr &papa, int lev, const Geometry &level_geom, const BoxArray &bl,
 
   buildMetrics();
 
+  if (use_nscbc) {
+    for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+      if ((nscbc_lo[dir] > 0 || nscbc_hi[dir] > 0) && Geom().isPeriodic(dir)) {
+        amrex::Abort("NSCBC cannot be enabled on a periodic direction");
+      }
+    }
+  }
+
   rz_sanity_check(Geom());
 };
 
@@ -113,6 +125,101 @@ void CNS::read_params() {
   for (int i = 0; i < AMREX_SPACEDIM; ++i) {
     h_phys_bc->setLo(i, lo_bc[i]);
     h_phys_bc->setHi(i, hi_bc[i]);
+  }
+
+  Vector<int> nslo(AMREX_SPACEDIM, 0);
+  Vector<int> nshi(AMREX_SPACEDIM, 0);
+  pp.queryarr("nscbc_lo", nslo, 0, AMREX_SPACEDIM);
+  pp.queryarr("nscbc_hi", nshi, 0, AMREX_SPACEDIM);
+  use_nscbc = false;
+  bool has_relaxed_inflow = false;
+  bool has_pressure_outflow = false;
+  for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+    if (nslo[dir] < 0 || nslo[dir] > 3 || nshi[dir] < 0 || nshi[dir] > 3) {
+      amrex::Abort("cns.nscbc_lo/hi entries must be 0, 1, 2, or 3");
+    }
+    nscbc_lo[dir] = nslo[dir];
+    nscbc_hi[dir] = nshi[dir];
+    use_nscbc = use_nscbc || nslo[dir] > 0 || nshi[dir] > 0;
+    has_relaxed_inflow = has_relaxed_inflow || nslo[dir] == 1 || nshi[dir] == 1;
+    has_pressure_outflow =
+      has_pressure_outflow || nslo[dir] == 3 || nshi[dir] == 3;
+  }
+
+  if (use_nscbc) {
+    pp.query("nscbc_Lchar", nscbc_parm.Lchar);
+    pp.query("nscbc_Mmax", nscbc_parm.Mmax);
+    pp.query("nscbc_Ptarget", nscbc_parm.Ptarget);
+    pp.query("nscbc_sigma", nscbc_parm.sigma);
+    pp.query("nscbc_utarget", nscbc_parm.utarget);
+    pp.query("nscbc_vtarget", nscbc_parm.vtarget);
+    pp.query("nscbc_wtarget", nscbc_parm.wtarget);
+    pp.query("nscbc_Ttarget", nscbc_parm.Ttarget);
+    pp.query("nscbc_eta", nscbc_parm.eta);
+    pp.query("nscbc_transverse_relax", nscbc_parm.transverse_relax);
+    pp.query("nscbc_order", nscbc_parm.derivative_order);
+    pp.query("nscbc_use_transverse", nscbc_parm.use_transverse);
+    pp.query("nscbc_min_rho", nscbc_parm.min_rho);
+    pp.query("nscbc_min_T", nscbc_parm.min_T);
+    pp.query("nscbc_min_p", nscbc_parm.min_p);
+
+    if (has_relaxed_inflow) {
+      const bool targets_present =
+        pp.contains("nscbc_utarget") && pp.contains("nscbc_Ttarget") &&
+        pp.contains("nscbc_eta")
+#if (AMREX_SPACEDIM >= 2)
+        && pp.contains("nscbc_vtarget")
+#endif
+#if (AMREX_SPACEDIM == 3)
+        && pp.contains("nscbc_wtarget")
+#endif
+        ;
+      if (!targets_present) {
+        amrex::Abort(
+          "NSCBC type 1 requires explicit velocity, temperature, and eta targets "
+          "in solver units");
+      }
+    }
+    if (has_pressure_outflow &&
+        !(pp.contains("nscbc_Ptarget") && pp.contains("nscbc_sigma") &&
+          pp.contains("nscbc_Lchar") && pp.contains("nscbc_Mmax"))) {
+      amrex::Abort(
+        "NSCBC type 3 requires explicit Ptarget, sigma, Lchar, and Mmax");
+    }
+
+    if (nscbc_parm.Lchar <= Real(0.0)) {
+      amrex::Abort("cns.nscbc_Lchar must be positive");
+    }
+    if (nscbc_parm.Mmax < Real(0.0) || nscbc_parm.Mmax >= Real(1.0)) {
+      amrex::Abort("cns.nscbc_Mmax must satisfy 0 <= Mmax < 1");
+    }
+    if (nscbc_parm.sigma < Real(0.0) || nscbc_parm.eta < Real(0.0)) {
+      amrex::Abort("cns.nscbc_sigma and cns.nscbc_eta must be non-negative");
+    }
+    if (nscbc_parm.use_transverse != 0 && nscbc_parm.use_transverse != 1) {
+      amrex::Abort("cns.nscbc_use_transverse must be 0 or 1");
+    }
+    if (nscbc_parm.transverse_relax < Real(0.0)) {
+      amrex::Abort("cns.nscbc_transverse_relax must be non-negative");
+    }
+    if (nscbc_parm.min_rho <= Real(0.0) || nscbc_parm.min_T <= Real(0.0) ||
+        nscbc_parm.min_p <= Real(0.0)) {
+      amrex::Abort("cns.nscbc_min_rho/min_T/min_p must be positive");
+    }
+    if (nscbc_parm.derivative_order != 1 &&
+        nscbc_parm.derivative_order != 2) {
+      amrex::Abort("cns.nscbc_order must be 1 or 2");
+    }
+
+    amrex::Print() << "  persistent ghost-cell NSCBC: lo="
+                   << AMREX_D_TERM(nscbc_lo[0], << " " << nscbc_lo[1],
+                                   << " " << nscbc_lo[2])
+                   << " hi="
+                   << AMREX_D_TERM(nscbc_hi[0], << " " << nscbc_hi[1],
+                                   << " " << nscbc_hi[2])
+                   << " order=" << nscbc_parm.derivative_order
+                   << " transverse=" << nscbc_parm.use_transverse
+                   << " beta=" << nscbc_parm.transverse_relax << "\n";
   }
 
   pp.query("do_reflux", do_reflux);
@@ -141,6 +248,10 @@ void CNS::read_params() {
   }
 
   pp.query("overlap_comm", overlap_comm);
+  if (use_nscbc && overlap_comm != 0) {
+    amrex::Abort(
+      "persistent ghost-cell NSCBC is not compatible with cns.overlap_comm=1");
+  }
   if (overlap_comm != 0) {
 #if defined(AMREX_USE_GPIBM) || defined(CNS_USE_EB)
     amrex::Abort("cns.overlap_comm=1 is not supported in IBM/EB builds");
@@ -206,6 +317,11 @@ void CNS::read_params() {
   if (!ppib.query("move", ib_move)) {
     amrex::Abort("ib.move not specified (0=false, 1=true)");
   }
+#ifndef CNS_USE_FSI
+  if (ib_move) {
+    amrex::Abort("ib.move=1 requires a USE_FSI=TRUE build");
+  }
+#endif
   if (!ppib.query("plot_surf", plot_surf)) {
     amrex::Abort("ib.plot_surf not specified (0=false, 1=true)");
   }
@@ -336,6 +452,10 @@ void CNS::buildMetrics() {
 void CNS::post_init(Real stop_time) {
 
   //amrex::Print() << " oo CNS::post_init level= "  << level << std::endl;
+
+  if (use_nscbc) {
+    initialize_nscbc_ghost_state(state[State_Type].curTime());
+  }
 
   if (level > 0) {
     return;
@@ -717,11 +837,18 @@ void CNS::postCoarseTimeStep(Real time) {
   // amrex::Print() << " oo CNS::postCoarseTimeStep " << std::endl;
 
 #ifdef AMREX_USE_GPIBM
-  // Surface output at user-specified step interval
+  // Surface fields are also required for FSI loads when file output is off.
   const int istep = parent->levelSteps(0);
-  if (plot_surf && (istep % surf_int == 0)) {
+  const bool surface_output_due = plot_surf && (istep % surf_int == 0);
+#ifdef CNS_USE_FSI
+  const bool surface_compute_due = true;
+#else
+  const bool surface_compute_due = surface_output_due;
+#endif
+  if (surface_compute_due) {
       for (int lev = 0; lev <= parent->finestLevel(); ++lev) {
-          dynamic_cast<CNS&>(parent->getLevel(lev)).writeSurfFile();
+          dynamic_cast<CNS&>(parent->getLevel(lev)).writeSurfFile(
+              !surface_output_due);
       }
   }
 
@@ -769,140 +896,12 @@ void CNS::post_regrid(int lbase, int new_finest) {
 #ifdef AMREX_USE_GPIBM
   rebuildIBM();
 
-  // ==========================================================================
-  // FSI post-regrid state cleanup.
-  //
-  // After regrid, AMReX::FillPatch has populated the new-grid conservative
-  // state by interpolating from the old grids. If the old grids had any
-  // stale or extreme values in solid cells (which don't evolve during RK),
-  // those values can contaminate freshly-created fine cells near the solid
-  // boundary. This causes downstream WENO reconstruction to explode.
-  //
-  // Two passes:
-  //   [A] Flood-fill solid cells from valid fluid/ghost neighbors so they
-  //       carry bounded, physically plausible data.
-  //   [B] Zero momentum in interior solid cells (same rationale as
-  //       end-of-step pass in advance.cpp).
-  //
-  // Static geometry doesn't need this: solid cells never transition and
-  // their data stays consistent with the (unchanging) flow around them.
-  // ==========================================================================
-  if (ib_move) {
-    MultiFab& S = get_new_data(State_Type);
-    auto& ib_mf = *IBM::ib.bmf_a[level];
-    const int ncons = d_prob_closures->NCONS;
-    constexpr int MAX_FLOOD_ITER = 32;
-
-    for (MFIter mfi(S, false); mfi.isValid(); ++mfi) {
-      const Box& bx  = mfi.tilebox();
-      const Box& bxg = mfi.growntilebox(d_prob_closures->NGHOST);
-      auto const& state = S.array(mfi);
-      auto const& mk    = ib_mf.const_array(mfi);
-
-      // Tag values: 0 = fluid or ghost point (valid)
-      //             1 = interior solid (needs fixing)
-      //             2 = solid, fixed in a previous iteration
-      //
-      // JACOBI DOUBLE BUFFER (F3 fix, same defect as the end-of-step Pass-2
-      // fill in src/tim/advance.cpp — see the full rationale there): comp
-      // iter%2 of tagfab is the previous iterate (read-only), comp 1-iter%2
-      // receives the next; buffers swap by parity. The old in-place update
-      // raced within a GPU kernel launch (neighbor tag/state read while
-      // sibling threads set tag=2 and overwrote state) — nondeterministic
-      // fill values. `state` needs no second buffer: cells written have
-      // old-tag 1, cells read have old-tag 0/2 — disjoint. CPU and GPU now
-      // compute identical (Jacobi) fill values; fresh-cell fills change
-      // slightly vs the old sequential Gauss-Seidel CPU sweep (an IC for
-      // newly-uncovered cells, physics-neutral).
-      BaseFab<int> tagfab(bxg, 2, The_Managed_Arena());
-      auto const& tag = tagfab.array();
-
-      ParallelFor(bxg, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
-        const int t = (mk(i,j,k,0) != 0 && mk(i,j,k,1) == 0) ? 1 : 0;
-        // Init BOTH buffers: ghost-ring cells (bxg minus bx) are never
-        // rewritten by the fill kernel (domain bx).
-        tag(i,j,k,0) = t;
-        tag(i,j,k,1) = t;
-      });
-
-      // [A] Iterative flood fill — propagate valid data inward one ring
-      //     per iteration until all solid cells are reached (or budget runs out).
-      for (int iter = 0; iter < MAX_FLOOD_ITER; ++iter) {
-        Gpu::DeviceScalar<int> d_nfixed(0);
-        int* p_nfixed = d_nfixed.dataPtr();
-        const int told = iter & 1;   // previous iterate (read)
-        const int tnew = 1 - told;   // next iterate (write)
-
-        ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
-          const int t = tag(i,j,k,told);
-          if (t != 1) {              // valid or already fixed:
-            tag(i,j,k,tnew) = t;     // carry tag into the next iterate
-            return;
-          }
-
-          Real sum[PROB::ProbClosures::NCONS] = {};
-          int count = 0;
-          for (int dj = -1; dj <= 1; ++dj) {
-            for (int di = -1; di <= 1; ++di) {
-#if (AMREX_SPACEDIM == 3)
-              for (int dk = -1; dk <= 1; ++dk) {
-#else
-              { int dk = 0;
-#endif
-                if (di == 0 && dj == 0 && dk == 0) continue;
-                const int ii = i+di, jj = j+dj, kk = k+dk;
-                if (!bxg.contains(IntVect(AMREX_D_DECL(ii,jj,kk)))) continue;
-                const int tn = tag(ii,jj,kk,told);
-                if (tn == 0 || tn == 2) {
-                  for (int n = 0; n < ncons; ++n)
-                    sum[n] += state(ii,jj,kk,n);
-                  count++;
-                }
-              }
-            }
-          }
-          if (count > 0) {
-            const Real inv = Real(1.0) / count;
-            for (int n = 0; n < ncons; ++n)
-              state(i,j,k,n) = sum[n] * inv;
-            tag(i,j,k,tnew) = 2;
-            Gpu::Atomic::Add(p_nfixed, 1);
-          } else {
-            tag(i,j,k,tnew) = 1;     // still unreached, try next iteration
-          }
-        });
-
-        Gpu::streamSynchronize();
-        if (d_nfixed.dataValue() == 0) break;
-      }
-
-      // [B] Zero momentum in interior solid cells to prevent spurious
-      //     velocity amplification from acoustic-phase averaging.
-      ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
-        if (mk(i,j,k,0) == 0) return;  // fluid
-        if (mk(i,j,k,1) != 0) return;  // ghost point
-
-        using PC = PROB::ProbClosures;
-        const Real rho = state(i,j,k, PC::URHO);
-        if (rho <= Real(0)) return;
-
-        const Real mx = state(i,j,k, PC::UMX);
-        const Real my = state(i,j,k, PC::UMY);
-#if (AMREX_SPACEDIM == 3)
-        const Real mz = state(i,j,k, PC::UMZ);
-        const Real ke = Real(0.5) * (mx*mx + my*my + mz*mz) / rho;
-#else
-        const Real ke = Real(0.5) * (mx*mx + my*my) / rho;
-#endif
-        state(i,j,k, PC::UMX) = Real(0);
-        state(i,j,k, PC::UMY) = Real(0);
-#if (AMREX_SPACEDIM == 3)
-        state(i,j,k, PC::UMZ) = Real(0);
-#endif
-        state(i,j,k, PC::UET) -= ke;
-      });
-    }
-  }  // end if (ib_move)
+  // Interior-solid conservative values are opaque storage.  The IBM flux and
+  // viscous operators mask them, and moving-body solid-to-fluid transitions
+  // are repaired by the level-wide Jacobi solve in fixExposedCells().  Do not
+  // flood-fill them here: this hook runs before state ghosts are guaranteed to
+  // be current, so a per-FAB fill is decomposition-dependent and can import
+  // uninitialised ghost values into valid cells.
 #endif  // AMREX_USE_GPIBM
 
 #ifdef CNS_USE_EB
@@ -938,6 +937,10 @@ void CNS::post_regrid(int lbase, int new_finest) {
 
 
 #endif
+
+  if (use_nscbc) {
+    initialize_nscbc_ghost_state(state[State_Type].curTime());
+  }
 
 }
 
@@ -1053,6 +1056,10 @@ amrex::Print() << " recreate markers " << std::endl;
   // Set up diagnostics after restart
   if (record_probe) {
     setupTimeProbe();
+  }
+
+  if (use_nscbc) {
+    initialize_nscbc_ghost_state(state[State_Type].curTime());
   }
 
 }
@@ -1451,7 +1458,7 @@ void CNS::writePlotFilePost(const std::string &dir, std::ostream &os) {
 // should be called per level
 #if AMREX_USE_GPIBM
 
-void CNS::rebuildIBM() {
+void CNS::rebuildIBM(bool rebuild_surface) {
   IBM::ib.destroy_mf(level);
   IBM::ib.build_mf(grids, dmap, level);
   IBM::ib.computeMarkers(level);
@@ -1459,7 +1466,7 @@ void CNS::rebuildIBM() {
   // Surface indices depend on all levels having valid bmf_a, so we can
   // only rebuild them once the entire regrid cascade is complete (i.e.,
   // when the finest level calls rebuildIBM).
-  if (level == parent->finestLevel()) {
+  if (rebuild_surface && level == parent->finestLevel()) {
      // --- Runaway-regrid guard (benefits ALL IBM+AMR cases) -------------------
      // A refinement criterion that is NOT grid-independent (e.g. a pure flow-
      // gradient tag whose stencil straddles the artificial IBM ghost/jet jump)
@@ -1492,12 +1499,13 @@ void CNS::rebuildIBM() {
   }
 }
 
-void CNS::writeSurfFile() {
+void CNS::writeSurfFile(bool force_compute) {
       
   // calculate and  write surface data  
   int istep = parent->levelSteps(0);
 
-  if (plot_surf && (istep % surf_int == 0))  {
+  const bool output_due = plot_surf && (istep % surf_int == 0);
+  if (output_due || force_compute)  {
      
     MultiFab& Sdata = get_new_data(State_Type); 
 
@@ -1543,7 +1551,7 @@ void CNS::writeSurfFile() {
       ppib.query("gp_file", gp_filename);
     }
 
-    if (plot_gp) {
+    if (plot_gp && output_due) {
       IBM::ib.computeAllGPs(prims_mf, cls_d, this->level);
       IBM::ib.plotGP(time, istep, gp_filename, this->level);
     }
@@ -1551,7 +1559,7 @@ void CNS::writeSurfFile() {
     IBM::ib.computeSURFs(prims_mf,cls_d,this->level); // computed at each level. From low to high.
 
     // Only gather and write on the finest level to ensure all levels are processed
-    if (this->level == parent->finestLevel()){
+    if (output_due && this->level == parent->finestLevel()){
       // collect data to rank 0
       IBM::ib.gatherSurfData(); 
 

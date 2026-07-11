@@ -22,7 +22,7 @@ public:
 
     // Calculate loads for a specific geometry
     // geom_id: Index of the geometry to calculate loads for
-    // ref_point: Reference point for moment calculation
+    // ref_point: Reference point in the body's reference frame.
     static ForceMoment computeLoads(int geom_id, const RealVect& ref_point) {
         
         ForceMoment loads;
@@ -41,6 +41,15 @@ public:
         // Get the range of faces for this geometry
         int start_idx = ib.geom_offsets[geom_id];
         int end_idx   = ib.geom_offsets[geom_id + 1];
+        const auto& transform = ib.transform_a[geom_id];
+
+        RealVect ref_point_world;
+        for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+            ref_point_world[d] = transform.d[d];
+            for (int q = 0; q < AMREX_SPACEDIM; ++q) {
+                ref_point_world[d] += transform.R[d][q] * ref_point[q];
+            }
+        }
 
         // Loop over faces
         for (int i = start_idx; i < end_idx; ++i) {
@@ -61,21 +70,30 @@ public:
             Real area = ib.SurfElem_a[i].measure;
             
             RealVect centroid;
-            for(int d=0; d<AMREX_SPACEDIM; ++d) {
-                centroid[d] = ib.SurfElem_a[i].centroid[d];
-            }
-
             RealVect normal;
             RealVect tangent1;
 #if (AMREX_SPACEDIM == 3)
             RealVect tangent2;
 #endif
-            for(int d=0; d<AMREX_SPACEDIM; ++d) {
-                normal[d]   = ib.LocalFrame_a[i].normal[d];
-                tangent1[d] = ib.LocalFrame_a[i].tangent1[d];
+            for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+                centroid[d] = transform.d[d];
+                normal[d] = 0.0;
+                tangent1[d] = 0.0;
 #if (AMREX_SPACEDIM == 3)
-                tangent2[d] = ib.LocalFrame_a[i].tangent2[d];
+                tangent2[d] = 0.0;
 #endif
+                for (int q = 0; q < AMREX_SPACEDIM; ++q) {
+                    centroid[d] += transform.R[d][q]
+                                 * ib.SurfElem_a[i].centroid[q];
+                    normal[d] += transform.R[d][q]
+                               * ib.LocalFrame_a[i].normal[q];
+                    tangent1[d] += transform.R[d][q]
+                                 * ib.LocalFrame_a[i].tangent1[q];
+#if (AMREX_SPACEDIM == 3)
+                    tangent2[d] += transform.R[d][q]
+                                 * ib.LocalFrame_a[i].tangent2[q];
+#endif
+                }
             }
 
             // 4. Calculate Elemental Force dF
@@ -88,7 +106,7 @@ public:
 #endif
 
             // 5. Calculate Elemental Moment dT = r x dF
-            RealVect r = centroid - ref_point;
+            RealVect r = centroid - ref_point_world;
             
             // Cross Product Logic
 #if (AMREX_SPACEDIM == 3)

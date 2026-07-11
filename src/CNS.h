@@ -6,6 +6,7 @@
 #include <AMReX_Math.H>
 #include <prob.h>
 #include <CNSconstants.h>
+#include <nscbc.h>
 
 #include <Utilities.h>
 
@@ -50,7 +51,8 @@ class CNS : public amrex::AmrLevel {
   // Time-stepping -----------------------------------------------------------
   void compute_rhs(amrex::MultiFab& S, amrex::Real dt,
                    amrex::FluxRegister* fr_as_crse,
-                   amrex::FluxRegister* fr_as_fine);
+                   amrex::FluxRegister* fr_as_fine,
+                   amrex::Real stage_time);
 
   // Communication/computation-overlap variant of (FillPatch + compute_rhs)
   // for one RK stage. Enabled by cns.overlap_comm=1; supports only the
@@ -122,7 +124,7 @@ class CNS : public amrex::AmrLevel {
   virtual void post_regrid(int lbase, int new_finest) override;
 
 #ifdef AMREX_USE_GPIBM
-  void rebuildIBM();
+  void rebuildIBM(bool rebuild_surface = true);
 #endif
 
   // Error estimation for regridding.
@@ -137,6 +139,14 @@ class CNS : public amrex::AmrLevel {
   enum StateDataType { State_Type = 0, Stats_Type, Cost_Type };
 
   void buildMetrics();
+
+  // Persistent ghost-cell NSCBC state.  The ghost state is integrated with
+  // the same RK scheme as the interior conservative state.
+  void initialize_nscbc_ghost_state(amrex::Real time);
+  void copy_nscbc_ghost_to_state(amrex::MultiFab& state,
+                                 amrex::MultiFab const& ghost) const;
+  void compute_nscbc_ghost_rhs(amrex::MultiFab& state,
+                               amrex::MultiFab& ghost_rhs) const;
 
   static AMREX_FORCE_INLINE void rz_sanity_check(amrex::Geometry const& geom)
   {
@@ -169,7 +179,7 @@ class CNS : public amrex::AmrLevel {
                                  std::ostream& os) override;
 
 #if AMREX_USE_GPIBM
-  virtual void writeSurfFile();
+  virtual void writeSurfFile(bool force_compute = false);
 #endif
 
   // diagnostics
@@ -217,6 +227,17 @@ class CNS : public amrex::AmrLevel {
   // interior RHS computation in the SSP-RK(3,3) advance. 0 = exactly the
   // legacy FillPatch + compute_rhs path.
   static int overlap_comm;
+
+  // cns.nscbc_{lo,hi}: 0=off, 1=relaxed inflow, 2=pure outflow,
+  // 3=pressure-relaxed outflow.  These flags activate the time-evolved
+  // persistent ghost-cell NSCBC independently of the ordinary AMReX BC code.
+  static bool use_nscbc;
+  static amrex::GpuArray<int, AMREX_SPACEDIM> nscbc_lo;
+  static amrex::GpuArray<int, AMREX_SPACEDIM> nscbc_hi;
+  static nscbc::Parm nscbc_parm;
+
+  std::unique_ptr<amrex::MultiFab> nscbc_ghost_state;
+  bool nscbc_ghost_initialized = false;
 
   // When true, the end-of-step IBM abort check uses "approaching the
   // smallr / ei_min clipping floors" as the failure criterion instead of

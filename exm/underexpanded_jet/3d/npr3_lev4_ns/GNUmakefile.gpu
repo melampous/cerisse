@@ -1,0 +1,36 @@
+# 3D Underexpanded Jet — GPU build  (viscous, no IB, no FSI)
+DEBUG     = FALSE
+DIM       = 3
+COMP      = gcc
+CXXSTD    = c++20
+PRECISION = DOUBLE
+TINY_PROFILE = TRUE
+CLIP_MINTEMP = FALSE
+
+USE_MPI  = TRUE
+USE_CUDA = TRUE
+USE_OMP  = FALSE
+
+USE_GPIBM = FALSE
+
+AMREX_NO_PROBINIT = TRUE
+CUDA_ARCH = 8.0 8.9
+
+JET_EULER_SCHEME ?= llf-wenoz5
+ifeq ($(JET_EULER_SCHEME),llf-wenoz5)
+  JET_EULER_SCHEME_ID := 0
+else ifeq ($(JET_EULER_SCHEME),afd-hllc-teno5)
+  JET_EULER_SCHEME_ID := 1
+else ifeq ($(JET_EULER_SCHEME),afd-hllc-wenoz5)
+  JET_EULER_SCHEME_ID := 2
+else
+  $(error JET_EULER_SCHEME must be one of: llf-wenoz5, afd-hllc-teno5, afd-hllc-wenoz5)
+endif
+DEFINES += -DJET_EULER_SCHEME_ID=$(JET_EULER_SCHEME_ID)
+USERSuffix := $(USERSuffix).jet_$(JET_EULER_SCHEME)
+
+AMR_SOLVER = $(abspath ../../../../)
+AMREX_HOME = $(AMR_SOLVER)/lib/amrex
+
+CEXE_headers += prob.h
+include $(AMR_SOLVER)/src/Make.CNS

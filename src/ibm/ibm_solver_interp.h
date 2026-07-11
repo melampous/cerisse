@@ -363,9 +363,10 @@ void computeIPweights(
     const Array4<uint8_t const>&                                 ibFab)
 {
     constexpr int INTERP_THRESHOLD = (GP_OR_SURF ? INTERP_THRESHOLD_GP : INTERP_THRESHOLD_SURF);
-    // iorder=2 WLS cannot fit anything below the linear-basis minimum D+1;
-    // lift the usability gate so such IPs are discarded up front and marked
-    // invalid (ninterp=0) for the persisted store / n_valid / eff_order.
+    // iorder=2 LS cannot fit anything below the linear-basis minimum D+1;
+    // lift the usability gate accordingly.  At either interpolation order an
+    // IP below the applicable threshold is invalid, so persist ninterp=0 rather
+    // than leaving a nonzero marker paired with all-zero weights.
     constexpr int MIN_PTS = (iorder_t == 1)
         ? INTERP_THRESHOLD
         : ((INTERP_THRESHOLD > AMREX_SPACEDIM + 1) ? INTERP_THRESHOLD
@@ -378,7 +379,7 @@ void computeIPweights(
             ip_ijk(iim, corner, d) = -99;
           }
         }
-        if constexpr (iorder_t != 1) { imp_ninterp(iim) = 0; }
+        imp_ninterp(iim) = 0;
         continue;
       }
       int base_ijk[AMREX_SPACEDIM];
@@ -643,22 +644,34 @@ static void extrapolate(
     // only extrapolate up to QLS (Last Species), skipping aux vars like QC, QG, QEINT.
     for (int n = 0; n <= cls_t::QLS; ++n) {
 
-        if (eff_order == 0) {
+        // Optional mixed-order profile: cubic thermodynamic extension supplies
+        // the extra value order lost by heat-flux differentiation, while the
+        // velocity extension stays on the better-conditioned quadratic path.
+        // Models without this member retain the historical uniform order.
+        int component_order = eff_order;
+        if constexpr (requires { param::cap_velocity_extrap_order_at_two; }) {
+            if (param::cap_velocity_extrap_order_at_two &&
+                n >= cls_t::QU && n < cls_t::QU + AMREX_SPACEDIM) {
+                component_order = amrex::min(component_order, 2);
+            }
+        }
+
+        if (component_order == 0) {
             prims(0, n) = prims(1, n);
         } else {
-            // Degree-eff_order Lagrange polynomial through the wall-normal nodes
-            // {0, disIM(0), ..., disIM(eff-1)} with values
-            // {prims(1,n), prims(2,n), ..., prims(eff+1,n)}, evaluated at the
-            // ghost abscissa s = -disGP. eff_order==1/2 reproduce the previous
-            // linear/quadratic formulas identically; eff_order>=3 (available
-            // when extrap_order>=3 image points are placed) is the cubic+
-            // extension. Runtime eff_order <= eorder_t bounds all indices.
+            // Degree-component_order Lagrange polynomial through the
+            // wall-normal nodes {0, disIM(0), ..., disIM(component_order-1)}
+            // and matching values {prims(1,n), ..., prims(component_order+1,n)},
+            // evaluated at the ghost abscissa s = -disGP. Orders 1/2 reproduce
+            // the previous linear/quadratic formulas identically; order >= 3
+            // is available when enough image points were placed. Runtime
+            // component_order <= eff_order <= eorder_t bounds all indices.
             const Real s = -disGP;
             Real acc = Real(0.0);
-            for (int m = 0; m <= eff_order; ++m) {
+            for (int m = 0; m <= component_order; ++m) {
                 const Real xm = (m == 0) ? Real(0.0) : disIM(m - 1);
                 Real Lm = Real(1.0);
-                for (int kk = 0; kk <= eff_order; ++kk) {
+                for (int kk = 0; kk <= component_order; ++kk) {
                     if (kk == m) continue;
                     const Real xk = (kk == 0) ? Real(0.0) : disIM(kk - 1);
                     Lm *= (s - xk) / (xm - xk);

@@ -4,6 +4,7 @@
 #include <AMReX_ParmParse.H>
 #include <AMReX_Scan.H>
 #include <AMReX_Reduce.H>
+#include <AMReX_iMultiFab.H>
 
 #include "ibm_containers.h"
 
@@ -36,8 +37,11 @@ public:
 
   // number of ghost layers needed for IB method
   static constexpr int  ghost_layers = param::ghost_layers;
+  static_assert(ghost_layers == 1,
+      "Volume IBM currently requires ghost_layers=1. ghost_layers=0 applies no "
+      "ghost-cell wall condition, and deeper GP bands are not yet validated.");
   static_assert(ghost_layers <= cls_t::NGHOST,
-              "IBM ghost_layers exceeds cls_t::NGHOST");
+      "IBM ghost_layers exceeds cls_t::NGHOST");
   
   // true: interior of closed geometry is solid; false: interior is fluid
   static constexpr bool interior_is_solid = param::interior_is_solid; 
@@ -537,17 +541,17 @@ public:
       // ===================================================================
       AMREX_ALWAYS_ASSERT_WITH_MESSAGE(ngeom <= MAX_NGEOM,
           "ngeom exceeds MAX_NGEOM; raise MAX_NGEOM in ibm_containers.h");
+      const int ngeom_local = amrex::min(ngeom, MAX_NGEOM);
 
       // Pre-pack trivially-copyable POD views for device capture.
       GpuArray<InsideTesterView, MAX_NGEOM> inout_views;
       GpuArray<AABB,             MAX_NGEOM> bboxes;
       GpuArray<RigidTransform,   MAX_NGEOM> transforms;
-      for (int ii = 0; ii < ngeom; ++ii) {
+      for (int ii = 0; ii < ngeom_local; ++ii) {
         inout_views[ii] = inout_fa[ii]->view();
         bboxes[ii]      = bbox_a[ii];          // world-frame bbox
         transforms[ii]  = transform_a[ii];     // body→world transform
       }
-      const int ngeom_local = ngeom;
 
       // --- Step 1: solid markers (comp 0) over grow(bx, NGHOST) ----------
       // Query points are in world frame: fast-reject vs world bbox, then
@@ -714,6 +718,7 @@ public:
     // ------------------------------------------------------------------
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(ngeom <= MAX_NGEOM,
         "ngeom exceeds MAX_NGEOM; increase MAX_NGEOM in ibm_containers.h");
+    const int ngeom_local = amrex::min(ngeom, MAX_NGEOM);
 
     // bqv[ii] : BVH4 query view for geometry ii (POD: raw ptrs to nodes/
     //           verts/faces). Used on device for closest-point queries in
@@ -731,12 +736,12 @@ public:
     //                  this kernel via updateRigidTransform().
     GpuArray<RigidTransform, MAX_NGEOM> transforms;
 
-    for (int ii = 0; ii < ngeom; ii++) {
+    for (int ii = 0; ii < ngeom_local; ii++) {
         bqv[ii]        = bvh_a[ii].query_view(geom_a[ii]);
         geom_off[ii]   = geom_offsets[ii];
         transforms[ii] = transform_a[ii];
     }
-    geom_off[ngeom] = geom_offsets[ngeom];   // sentinel for total elem count
+    geom_off[ngeom_local] = geom_offsets[ngeom_local];
 
     // ------------------------------------------------------------------
     // Level-scalar constants captured by value into the device lambda.
@@ -752,10 +757,6 @@ public:
     // Cell diagonal length on this level — used as upper-bound sanity
     // check for ghost-point ↔ closest-surface-point distance.
     const Real diag_lev     = diag_a[lev];
-
-    // Local copy of geometry count: members can't be referenced inside
-    // a device lambda directly, so we capture a stack int by value.
-    const int  ngeom_local  = ngeom;
 
     // Raw pointer to level-wide LocalFrame array (per-element body-frame
     // normal + tangents). Indexed by global f_idx = prim_id + geom_off[ii].
@@ -773,6 +774,7 @@ public:
     //                       pre-zeroed here, so no per-FAB reset is needed.
     //   slot  nfabs       — first-IP stencil-out-of-box failure count
     //   slot  nfabs+1     — first-IP below-threshold placement failure count
+    //   slot  nfabs+2     — first-IP interpolation fit failure count
     // (failure counters give GPU parity with the CPU path's abort/print
     // semantics: device printf is lossy and asserts are stripped in release,
     // so failures are aggregated and reported host-side).
@@ -791,13 +793,14 @@ public:
     std::copy(gpstore.fab_offsets.begin(), gpstore.fab_offsets.end(),
               h_fab_offsets.begin());
 
-    Vector<int> h_counts(nfabs_local + 2, 0);
-    Gpu::DeviceVector<int> d_counts(nfabs_local + 2);
+    Vector<int> h_counts(nfabs_local + 3, 0);
+    Gpu::DeviceVector<int> d_counts(nfabs_local + 3);
     Gpu::copyAsync(Gpu::hostToDevice, h_counts.begin(), h_counts.end(),
                    d_counts.begin());
     int* p_gp_count    = d_counts.data();                    // per-FAB slots
     int* p_err_stencil = d_counts.data() + nfabs_local;      // first-IP stencil out of box
     int* p_err_place   = d_counts.data() + nfabs_local + 1;  // first-IP below threshold
+    int* p_err_fit     = d_counts.data() + nfabs_local + 2;  // first-IP LS/weight fit failure
 
     int ifab_local = 0;
     for (MFIter mfi(mfab, false); mfi.isValid(); ++mfi, ++ifab_local) {
@@ -876,10 +879,8 @@ public:
 #endif
 
         // Image points: stack-local SoA, written into GPStore once at the end.
-        // Value-initialised ({}): search_optimal_image_point writes slot 0 only
-        // when an attempt finds fluid; on total placement failure the arrays
-        // would otherwise be persisted uninitialised (imp_ninterp(0)=0 keeps
-        // the GP below INTERP_THRESHOLD -> deterministic 0th-order fallback).
+        // Value-initialisation keeps diagnostics deterministic before the
+        // aggregated host-side failure check aborts an invalid first IP.
         Array2D<Real, 0, eorder_tparm - 1, 0, AMREX_SPACEDIM - 1> imp_xyz{};
         Array2D< int, 0, eorder_tparm - 1, 0, AMREX_SPACEDIM - 1> imp_ijk{};
         Array1D<Real, 0, eorder_tparm - 1> disIM{};
@@ -907,6 +908,9 @@ public:
             imp_ipweights, imp_ip_ijk,
             imp_xyz, imp_ijk, imp_ninterp,
             prob_lo, dx_lev, ibMarkers);
+        if (place_status == 0 && imp_ninterp(0) == 0) {
+          Gpu::Atomic::Add(p_err_fit, 1);
+        }
 
         // Store imp_ninterp AFTER computeIPweights: the iorder=2 WLS path
         // demotes an unfittable image point by setting imp_ninterp(iim)=0,
@@ -949,6 +953,7 @@ public:
     {
       const int n_stencil = h_counts[nfabs_local];
       const int n_place   = h_counts[nfabs_local + 1];
+      const int n_fit     = h_counts[nfabs_local + 2];
       if (n_stencil > 0) {
         amrex::Print() << "initialiseGPs (GPU): " << n_stencil
                        << " ghost point(s) on level " << lev
@@ -956,10 +961,16 @@ public:
         amrex::Abort("initialiseGPs: interpolation stencil out of box (GPU)");
       }
       if (n_place > 0) {
-        amrex::Print() << "IBM WARNING (GPU): " << n_place
+        amrex::Print() << "initialiseGPs (GPU): " << n_place
                        << " ghost point(s) on level " << lev
-                       << " failed first image-point placement (below threshold);"
-                       << " they fall back to low-order reconstruction.\n";
+                       << " failed first image-point placement (below threshold).\n";
+        amrex::Abort("initialiseGPs: invalid first image point (GPU)");
+      }
+      if (n_fit > 0) {
+        amrex::Print() << "initialiseGPs (GPU): " << n_fit
+                       << " ghost point(s) on level " << lev
+                       << " have no resolvable interpolation fit at the first image point.\n";
+        amrex::Abort("initialiseGPs: invalid first image-point fit (GPU)");
       }
     }
 
@@ -968,6 +979,9 @@ public:
     // CPU path: original LoopOnCpu implementation
     // ================================================================
     int ifab_local = 0;
+    int n_stencil_fail = 0;
+    int n_place_fail = 0;
+    int n_fit_fail = 0;
     for (MFIter mfi(mfab, false); mfi.isValid(); ++mfi, ++ifab_local) {
       // Get the pre-allocated range in the flattened GPStore for this FAB.
       // (CPU build: ManagedVector is plain host memory — direct read is safe;
@@ -1034,21 +1048,22 @@ public:
           T.rotate_to_world(lf_body.tangent2, localframe.tangent2);
 #endif
 
-          // Value-initialised ({}) — see GPU-path note: keeps total placement
-          // failure deterministic (imp_ninterp(0)=0 -> 0th-order fallback).
+          // Value-initialised ({}) so a failed search remains deterministic
+          // until the aggregated host-side failure check below aborts.
           Array2D<Real, 0, eorder_tparm - 1, 0, AMREX_SPACEDIM - 1> imp_xyz{};
           Array2D< int, 0, eorder_tparm - 1, 0, AMREX_SPACEDIM - 1> imp_ijk{};
           Array1D<Real, 0, eorder_tparm - 1> disIM{};
           Array1D< int, 0, eorder_tparm - 1> imp_ninterp{};
 
           // Chained walk along the outward normal — shared with GPU path.
-          // (return status ignored: the CPU host path aborts/prints inside.)
-          (void) place_image_points<eorder_tparm, iorder_tparm>(
+          const int place_status = place_image_points<eorder_tparm, iorder_tparm>(
               cp, localframe,
               lev, prob_lo, dx_a[lev], di_a[lev],
               bxg, ibMarkers,
               gpstore, gidx,
               imp_xyz, imp_ijk, disIM, imp_ninterp);
+          if (place_status & 1) { ++n_stencil_fail; }
+          if (place_status & 2) { ++n_place_fail; }
 
           gpstore.imp_xyz[gidx] = imp_xyz;
           gpstore.imp_ijk[gidx] = imp_ijk;
@@ -1064,6 +1079,9 @@ public:
               imp_ijk, 
               imp_ninterp,
               prob_lo, dx_a[lev], ibMarkers);
+          if (place_status == 0 && imp_ninterp(0) == 0) {
+            ++n_fit_fail;
+          }
           
           // Store imp_ninterp AFTER computeIPweights (WLS demotion visibility).
           gpstore.imp_ninterp[gidx] = imp_ninterp;
@@ -1080,7 +1098,33 @@ public:
       }
     } //end MFIter
 
+    if (n_stencil_fail > 0) {
+      amrex::Print() << "initialiseGPs (CPU): " << n_stencil_fail
+                     << " ghost point(s) on level " << lev
+                     << " have their first image-point stencil outside the grown box.\n";
+      amrex::Abort("initialiseGPs: interpolation stencil out of box (CPU)");
+    }
+    if (n_place_fail > 0) {
+      amrex::Print() << "initialiseGPs (CPU): " << n_place_fail
+                     << " ghost point(s) on level " << lev
+                     << " failed first image-point placement (below threshold).\n";
+      amrex::Abort("initialiseGPs: invalid first image point (CPU)");
+    }
+    if (n_fit_fail > 0) {
+      amrex::Print() << "initialiseGPs (CPU): " << n_fit_fail
+                     << " ghost point(s) on level " << lev
+                     << " have no resolvable interpolation fit at the first image point.\n";
+      amrex::Abort("initialiseGPs: invalid first image-point fit (CPU)");
+    }
+
 #endif // AMREX_USE_GPU
+
+    // initialiseGPs rewrites marker component 1 from the temporary geometry id
+    // to the final first-IP interpolation count.  Only valid cells own that
+    // value; same-level ghost copies must be refreshed before any flux stencil
+    // inspects them.  Exchange both components so the solid and GP views have
+    // one authoritative, box-layout-independent representation.
+    mfab.FillBoundary(0, 2, amr_p->Geom(lev).periodicity());
 
     // NOTE: gpstore.shrink() disabled — shrink_to_fit() on PODVector
     // corrupts data on some platforms (observed with AMReX ManagedVector on CPU).
@@ -1475,7 +1519,7 @@ public:
   {
     BL_PROFILE("IBM::computeAllGPs");
     auto& gpstore = gpstore_a[lev];
-    if (gpstore.total_ngps == 0) return;
+    if (gpstore.total_ngps > 0) {
 
     auto gpview = gpstore.view();
     auto const* lf_ptr = LocalFrame_a.data();
@@ -1483,14 +1527,11 @@ public:
 
     // Capture per-geometry transforms for rotating body-frame LocalFrame to world
     AMREX_ALWAYS_ASSERT(ngeom <= MAX_NGEOM);
+    const int ngeom_local = amrex::min(ngeom, MAX_NGEOM);
     GpuArray<RigidTransform, MAX_NGEOM> transforms;
-    GpuArray<int, MAX_NGEOM + 1> geom_off;
-    for (int ii = 0; ii < ngeom; ii++) {
+    for (int ii = 0; ii < ngeom_local; ii++) {
         transforms[ii] = transform_a[ii];
-        geom_off[ii]   = geom_offsets[ii];
     }
-    geom_off[ngeom] = geom_offsets[ngeom];
-    const int ngeom_local = ngeom;
 
     // Build device array of Array4 pointers (one per local FAB).
     // No snapshot needed: GPs write only to ghost cells (ibMarkers==1)
@@ -1637,220 +1678,170 @@ public:
           prims(i,j,k,n) = Q[n];
       }
     }); // end ParallelFor over all ghost points
+    }
+
+    // GP reconstruction writes the valid owner cell only.  A neighboring FAB
+    // can read that cell through its private ghost copy in WENO/TENO or viscous
+    // stencils, so publish the reconstructed values before returning.  This is
+    // intentionally unconditional: ranks with zero local GPs must still
+    // participate in the same-level exchange initiated by ranks that own GPs.
+    prims_mf.FillBoundary(amr_p->Geom(lev).periodicity());
   }
 
   /**
-   * \brief Fix conservative state for cells freshly exposed by geometry movement.
+   * \brief Repair conservative state in cells exposed by moving geometry.
    *
-   * When the immersed body moves, some cells transition from solid to fluid.
-   * Their conservative values are stale (whatever was there when they were solid)
-   * and may produce NaN when converted to primitive variables.
+   * A level-wide Jacobi front propagates data from cells that are fluid in
+   * both topologies into cells that changed solid -> fluid.  Tags and state
+   * ghosts are exchanged after every iteration, so the result is independent
+   * of GPU scheduling, FAB decomposition and MPI rank boundaries.  Only a
+   * one-cell halo is accessed; there are no unchecked expanding-ring reads.
    *
-   * Strategy:
-   *   Pass 0: zero-initialise density of freshly-exposed cells so pass 2 can
-   *           reliably distinguish "already fixed" from "stale solid data."
-   *   Pass 1: average from immediate fluid neighbours (4/6-connected).
-   *   Pass 2: wider 2-ring search for cells that had no valid pass-1 donors.
-   *
-   * \param old_markers  Snapshot of markers BEFORE geometry rebuild (comp 0 only, same BA/DM).
-   * \param state_mf     Conservative state MultiFab to repair (valid + ghost cells).
-   * \param lev          AMR level.
+   * If an exposed component is disconnected from every old-fluid donor, the
+   * state is physically undefined.  Abort instead of inventing a freestream
+   * value or retaining stale solid data.
    */
   void fixExposedCells(const FabArray<BaseFab<uint8_t>>& old_markers,
                        MultiFab& state_mf,
                        int lev)
   {
     BL_PROFILE("IBM::fixExposedCells");
-    auto& mfab = *bmf_a[lev];
-    const int ncons = cls_t::NCONS;
 
-    // Pass 0: zero-initialise freshly-exposed cells so that pass 2 can
-    // distinguish "fixed by pass 1" (URHO > 0) from "still needs fixing."
-    // Without this, stale solid-cell data (which may have URHO > 1e-10)
-    // would cause pass 2 to skip cells that were never handled by pass 1.
-    for (MFIter mfi(mfab, false); mfi.isValid(); ++mfi) {
+    auto& new_markers = *bmf_a[lev];
+    AMREX_ALWAYS_ASSERT(old_markers.boxArray() == new_markers.boxArray());
+    AMREX_ALWAYS_ASSERT(state_mf.boxArray() == new_markers.boxArray());
+    AMREX_ALWAYS_ASSERT(state_mf.nGrowVect().allGE(IntVect(1)));
+
+    constexpr int invalid = -1;
+    constexpr int donor   = 0;
+    constexpr int pending = 1;
+    constexpr int fixed   = 2;
+
+    // Two tag components are the old/new Jacobi buffers.  Ghosts start invalid
+    // and become valid only through FillBoundary from an owned same-level cell.
+    iMultiFab tags(new_markers.boxArray(), new_markers.DistributionMap(),
+                   2, 1, MFInfo().SetArena(The_Async_Arena()));
+    tags.setVal(invalid);
+
+    Gpu::DeviceScalar<int> d_pending(0);
+    int* const p_pending = d_pending.dataPtr();
+
+    for (MFIter mfi(new_markers, false); mfi.isValid(); ++mfi) {
       const Box& bx = mfi.tilebox();
       auto const& old_mk = old_markers.const_array(mfi);
-      auto const& new_mk = mfab.const_array(mfi);
-      auto const& state  = state_mf.array(mfi);
+      auto const& new_mk = new_markers.const_array(mfi);
+      auto const& tag = tags.array(mfi);
 
-      ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-      {
-        if (old_mk(i,j,k,0) != 0 && new_mk(i,j,k,0) == 0) {
-          for (int n = 0; n < ncons; ++n)
-            state(i,j,k,n) = Real(0.0);
-        }
-      });
-    }
-
-    for (MFIter mfi(mfab, false); mfi.isValid(); ++mfi) {
-      const Box& bx = mfi.tilebox();
-      auto const& old_mk = old_markers.const_array(mfi);   // old comp-0 markers
-      auto const& new_mk = mfab.const_array(mfi);          // new markers (comp 0)
-      auto const& state  = state_mf.array(mfi);
-
-      // Pass 1: fill freshly-exposed cells from valid fluid neighbours
-      ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-      {
-        // Only process cells that changed from solid → fluid
-        if (old_mk(i,j,k,0) == 0) return;   // was already fluid
-        if (new_mk(i,j,k,0) != 0) return;   // still solid
-
-        // Average conservative state from immediate fluid neighbours
-        // (cells that are fluid in BOTH old and new markers → reliable data)
-        Real sum[cls_t::NCONS] = {};
-        int count = 0;
-
-        // 6-connected (2D: 4-connected) neighbourhood
-        constexpr int offsets[][3] = {
-          {-1,0,0},{1,0,0},{0,-1,0},{0,1,0}
-#if (AMREX_SPACEDIM == 3)
-          ,{0,0,-1},{0,0,1}
-#endif
-        };
-
-        for (const auto& off : offsets) {
-          int ii = i + off[0], jj = j + off[1];
-          AMREX_D_TERM(;, ;, int kk = k + off[2];)
-#if (AMREX_SPACEDIM == 2)
-          int kk = 0;
-#endif
-          // Donor must be fluid in old state (has valid conservative data)
-          // and also fluid in new state (not about to be covered)
-          if (old_mk(ii,jj,kk,0) == 0 && new_mk(ii,jj,kk,0) == 0) {
-            for (int n = 0; n < ncons; ++n)
-              sum[n] += state(ii,jj,kk,n);
-            count++;
+      ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+        int t = invalid;
+        if (new_mk(i,j,k,0) == 0) {
+          if (old_mk(i,j,k,0) == 0) {
+            t = donor;
+          } else {
+            t = pending;
+            Gpu::Atomic::Add(p_pending, 1);
           }
         }
-
-        if (count > 0) {
-          Real inv = Real(1.0) / count;
-          for (int n = 0; n < ncons; ++n)
-            state(i,j,k,n) = sum[n] * inv;
-        }
-        // If count==0, all neighbours are also newly exposed or solid.
-        // Leave for Pass 2 (wider stencil) below.
+        tag(i,j,k,0) = t;
+        tag(i,j,k,1) = t;
       });
     }
 
-    // Pass 2: sweep again for any remaining unfixed cells (all neighbours were also exposed).
-    // Use progressively wider search rings (2, 4, 8) to handle large motion per step.
-    for (int ring = 2; ring <= 8; ring *= 2) {
-      for (MFIter mfi(mfab, false); mfi.isValid(); ++mfi) {
-        const Box& bx  = mfi.tilebox();
-        const Box& bxg = mfi.growntilebox(ring); // ensure we can read ring-width neighbours
-        auto const& old_mk = old_markers.const_array(mfi);
-        auto const& new_mk = mfab.const_array(mfi);
-        auto const& state  = state_mf.array(mfi);
-        const int R = ring;
+    int n_pending = d_pending.dataValue();
+    ParallelDescriptor::ReduceIntSum(n_pending);
+    if (n_pending == 0) return;
 
-        ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-        {
-          if (old_mk(i,j,k,0) == 0) return;   // was already fluid
-          if (new_mk(i,j,k,0) != 0) return;   // still solid
-          if (state(i,j,k, cls_t::URHO) > Real(1.0e-10)) return; // already fixed
+    const auto& periodicity = amr_p->Geom(lev).periodicity();
+    state_mf.FillBoundary(periodicity);
+    tags.FillBoundary(periodicity);
+
+    int max_iters = 0;
+    const Box& domain = amr_p->Geom(lev).Domain();
+    for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+      max_iters = amrex::max(max_iters, domain.length(d));
+    }
+
+    int previous_pending = n_pending;
+    for (int iter = 0; iter < max_iters; ++iter) {
+      const int told = iter & 1;
+      const int tnew = 1 - told;
+      const int zero = 0;
+      Gpu::htod_memcpy(p_pending, &zero, sizeof(int));
+
+      for (MFIter mfi(new_markers, false); mfi.isValid(); ++mfi) {
+        const Box& bx = mfi.tilebox();
+        auto const& tag = tags.array(mfi);
+        auto const& state = state_mf.array(mfi);
+        const int nc = cls_t::NCONS;
+
+        ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+          const int old_tag = tag(i,j,k,told);
+          if (old_tag != pending) {
+            tag(i,j,k,tnew) = old_tag;
+            return;
+          }
 
           Real sum[cls_t::NCONS] = {};
           int count = 0;
-          for (int dj = -R; dj <= R; ++dj) {
-            for (int di = -R; di <= R; ++di) {
+          for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+            for (int s = -1; s <= 1; s += 2) {
+              int ii = i;
+              int jj = j;
+              int kk = k;
+              if (d == 0) ii += s;
+              if (d == 1) jj += s;
 #if (AMREX_SPACEDIM == 3)
-              for (int dk = -R; dk <= R; ++dk) {
-#else
-              { int dk = 0;
+              if (d == 2) kk += s;
 #endif
-                if (di == 0 && dj == 0 && dk == 0) continue;
-                int ii = i+di, jj = j+dj, kk = k+dk;
-                if (!bxg.contains(IntVect(AMREX_D_DECL(ii,jj,kk)))) continue;
-                if (new_mk(ii,jj,kk,0) == 0 && state(ii,jj,kk, cls_t::URHO) > Real(1.0e-10)) {
-                  for (int n = 0; n < ncons; ++n)
-                    sum[n] += state(ii,jj,kk,n);
-                  count++;
-                }
+              const int neighbour_tag = tag(ii,jj,kk,told);
+              if (neighbour_tag != donor && neighbour_tag != fixed) continue;
+
+              bool valid_state = state(ii,jj,kk,cls_t::URHO) > Real(0.0)
+                              && state(ii,jj,kk,cls_t::UET)  > Real(0.0);
+              for (int n = 0; n < nc; ++n) {
+                valid_state = valid_state && std::isfinite(state(ii,jj,kk,n));
               }
+              if (!valid_state) continue;
+
+              for (int n = 0; n < nc; ++n) {
+                sum[n] += state(ii,jj,kk,n);
+              }
+              ++count;
             }
           }
+
           if (count > 0) {
-            Real inv = Real(1.0) / count;
-            for (int n = 0; n < ncons; ++n)
+            const Real inv = Real(1.0) / Real(count);
+            for (int n = 0; n < nc; ++n) {
               state(i,j,k,n) = sum[n] * inv;
+            }
+            tag(i,j,k,tnew) = fixed;
+          } else {
+            tag(i,j,k,tnew) = pending;
+            Gpu::Atomic::Add(p_pending, 1);
           }
         });
       }
-    } // end ring loop
 
-    // Pass 3 (fallback): any cell still unfixed gets freestream-like state
-    // derived from the nearest valid fluid cell in the entire FAB.
-    // This is a last resort — should only trigger for extremely large motions.
-    for (MFIter mfi(mfab, false); mfi.isValid(); ++mfi) {
-      const Box& bx = mfi.tilebox();
-      auto const& old_mk = old_markers.const_array(mfi);
-      auto const& new_mk = mfab.const_array(mfi);
-      auto const& state  = state_mf.array(mfi);
+      // Publish newly fixed states and tags before the next Jacobi iteration.
+      state_mf.FillBoundary(periodicity);
+      tags.FillBoundary(tnew, 1, periodicity);
 
-      // First find ANY valid fluid cell in this FAB to use as reference
-      const Box& bxg = mfi.growntilebox(cls_t::NGHOST);
-      ReduceOps<ReduceOpSum> reduce_op;
-      ReduceData<int> reduce_data(reduce_op);
-      using ReduceTuple = typename decltype(reduce_data)::Type;
+      n_pending = d_pending.dataValue();
+      ParallelDescriptor::ReduceIntSum(n_pending);
+      if (n_pending == 0) return;
 
-      reduce_op.eval(bx, reduce_data,
-        [=] AMREX_GPU_DEVICE (int i, int j, int k) -> ReduceTuple
-      {
-        if (old_mk(i,j,k,0) == 0) return {0};
-        if (new_mk(i,j,k,0) != 0) return {0};
-        if (state(i,j,k, cls_t::URHO) > Real(1.0e-10)) return {0};
-        return {1}; // still unfixed
-      });
-      int n_unfixed = amrex::get<0>(reduce_data.value(reduce_op));
-
-      if (n_unfixed > 0) {
-        amrex::Print() << "[fixExposedCells] WARNING: " << n_unfixed
-                       << " cells still unfixed after 8-ring search. "
-                       << "Using nearest-valid-fluid fallback.\n";
-
-        // Brute-force: for each unfixed cell, scan the FAB for the nearest valid cell
-        ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-        {
-          if (old_mk(i,j,k,0) == 0) return;
-          if (new_mk(i,j,k,0) != 0) return;
-          if (state(i,j,k, cls_t::URHO) > Real(1.0e-10)) return;
-
-          // Expanding ring search until we find something
-          for (int r = 1; r <= 16; ++r) {
-            Real sum[cls_t::NCONS] = {};
-            int count = 0;
-            // Only check the shell at distance r (not the interior)
-            for (int dj = -r; dj <= r; ++dj) {
-              for (int di = -r; di <= r; ++di) {
-#if (AMREX_SPACEDIM == 3)
-                for (int dk = -r; dk <= r; ++dk) {
-                  if (amrex::Math::abs(di) != r && amrex::Math::abs(dj) != r && amrex::Math::abs(dk) != r) continue;
-#else
-                { int dk = 0;
-                  if (amrex::Math::abs(di) != r && amrex::Math::abs(dj) != r) continue;
-#endif
-                  int ii = i+di, jj = j+dj, kk = k+dk;
-                  if (!bxg.contains(IntVect(AMREX_D_DECL(ii,jj,kk)))) continue;
-                  if (new_mk(ii,jj,kk,0) == 0 && state(ii,jj,kk, cls_t::URHO) > Real(1.0e-10)) {
-                    for (int n = 0; n < ncons; ++n)
-                      sum[n] += state(ii,jj,kk,n);
-                    count++;
-                  }
-                }
-              }
-            }
-            if (count > 0) {
-              Real inv = Real(1.0) / count;
-              for (int n = 0; n < ncons; ++n)
-                state(i,j,k,n) = sum[n] * inv;
-              break;
-            }
-          }
-        });
+      if (n_pending >= previous_pending) {
+        amrex::Abort(
+            "fixExposedCells: exposed fluid region is disconnected from all "
+            "old-fluid donors on level " + std::to_string(lev) +
+            " (" + std::to_string(n_pending) + " cell(s) remain)");
       }
+      previous_pending = n_pending;
     }
+
+    amrex::Abort("fixExposedCells: Jacobi propagation exceeded the level "
+                 "domain extent on level " + std::to_string(lev));
   }
 
   /**
@@ -2031,8 +2022,11 @@ public:
     // (search_optimal_image_point, computeIPweights) are stateless and
     // thread-safe, so the outer FAB loop is safe to parallelize with OpenMP.
     // ========================================================================
+    int surf_stencil_fail = 0;
+    int surf_place_fail = 0;
+    int surf_fit_fail = 0;
 #ifdef AMREX_USE_OMP
-#pragma omp parallel for schedule(dynamic, 1)
+#pragma omp parallel for schedule(dynamic, 1) reduction(+:surf_stencil_fail,surf_place_fail,surf_fit_fail)
 #endif
     for (int lfab = 0; lfab < nfab_local; ++lfab) {
       const auto& flist = fab_faces[lfab];
@@ -2073,14 +2067,13 @@ public:
 #endif
         Point surf_centroid = T.to_world(c_body);
 
-        // Temporary storage for this face's image point data.
-        // Value-initialised ({}) — see initialiseGPs note: keeps total
-        // placement failure deterministic (imp_ninterp(0)=0 -> face degrades
-        // to the guarded 1st-order/invalid path instead of reading garbage).
+        // Temporary storage for this face's image point data.  Keep it
+        // deterministic so an invalid first IP can be diagnosed and rejected.
         Array2D<Real, 0, eorder_tparm_surf - 1, 0, IDIM> imp_xyz{};
         Array2D< int, 0, eorder_tparm_surf - 1, 0, IDIM> imp_ijk{};
         Array1D<Real, 0, eorder_tparm_surf - 1> disIM{};
         Array1D< int, 0, eorder_tparm_surf - 1> imp_ninterp{};
+        int first_place_status = 0;
 
         for (int jj = 0; jj < eorder_tparm_surf; jj++) {
           Point cp_start;
@@ -2099,12 +2092,16 @@ public:
           }
 
           if (jj == 0) {
-            search_optimal_image_point<eorder_tparm_surf, iorder_tparm_surf>(
+            first_place_status =
+                search_optimal_image_point<eorder_tparm_surf, iorder_tparm_surf>(
                                           cp_start, localframe,
                                           lev, prob_lo, dx_a[lev], di_a_surf[lev],
                                           bxg, ibMarkers,
                                           surfimp_soa, f_idx,
                                           imp_xyz, imp_ijk, disIM, imp_ninterp);
+            if (first_place_status & 1) { ++surf_stencil_fail; }
+            if (first_place_status & 2) { ++surf_place_fail; }
+            if (first_place_status != 0) { surfphys_soa.elemfound[f_idx] = 0; }
           }
           else {
             search_image_point<eorder_tparm_surf, iorder_tparm_surf>(
@@ -2127,6 +2124,10 @@ public:
             imp_ipweights, imp_ip_ijk,
             imp_xyz, imp_ijk, imp_ninterp,
             prob_lo, dx_a[lev], ibMarkers);
+        if (first_place_status == 0 && imp_ninterp(0) == 0) {
+          ++surf_fit_fail;
+          surfphys_soa.elemfound[f_idx] = 0;
+        }
 
         // Store imp_ninterp / ip_quality AFTER computeIPweights (WLS demotion).
         surfimp_soa.imp_ninterp[f_idx] = imp_ninterp;
@@ -2135,6 +2136,28 @@ public:
         surfimp_soa.imp_ipweights[f_idx] = imp_ipweights;
       } // end loop over faces in this FAB
     } // end loop over FABs
+
+    ParallelDescriptor::ReduceIntSum(surf_stencil_fail);
+    ParallelDescriptor::ReduceIntSum(surf_place_fail);
+    ParallelDescriptor::ReduceIntSum(surf_fit_fail);
+    if (surf_stencil_fail > 0) {
+      amrex::Print() << "computeSurfIndices: " << surf_stencil_fail
+                     << " surface first-IP stencil(s) on level " << lev
+                     << " extend outside their owning FAB's grown box.\n";
+      amrex::Abort("computeSurfIndices: surface interpolation stencil out of box");
+    }
+    if (surf_place_fail > 0) {
+      amrex::Print() << "computeSurfIndices: " << surf_place_fail
+                     << " surface element(s) on level " << lev
+                     << " failed first image-point placement.\n";
+      amrex::Abort("computeSurfIndices: invalid surface first image point");
+    }
+    if (surf_fit_fail > 0) {
+      amrex::Print() << "computeSurfIndices: " << surf_fit_fail
+                     << " surface element(s) on level " << lev
+                     << " have no resolvable interpolation fit at the first image point.\n";
+      amrex::Abort("computeSurfIndices: invalid surface first image-point fit");
+    }
 
     // Build CSR at the coarsest level (surface is built from finest to coarsest)
     if (lev == 0) buildCSR();
@@ -2217,14 +2240,14 @@ public:
 
     // Capture transforms and geom_offsets for body→world rotation
     AMREX_ALWAYS_ASSERT(ngeom <= MAX_NGEOM);
+    const int ngeom_local = amrex::min(ngeom, MAX_NGEOM);
     GpuArray<RigidTransform, MAX_NGEOM> transforms;
     GpuArray<int, MAX_NGEOM + 1> geom_off;
-    for (int ii = 0; ii < ngeom; ii++) {
+    for (int ii = 0; ii < ngeom_local; ii++) {
         transforms[ii] = transform_a[ii];
         geom_off[ii]   = geom_offsets[ii];
     }
-    geom_off[ngeom] = geom_offsets[ngeom];
-    const int ngeom_local = ngeom;
+    geom_off[ngeom_local] = geom_offsets[ngeom_local];
 
     auto* copy = this;
 

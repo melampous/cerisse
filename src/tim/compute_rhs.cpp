@@ -205,7 +205,8 @@ void region_flux_div(RhsT& prob_rhs, const Geometry& geom, const Box& rbx,
 // computation and data transfer, is not useful then. Therefore, we can have all
 // grid point computations, per fab, in a single MFIter loop (single stream).
 
-void CNS::compute_rhs(MultiFab& statemf, Real dt, FluxRegister* fr_as_crse, FluxRegister* fr_as_fine) {
+void CNS::compute_rhs(MultiFab& statemf, Real dt, FluxRegister* fr_as_crse,
+                      FluxRegister* fr_as_fine, Real stage_time) {
   BL_PROFILE("CNS::compute_rhs()");
 
   // Variables
@@ -214,7 +215,10 @@ void CNS::compute_rhs(MultiFab& statemf, Real dt, FluxRegister* fr_as_crse, Flux
   const PROB::ProbParm* pparm_d = CNS::d_prob_parm;
 
   // time
-  const Real cur_time = state[State_Type].curTime();
+  // RK stage time is explicit.  StateData::curTime() is not reliable for the
+  // first stage after swapTimeLevels(): it already points at t^{n+1} while
+  // FillPatch reads U^n at t^n.
+  const Real cur_time = stage_time;
 
 #ifdef AMREX_USE_GPIBM
   // Convert conserved variables to primitives level-wide, then apply IBM
@@ -253,6 +257,32 @@ void CNS::compute_rhs(MultiFab& statemf, Real dt, FluxRegister* fr_as_crse, Flux
     BL_PROFILE_VAR("IBM::computeAllGPs", prof_gp);
     IBM::ib.computeAllGPs(prims_mf, cls_d, level);
     BL_PROFILE_VAR_STOP(prof_gp);
+  }
+
+  // Validation hook: poison only unreconstructed interior-solid primitives.
+  // A marker-safe IBM flux must produce bitwise-identical fluid RHS values
+  // with this enabled.  The default is off and adds no production kernel.
+  static const bool poison_interior_solid = [] {
+    int value = 0;
+    ParmParse pp("ib");
+    pp.query("poison_interior_solid", value);
+    return value != 0;
+  }();
+  if (poison_interior_solid) {
+    const Real poison = std::numeric_limits<Real>::quiet_NaN();
+    auto& marker_mf = *IBM::ib.bmf_a[level];
+    for (MFIter mfi(prims_mf, false); mfi.isValid(); ++mfi) {
+      const Box bxg = mfi.growntilebox(cls_h.NGHOST);
+      const auto prims = prims_mf.array(mfi);
+      const auto marker = marker_mf.array(mfi);
+      ParallelFor(bxg, cls_h.NPRIM,
+                  [=] AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept {
+                    if (marker(i, j, k, 0) != 0 &&
+                        marker(i, j, k, 1) == 0) {
+                      prims(i, j, k, n) = poison;
+                    }
+                  });
+    }
   }
 #endif
 
@@ -380,6 +410,7 @@ void CNS::compute_rhs(MultiFab& statemf, Real dt, FluxRegister* fr_as_crse, Flux
     // evaluations that would arise from a 4D (i,j,k,n) ParallelFor.
     const int ncons = cls_h.NCONS;
 
+#if (AMREX_SPACEDIM == 2)
     if (is_rz) {
 
         const Real dr = dx[0];
@@ -530,7 +561,9 @@ void CNS::compute_rhs(MultiFab& statemf, Real dt, FluxRegister* fr_as_crse, Flux
                         state(i, j, k, n) += (fy(i, j, k, n) - fy(i, j + 1, k, n)) * inv_dz;
                     }
                 });
-    } else {
+    } else
+#endif
+    {
 #if (AMREX_SPACEDIM == 1)
         const Real invdx = Real(1.0) / dx[0];
         ParallelFor(bx,
@@ -680,9 +713,8 @@ void CNS::compute_rhs_overlap(MultiFab& statemf, Real dt,
   const PROB::ProbClosures& cls_h = *CNS::h_prob_closures;
   const PROB::ProbParm* pparm_d = CNS::d_prob_parm;
 
-  // time (same convention as compute_rhs: the state's current time, which
-  // the RK3 driver has set via setNewTimeLevel before this call)
-  const Real cur_time = state[State_Type].curTime();
+  // The overlap driver already supplies the exact RK abscissa.
+  const Real cur_time = t_fill;
 
   const int ncons = cls_h.NCONS;
   const int ng = cls_h.NGHOST;

@@ -1,0 +1,43 @@
+#-----------------------------------------------------------------------------#
+#  AMR regrid-loop FIX test: max_level=3, short run, verbose regrid + steps
+#-----------------------------------------------------------------------------#
+max_step  = 80
+stop_time = 10.0
+cfl = 0.3
+
+cns.order_rk  = 3
+cns.stages_rk = 3
+
+cns.lo_bc = 3 2
+cns.hi_bc = 2 2
+cns.nstep_screen_output = 5
+cns.verbose = 0
+
+ib.filename = plate.dat
+ib.move = 0
+ib.plot_surf = 0
+
+geometry.is_periodic = 0 0
+geometry.coord_sys   = 1
+geometry.prob_lo     = 0.0   -0.02
+geometry.prob_hi     = 0.06   0.24
+amr.n_cell           = 96     416
+
+amr.max_level       = 3
+amr.ref_ratio       = 2
+amr.regrid_int      = 20
+amr.blocking_factor  = 8
+amr.max_grid_size    = 64
+amr.n_error_buf     = 2
+amr.grid_eff        = 0.8
+
+amr.plot_files_output = 1
+amr.plot_file         = ./plot_amrtest/plt
+amr.plot_int          = 20
+amr.derive_plot_vars  = pressure velocity temperature
+amr.v       = 1
+amr.verbose = 1
+
+amr.checkpoint_files_output = 0
+
+amrex.the_arena_is_managed = 0

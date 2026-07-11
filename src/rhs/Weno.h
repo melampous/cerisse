@@ -78,27 +78,45 @@ struct WenoZ5 {
     constexpr Real eps = (std::numeric_limits<Real>::digits >= 53)
                              ? Real(1e-40)
                              : std::numeric_limits<Real>::epsilon();
-    Real vr[3], beta[3], tmp;
-    
-    smoothness_indicator(s, beta);
     const bool v0 = optimal_weight[0] > Real(0.0);
     const bool v1 = optimal_weight[1] > Real(0.0);
     const bool v2 = optimal_weight[2] > Real(0.0);
-    if (v0 && v1 && v2) {
-      tmp = std::abs(beta[2] - beta[0]);
-    } else if (v0 && v1) {
-      tmp = std::abs(beta[1] - beta[0]);
-    } else if (v1 && v2) {
-      tmp = std::abs(beta[2] - beta[1]);
-    } else {
-      tmp = Real(0.0);
+    Real vr[3] = {Real(0.0), Real(0.0), Real(0.0)};
+    Real beta[3] = {Real(0.0), Real(0.0), Real(0.0)};
+
+    // Do not even evaluate a disabled candidate.  A masked stencil can
+    // contain NaN/garbage in an interior solid cell; evaluating that beta or
+    // polynomial and multiplying by a zero weight still produces NaN.
+    if (v2) {
+      beta[2] = Real(13. / 12.) * POWER2(s[4] - 2.0 * s[3] + s[2]) +
+                Real(0.25) * POWER2(s[4] - 4.0 * s[3] + 3.0 * s[2]);
+      vr[2] = 11.0 * s[2] - 7.0 * s[3] + 2.0 * s[4];
+    }
+    if (v1) {
+      beta[1] = Real(13. / 12.) * POWER2(s[3] - 2.0 * s[2] + s[1]) +
+                Real(0.25) * POWER2(s[3] - s[1]);
+      vr[1] = -s[3] + 5.0 * s[2] + 2.0 * s[1];
+    }
+    if (v0) {
+      beta[0] = Real(13. / 12.) * POWER2(s[2] - 2.0 * s[1] + s[0]) +
+                Real(0.25) * POWER2(3.0 * s[2] - 4.0 * s[1] + s[0]);
+      vr[0] = 2.0 * s[2] + 5.0 * s[1] - s[0];
     }
 
-    beta[2] = (1.0 + tmp / (eps + beta[2])) * optimal_weight[2];
-    beta[1] = (1.0 + tmp / (eps + beta[1])) * optimal_weight[1];
-    beta[0] = (1.0 + tmp / (eps + beta[0])) * optimal_weight[0];
+    Real tau;
+    if (v0 && v1 && v2) {
+      tau = std::abs(beta[2] - beta[0]);
+    } else if (v0 && v1) {
+      tau = std::abs(beta[1] - beta[0]);
+    } else if (v1 && v2) {
+      tau = std::abs(beta[2] - beta[1]);
+    } else {
+      tau = Real(0.0);
+    }
 
-    linear_polynomial_recon(s, vr);
+    if (v2) beta[2] = (1.0 + tau / (eps + beta[2])) * optimal_weight[2];
+    if (v1) beta[1] = (1.0 + tau / (eps + beta[1])) * optimal_weight[1];
+    if (v0) beta[0] = (1.0 + tau / (eps + beta[0])) * optimal_weight[0];
 
     const Real denom = beta[2] + beta[1] + beta[0];
     if (!(denom > std::numeric_limits<Real>::min())) {
@@ -107,9 +125,9 @@ struct WenoZ5 {
       if (v2) return vr[2] / Real(6.0);
       return vr[1] / Real(6.0);
     }
-    tmp = 1.0 / denom;
+    const Real inv_denom = 1.0 / denom;
 
-    return tmp / Real(6.0) *
+    return inv_denom / Real(6.0) *
            (beta[2] * vr[2] + beta[1] * vr[1] + beta[0] * vr[0]);
   }
 
@@ -181,39 +199,59 @@ struct Teno5 : public WenoZ5 {
     // gradients -> more upwind/dissipative -> more robust against the density
     // undershoot that crashed L3 NPR=3 (raised 1e-5 -> 1e-3 for robustness).
     constexpr Real cutoff = 1e-3;
-    Real vr[3], beta[3], tmp;
-    
-    smoothness_indicator(s, beta);
     const bool v0 = optimal_weight[0] > Real(0.0);
     const bool v1 = optimal_weight[1] > Real(0.0);
     const bool v2 = optimal_weight[2] > Real(0.0);
-    if (v0 && v1 && v2) {
-      tmp = std::abs(std::abs(beta[2] - beta[0]) -
-                     (beta[2] + 4.0 * beta[1] + beta[0]) / 6.0);
-    } else if (v0 && v1) {
-      tmp = std::abs(beta[1] - beta[0]);
-    } else if (v1 && v2) {
-      tmp = std::abs(beta[2] - beta[1]);
-    } else {
-      tmp = Real(0.0);
+    Real vr[3] = {Real(0.0), Real(0.0), Real(0.0)};
+    Real beta[3] = {Real(0.0), Real(0.0), Real(0.0)};
+
+    if (v2) {
+      beta[2] = Real(13. / 12.) * POWER2(s[4] - 2.0 * s[3] + s[2]) +
+                Real(0.25) * POWER2(s[4] - 4.0 * s[3] + 3.0 * s[2]);
+      vr[2] = 11.0 * s[2] - 7.0 * s[3] + 2.0 * s[4];
+    }
+    if (v1) {
+      beta[1] = Real(13. / 12.) * POWER2(s[3] - 2.0 * s[2] + s[1]) +
+                Real(0.25) * POWER2(s[3] - s[1]);
+      vr[1] = -s[3] + 5.0 * s[2] + 2.0 * s[1];
+    }
+    if (v0) {
+      beta[0] = Real(13. / 12.) * POWER2(s[2] - 2.0 * s[1] + s[0]) +
+                Real(0.25) * POWER2(3.0 * s[2] - 4.0 * s[1] + s[0]);
+      vr[0] = 2.0 * s[2] + 5.0 * s[1] - s[0];
     }
 
-    beta[2] = POWER6(1.0 + tmp / (eps + beta[2]));
-    beta[1] = POWER6(1.0 + tmp / (eps + beta[1]));
-    beta[0] = POWER6(1.0 + tmp / (eps + beta[0]));
-    tmp = 1.0 / (beta[2] + beta[1] + beta[0]);
-    beta[2] = beta[2] * tmp < cutoff ? 0.0 : optimal_weight[2];
-    beta[1] = beta[1] * tmp < cutoff ? 0.0 : optimal_weight[1];
-    beta[0] = beta[0] * tmp < cutoff ? 0.0 : optimal_weight[0];
+    Real tau;
+    if (v0 && v1 && v2) {
+      tau = std::abs(std::abs(beta[2] - beta[0]) -
+                     (beta[2] + 4.0 * beta[1] + beta[0]) / 6.0);
+    } else if (v0 && v1) {
+      tau = std::abs(beta[1] - beta[0]);
+    } else if (v1 && v2) {
+      tau = std::abs(beta[2] - beta[1]);
+    } else {
+      tau = Real(0.0);
+    }
+
+    Real gamma[3] = {Real(0.0), Real(0.0), Real(0.0)};
+    if (v2) gamma[2] = POWER6(1.0 + tau / (eps + beta[2]));
+    if (v1) gamma[1] = POWER6(1.0 + tau / (eps + beta[1]));
+    if (v0) gamma[0] = POWER6(1.0 + tau / (eps + beta[0]));
+    const Real gamma_sum = gamma[2] + gamma[1] + gamma[0];
+    if (!(gamma_sum > std::numeric_limits<Real>::min())) {
+      return WenoZ5::recon_masked(s, optimal_weight);
+    }
+    const Real inv_gamma_sum = Real(1.0) / gamma_sum;
+    beta[2] = v2 && gamma[2] * inv_gamma_sum >= cutoff ? optimal_weight[2] : Real(0.0);
+    beta[1] = v1 && gamma[1] * inv_gamma_sum >= cutoff ? optimal_weight[1] : Real(0.0);
+    beta[0] = v0 && gamma[0] * inv_gamma_sum >= cutoff ? optimal_weight[0] : Real(0.0);
     const Real denom = beta[2] + beta[1] + beta[0];
     if (!(denom > std::numeric_limits<Real>::min())) {
       return WenoZ5::recon_masked(s, optimal_weight);
     }
-    tmp = 1.0 / denom;
+    const Real inv_denom = 1.0 / denom;
 
-    linear_polynomial_recon(s, vr);
-
-    return tmp / Real(6.0) *
+    return inv_denom / Real(6.0) *
            (beta[2] * vr[2] + beta[1] * vr[1] + beta[0] * vr[0]);
   }
 };  // struct Teno5
@@ -384,6 +422,14 @@ class weno_t {
 #endif
     using amrex::Array4, amrex::Box, amrex::Dim3, amrex::IntVect, amrex::Real;
 
+#if AMREX_USE_GPIBM
+    static_assert(
+        Scheme::ncand == 3,
+        "IBM-safe stencil masking is implemented only for WenoZ5/Teno5; "
+        "Teno6 must not be used with GPIBM until its four-candidate masking "
+        "is made solid-state safe.");
+#endif
+
     const Box& bx = bx_region;
     const Box skipbox = skip_cells;
     const bool skip_ok = skipbox.ok();
@@ -441,95 +487,28 @@ class weno_t {
           return;  // skip solid cells
         }
 #endif
-        
-
-        const Real alpha_raw = cls->max_char_speed(iv, dir, ng, prims_in);
-        AMREX_ASSERT_WITH_MESSAGE(alpha_raw > Real(0.0), "Non-positive LLF alpha in WENO/TENO flux split");
-        const Real alpha = (alpha_raw > Real(0.0))
-                               ? alpha_raw
-                               : std::numeric_limits<Real>::epsilon();
-
-        // --- Fix C: positivity-preserving first-order fallback --------------
-        // The high-order WENO/TENO reconstruction of the LLF-split conservative
-        // fluxes is not positivity-preserving: in the under-expanded jet near-
-        // field it overshoots the energy component and the update yields
-        // rho*e < 0 (negative internal energy) even though LLF keeps rho > 0.
-        // Detect a rarefaction / near-vacuum pocket (deep local minimum of
-        // density OR pressure across this face, along this direction) and use
-        // the first-order LLF (Rusanov) flux there, which is positivity-robust
-        // under the usual CFL. A shock is a monotone jump, not a local minimum,
-        // so the bow shock is not smeared. Mirrors the HLLC rarefaction_pocket
-        // sensor in Riemann.h. No-op in smooth flow (a 10x local drop is needed).
-        {
-          constexpr Real RAREFY_RATIO = Real(0.1);
-          bool pocket = false;
-          for (int side = -1; side <= 0 && !pocket; ++side) {  // cells iv-ivd, iv
-            const IntVect c = iv + side * ivd;
-            const Real rc = prims_in(c, cls_t::QRHO);
-            const Real pc = prims_in(c, cls_t::QPRES);
-            pocket = (rc < RAREFY_RATIO * amrex::max(prims_in(c - ivd, cls_t::QRHO),
-                                                     prims_in(c + ivd, cls_t::QRHO))) ||
-                     (pc < RAREFY_RATIO * amrex::max(prims_in(c - ivd, cls_t::QPRES),
-                                                     prims_in(c + ivd, cls_t::QPRES)));
-          }
-          if (pocket) {
-            Real fL[cls_t::NCONS], fR[cls_t::NCONS], uL[cls_t::NCONS], uR[cls_t::NCONS];
-            cls->prims2flux(iv - ivd, dir, prims_in, fL);
-            cls->prims2cons(iv - ivd, prims_in, uL);
-            cls->prims2flux(iv, dir, prims_in, fR);
-            cls->prims2cons(iv, prims_in, uR);
-            if (rz_pressure_split) {
-              fL[cls_t::UMX] -= prims_in(iv - ivd, cls_t::QPRES);
-              fR[cls_t::UMX] -= prims_in(iv, cls_t::QPRES);
-            }
-            for (int n = 0; n < cls_t::NCONS; ++n)
-              flx(iv, n) = Real(0.5) * (fL[n] + fR[n]) -
-                           Real(0.5) * alpha * (uR[n] - uL[n]);
-            return;
-          }
-        }
-        // -------------------------------------------------------------------
-
-        const auto roe_avg = cls->roe_avg_state(iv, dir, prims_in);
-
-        Real cons[cls_t::NCONS], f[cls_t::NCONS], fp[2 * ng][cls_t::NCONS],
-            fm[2 * ng][cls_t::NCONS];
-        for (int m = 0; m < 2 * ng; ++m) {
-          // LLF splitting into left- and right-running fluxes
-          const IntVect c = iv + (m - ng) * ivd;
-          cls->prims2flux(c, dir, prims_in, f);
-          cls->prims2cons(c, prims_in, cons);
-          if (rz_pressure_split) {
-            f[cls_t::UMX] -= prims_in(c, cls_t::QPRES);
-          }
-
-          for (int n = 0; n < cls_t::NCONS; ++n) {
-            fp[m][n] = 0.5 * (cons[n] + f[n] / alpha);
-            fm[m][n] = 0.5 * (cons[n] - f[n] / alpha);
-          }
-
-          // Convert into characteristic variables
-          cls->cons2char(roe_avg, fp[m]);
-          cls->cons2char(roe_avg, fm[m]);
-        }
 
 #if AMREX_USE_GPIBM
+        // Build the complete IBM usability/candidate mask before any stencil
+        // state is read.  Fluid and reconstructed GP cells are usable;
+        // interior solid cells are not.  point_needed is the union of the
+        // surviving left/right candidate supports and therefore defines the
+        // only cells that LLF splitting and its wave-speed estimate may read.
+        bool usable[2 * ng];
+        bool point_needed[2 * ng] = {};
+        for (int m = 0; m < 2 * ng; ++m) {
+          const IntVect c = iv + (m - ng) * ivd;
+          usable[m] = (!ibMarkers(c, 0)) || (ibMarkers(c, 1) != 0);
+        }
+
         amrex::GpuArray<Real, 3> fp_weight3{Real(3.0), Real(6.0), Real(1.0)};
         amrex::GpuArray<Real, 3> fm_weight3{Real(3.0), Real(6.0), Real(1.0)};
         amrex::GpuArray<Real, 4> fp_weight4{Real(6.0), Real(9.0), Real(1.0), Real(4.0)};
         amrex::GpuArray<Real, 4> fm_weight4{Real(6.0), Real(9.0), Real(1.0), Real(4.0)};
         bool has_fp = true;
         bool has_fm = true;
-        if constexpr (Scheme::ncand == 3) {
-          bool usable[2 * ng];
-          for (int m = 0; m < 2 * ng; ++m) {
-            const IntVect c = iv + (m - ng) * ivd;
-            usable[m] = (!ibMarkers(c, 0)) || (ibMarkers(c, 1) != 0);
-          }
 
-          // Candidate maps for the WENO5/TENO5 stencils built above. A
-          // reconstructed IBM ghost point is usable; an interior solid cell is
-          // not. This masks only the candidate that actually reads bad data.
+        if constexpr (Scheme::ncand == 3) {
           const bool fp_ok0 = usable[2] && usable[3] && usable[4];
           const bool fp_ok1 = usable[1] && usable[2] && usable[3];
           const bool fp_ok2 = usable[0] && usable[1] && usable[2];
@@ -544,18 +523,16 @@ class weno_t {
           if (!fm_ok1) fm_weight3[1] = Real(0.0);
           if (!fm_ok2) fm_weight3[2] = Real(0.0);
 
+          if (fp_ok0) for (int m = 2; m <= 4; ++m) point_needed[m] = true;
+          if (fp_ok1) for (int m = 1; m <= 3; ++m) point_needed[m] = true;
+          if (fp_ok2) for (int m = 0; m <= 2; ++m) point_needed[m] = true;
+          if (fm_ok0) for (int m = 1; m <= 3; ++m) point_needed[m] = true;
+          if (fm_ok1) for (int m = 2; m <= 4; ++m) point_needed[m] = true;
+          if (fm_ok2) for (int m = 3; m <= 5; ++m) point_needed[m] = true;
+
           has_fp = fp_ok0 || fp_ok1 || fp_ok2;
           has_fm = fm_ok0 || fm_ok1 || fm_ok2;
         } else if constexpr (Scheme::ncand == 4) {
-          bool usable[2 * ng];
-          for (int m = 0; m < 2 * ng; ++m) {
-            const IntVect c = iv + (m - ng) * ivd;
-            usable[m] = (!ibMarkers(c, 0)) || (ibMarkers(c, 1) != 0);
-          }
-
-          // Candidate maps for TENO6.  The first three candidates use three
-          // points, and the extra candidate uses four points.  A reconstructed
-          // IBM ghost is usable; an interior solid cell is not.
           const bool fp_ok0 = usable[2] && usable[3] && usable[4];
           const bool fp_ok1 = usable[1] && usable[2] && usable[3];
           const bool fp_ok2 = usable[0] && usable[1] && usable[2];
@@ -574,11 +551,88 @@ class weno_t {
           if (!fm_ok2) fm_weight4[2] = Real(0.0);
           if (!fm_ok3) fm_weight4[3] = Real(0.0);
 
+          if (fp_ok0) for (int m = 2; m <= 4; ++m) point_needed[m] = true;
+          if (fp_ok1) for (int m = 1; m <= 3; ++m) point_needed[m] = true;
+          if (fp_ok2) for (int m = 0; m <= 2; ++m) point_needed[m] = true;
+          if (fp_ok3) for (int m = 2; m <= 5; ++m) point_needed[m] = true;
+          if (fm_ok0) for (int m = 1; m <= 3; ++m) point_needed[m] = true;
+          if (fm_ok1) for (int m = 2; m <= 4; ++m) point_needed[m] = true;
+          if (fm_ok2) for (int m = 3; m <= 5; ++m) point_needed[m] = true;
+          if (fm_ok3) for (int m = 0; m <= 3; ++m) point_needed[m] = true;
+
           has_fp = fp_ok0 || fp_ok1 || fp_ok2 || fp_ok3;
           has_fm = fm_ok0 || fm_ok1 || fm_ok2 || fm_ok3;
         }
-        if (!has_fp || !has_fm) {
-          Real fL[cls_t::NCONS], fR[cls_t::NCONS], uL[cls_t::NCONS], uR[cls_t::NCONS];
+        const bool force_first_order = !has_fp || !has_fm;
+
+        // A face adjacent to fluid must have a valid reconstructed GP on its
+        // solid side.  P0 initialisation fails fast if this invariant cannot
+        // be met; retain a device assertion here as a last line of defence.
+        if (force_first_order) {
+          AMREX_ASSERT(usable[ng - 1] && usable[ng]);
+        }
+#else
+        const bool force_first_order = false;
+#endif
+
+        Real alpha_raw = Real(0.0);
+#if AMREX_USE_GPIBM
+        for (int m = 0; m < 2 * ng; ++m) {
+          const bool read_point = force_first_order
+                                      ? (m == ng - 1 || m == ng)
+                                      : point_needed[m];
+          if (!read_point) continue;
+          const IntVect c = iv + (m - ng) * ivd;
+          const Real wavespeed = std::abs(prims_in(c, cls_t::QU + dir)) +
+                                 prims_in(c, cls_t::QC);
+          if (wavespeed > alpha_raw) alpha_raw = wavespeed;
+        }
+#else
+        alpha_raw = cls->max_char_speed(iv, dir, ng, prims_in);
+#endif
+        AMREX_ASSERT_WITH_MESSAGE(alpha_raw > Real(0.0), "Non-positive LLF alpha in WENO/TENO flux split");
+        const Real alpha = (alpha_raw > Real(0.0))
+                               ? alpha_raw
+                               : std::numeric_limits<Real>::epsilon();
+
+        // --- Fix C: positivity-preserving first-order fallback --------------
+        // The high-order WENO/TENO reconstruction of the LLF-split conservative
+        // fluxes is not positivity-preserving: in the under-expanded jet near-
+        // field it overshoots the energy component and the update yields
+        // rho*e < 0 (negative internal energy) even though LLF keeps rho > 0.
+        // Detect a rarefaction / near-vacuum pocket (deep local minimum of
+        // density OR pressure across this face, along this direction) and use
+        // the first-order LLF (Rusanov) flux there, which is positivity-robust
+        // under the usual CFL. A shock is a monotone jump, not a local minimum,
+        // so the bow shock is not smeared. Mirrors the HLLC rarefaction_pocket
+        // sensor in Riemann.h. No-op in smooth flow (a 10x local drop is needed).
+        bool first_order_flux = force_first_order;
+        if (!first_order_flux) {
+          constexpr Real RAREFY_RATIO = Real(0.1);
+          bool pocket = false;
+#if AMREX_USE_GPIBM
+          // The sensor uses cells m=1..4.  Disable it near an IBM surface
+          // unless every one is usable; it is a robustness heuristic and
+          // must never reintroduce reads from masked interior-solid cells.
+          const bool sensor_usable = usable[1] && usable[2] &&
+                                     usable[3] && usable[4];
+#else
+          const bool sensor_usable = true;
+#endif
+          for (int side = -1; side <= 0 && sensor_usable && !pocket; ++side) {
+            const IntVect c = iv + side * ivd;
+            const Real rc = prims_in(c, cls_t::QRHO);
+            const Real pc = prims_in(c, cls_t::QPRES);
+            pocket = (rc < RAREFY_RATIO * amrex::max(prims_in(c - ivd, cls_t::QRHO),
+                                                     prims_in(c + ivd, cls_t::QRHO))) ||
+                     (pc < RAREFY_RATIO * amrex::max(prims_in(c - ivd, cls_t::QPRES),
+                                                     prims_in(c + ivd, cls_t::QPRES)));
+          }
+          first_order_flux = pocket;
+        }
+        if (first_order_flux) {
+          Real fL[cls_t::NCONS], fR[cls_t::NCONS];
+          Real uL[cls_t::NCONS], uR[cls_t::NCONS];
           cls->prims2flux(iv - ivd, dir, prims_in, fL);
           cls->prims2cons(iv - ivd, prims_in, uL);
           cls->prims2flux(iv, dir, prims_in, fR);
@@ -587,12 +641,45 @@ class weno_t {
             fL[cls_t::UMX] -= prims_in(iv - ivd, cls_t::QPRES);
             fR[cls_t::UMX] -= prims_in(iv, cls_t::QPRES);
           }
-          for (int n = 0; n < cls_t::NCONS; ++n)
+          for (int n = 0; n < cls_t::NCONS; ++n) {
             flx(iv, n) = Real(0.5) * (fL[n] + fR[n]) -
                          Real(0.5) * alpha * (uR[n] - uL[n]);
+          }
           return;
         }
+        // -------------------------------------------------------------------
+
+        const auto roe_avg = cls->roe_avg_state(iv, dir, prims_in);
+
+        Real cons[cls_t::NCONS], f[cls_t::NCONS], fp[2 * ng][cls_t::NCONS],
+            fm[2 * ng][cls_t::NCONS];
+        for (int m = 0; m < 2 * ng; ++m) {
+#if AMREX_USE_GPIBM
+          if (!point_needed[m]) {
+            for (int n = 0; n < cls_t::NCONS; ++n) {
+              fp[m][n] = Real(0.0);
+              fm[m][n] = Real(0.0);
+            }
+            continue;
+          }
 #endif
+          // LLF splitting into left- and right-running fluxes
+          const IntVect c = iv + (m - ng) * ivd;
+          cls->prims2flux(c, dir, prims_in, f);
+          cls->prims2cons(c, prims_in, cons);
+          if (rz_pressure_split) {
+            f[cls_t::UMX] -= prims_in(c, cls_t::QPRES);
+          }
+
+          for (int n = 0; n < cls_t::NCONS; ++n) {
+            fp[m][n] = 0.5 * (cons[n] + f[n] / alpha);
+            fm[m][n] = 0.5 * (cons[n] - f[n] / alpha);
+          }
+
+          // Convert into characteristic variables
+          cls->cons2char(roe_avg, fp[m]);
+          cls->cons2char(roe_avg, fm[m]);
+        }
 
         // Reconstruct with upwind stencils
         Real fpL[cls_t::NCONS], fmR[cls_t::NCONS], s[2 * ng];

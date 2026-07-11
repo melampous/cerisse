@@ -190,6 +190,10 @@ void plotSURF(
             amrex::Print() << "Error: Cannot open file " << filename << " for writing.\n";
             continue;
         }
+        // Full double precision so surface diagnostics (P/T/tau/dTdn) round-trip
+        // losslessly — required to resolve bitwise vs FP-reassociation-level
+        // CPU/GPU differences (default ostream precision is only 6 sig figs).
+        ofs << std::setprecision(17);
 
         // ==================================================================
         // 1. Count Points and Cells

@@ -1,0 +1,51 @@
+#-----------------------------------------------------------------------------#
+#  IBM-solid underexpanded sonic jet (NPR=3), RZ axisymmetric
+#-----------------------------------------------------------------------------#
+max_step  = 12000
+stop_time = 10.0
+cfl = 0.3
+
+cns.order_rk  = 3
+cns.stages_rk = 3
+
+cns.lo_bc = 3 2     # r=0 axis | z-lo foextrap (inside plate)
+cns.hi_bc = 2 2     # r-hi outflow | z-hi outflow
+cns.nstep_screen_output = 500
+cns.verbose = 0
+
+ib.filename = plate.dat
+ib.move = 0
+ib.plot_surf = 0
+
+geometry.is_periodic = 0 0
+geometry.coord_sys   = 1            # RZ
+geometry.prob_lo     = 0.0   -0.02
+geometry.prob_hi     = 0.06   0.24
+amr.n_cell           = 96     416   # base dx = 0.625 mm
+
+amr.max_level       = 3
+amr.ref_ratio       = 2
+amr.regrid_int      = 20
+amr.blocking_factor  = 8
+amr.max_grid_size    = 64
+amr.n_error_buf     = 2
+amr.grid_eff        = 0.8
+
+amr.plot_files_output = 1
+amr.plot_file         = ./plot/plt
+amr.plot_int          = 2000
+amr.derive_plot_vars  = pressure velocity temperature
+amr.v = 1
+
+amr.checkpoint_files_output = 1
+amr.check_file              = ./plot/chk
+amr.check_int               = 6000
+
+amrex.the_arena_is_managed = 0
+
+# uniform overrides (last value wins)
+amr.max_level = 0
+amr.n_cell = 192 832
+amr.plot_file = ./plot_uni/plt
+max_step = 10000
+amr.checkpoint_files_output = 0

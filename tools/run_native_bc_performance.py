@@ -24,10 +24,21 @@ class BcSpec:
     name: str
     hi_bc: str
     bc_mode: int
+    extras: tuple[str, ...] = ()
 
 
 BCS = {
     "char": BcSpec("char", hi_bc="7 -1", bc_mode=1),
+    "persistent_lodi": BcSpec(
+        "persistent_lodi", hi_bc="2 -1", bc_mode=0,
+        extras=(
+            "cns.nscbc_lo=0 0",
+            "cns.nscbc_hi=2 0",
+            "cns.nscbc_order=2",
+            "cns.nscbc_use_transverse=1",
+            "cns.nscbc_transverse_relax=0.25",
+        ),
+    ),
     "lodi": BcSpec("lodi", hi_bc="7 -1", bc_mode=3),
     "plane": BcSpec("plane", hi_bc="7 -1", bc_mode=2),
     "foextrap": BcSpec("foextrap", hi_bc="2 -1", bc_mode=0),
@@ -92,6 +103,7 @@ def run_case(bc: BcSpec, nx: int, ny: int, steps: int,
         "prob.sigma_y=1.0",
         "prob.carrier_y=4",
     ]
+    cmd.extend(bc.extras)
     wall = run_command(cmd, CASE_DIR, stdout, timeout + 30)
     text = stdout.read_text(errors="replace")
     return {

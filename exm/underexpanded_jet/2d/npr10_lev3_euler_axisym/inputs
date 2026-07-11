@@ -1,0 +1,48 @@
+#==============================================================================
+#  2D Axisymmetric (RZ) Jet — NPR_0=10.0, pe/pa~5.283
+#  Same nozzle (D_e=10mm) and ambient (p=101325 Pa, T=300K) as 3D case
+#  Dimension mapping:  r → x-direction ∈ [0, 0.06]
+#                      z → y-direction ∈ [0, 0.24]
+#==============================================================================
+max_step  = 20000
+stop_time = 1.0
+cfl = 0.3
+
+cns.order_rk  = 3
+cns.stages_rk = 3
+
+# BC: x(r)-lo = Symmetry(3), x(r)-hi = Outflow(2),
+#     y(z)-lo = Inflow(1) = Jet,  y(z)-hi = Outflow(2)
+cns.lo_bc = 3 1
+cns.hi_bc = 2 2
+cns.nstep_screen_output = 100
+cns.verbose = 1
+
+#--------------------------- COMPUTATIONAL DOMAIN ----------------------------#
+geometry.is_periodic = 0 0
+geometry.coord_sys   = 1           # 1 = RZ axisymmetric
+geometry.prob_lo     = 0.0  0.0
+geometry.prob_hi     = 0.06 0.24   # r_max=60mm (6 De), z_max=240mm (24 De)
+amr.n_cell           = 96   384    # base = 3D L0 (0.625 mm)
+
+#------------------------------- REFINEMENT ----------------------------------#
+amr.max_level       = 3         # 3 levels: L1=0.313, L2=0.156, L3=0.078 mm
+amr.ref_ratio       = 2 2 2
+amr.regrid_int      = 20
+amr.blocking_factor = 32
+amr.max_grid_size   = 128 256 256 256
+amr.n_error_buf     = 2 2 2 2
+amr.grid_eff        = 0.85
+
+#-------------------------------- PLOTFILES ----------------------------------#
+amr.plot_files_output = 1
+amr.plot_file         = ./plot/plt
+amr.plot_int          = 500
+amr.derive_plot_vars  = pressure velocity temperature
+amr.v = 1
+
+amr.checkpoint_files_output = 1
+amr.check_int  = 2000
+amr.check_file = ./plot/chk
+
+amrex.the_arena_is_managed = 0

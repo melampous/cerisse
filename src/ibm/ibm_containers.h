@@ -50,6 +50,11 @@
 template<typename marker_t>
 class IBFab : public amrex::BaseFab<marker_t> {
 public:
+  // FabArray communication creates temporary FABs before defining their
+  // storage.  Match BaseFab's default-constructible interface so standard
+  // FillBoundary/ParallelCopy paths work for marker data.
+  IBFab() = default;
+
   explicit IBFab(const amrex::Box& b, int ncomp,
                  bool alloc = true, bool shared = false, amrex::Arena* ar = nullptr)
       : amrex::BaseFab<marker_t>(b, ncomp, alloc, shared, ar) {}

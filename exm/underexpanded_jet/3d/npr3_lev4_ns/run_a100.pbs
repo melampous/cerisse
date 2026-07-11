@@ -1,0 +1,24 @@
+#!/bin/bash
+#PBS -l select=1:ncpus=8:mem=64gb:ngpus=1:gpu_type=A100
+#PBS -l walltime=24:00:00
+#PBS -N run_npr3_visc
+#PBS -o run.out
+#PBS -e run.err
+
+cd $PBS_O_WORKDIR
+module load tools/prod
+module load GCC/13.3.0
+module load OpenMPI/5.0.3-GCC-13.3.0
+module load CUDA/12.6.0
+
+echo "=== 3d_npr3_visc on A100 ==="
+echo "Host: $(hostname)"; date
+nvidia-smi --query-gpu=name,compute_cap,memory.total --format=csv,noheader
+
+if [ ! -f main3d.gnu.TPROF.MPI.CUDA.ex ]; then
+  echo ERROR: binary missing; exit 1
+fi
+
+rm -rf plot
+time mpirun -np 1 ./main3d.gnu.TPROF.MPI.CUDA.ex inputs
+date

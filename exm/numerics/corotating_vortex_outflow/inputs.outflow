@@ -1,0 +1,82 @@
+# =====================================================================
+#  2-D co-rotating Lamb-Oseen vortex pair (CVP) aeroacoustic showcase.
+#  OUTFLOW VARIANT: lateral (x) boundaries use foextrap (code 2);
+#  y-direction uses characteristic (code 7).
+#
+#  Narrow domain centered on origin: 8x8 (-4 to +4 in both x,y).
+#  Same IC and physics as the WIDE domain, only BC/geometry differ.
+#
+#  Non-dim: rho0=1, c0=1, gamma=1.4 => p0=1/gamma=0.7142857.
+#  M_rot=0.20, Gamma=1.2566370614, b=1, rc=0.25 (b/rc=4).
+#  Omega=0.40, T_rot=15.708, f_ac=0.12732, lambda=7.854.
+# =====================================================================
+
+amr.max_step  = 1000000
+amr.stop_time = 55.0           # ~3.5 T_rot with 85 plot frames
+
+cfl       = 0.30
+
+cns.order_rk            = 3      # RK3 (4 stages)
+cns.stages_rk           = 4
+cns.nstep_screen_output = 200
+cns.verbose             = 1
+
+# ----- boundary conditions (OUTFLOW VARIANT) -----
+# x-faces (lo/hi in direction 0): foextrap (code 2, lateral open)
+# y-faces (lo/hi in direction 1): characteristic (code 7, far-field)
+cns.lo_bc = 2 7
+cns.hi_bc = 2 7
+
+# ----- problem parameters -----
+prob.gamma   = 1.4
+prob.rho0    = 1.0
+prob.p0      = 0.7142857142857143
+prob.Gamma   = 1.2566370614359172
+prob.b       = 1.0
+prob.rc      = 0.25
+
+# BC mode: 1 = characteristic far-field (used for y-faces only in this variant)
+# x-faces handled purely by code 2 (foextrap), so prob.bc_mode/use_lodi only
+# affect y-direction characteristic fallback.
+prob.bc_mode  = 1
+prob.use_lodi = 0
+prob.lodi_pressure_relax   = 0.0
+prob.lodi_transverse_relax = 0.25
+
+# AMR tagging: refine the two vortex cores only
+prob.tag_vort_frac = 0.15
+prob.tag_radius    = 1.5
+prob.tag_graddens  = 0.05
+
+# ----- geometry: NARROW square domain centered on origin, NOT periodic -----
+geometry.is_periodic = 0 0
+geometry.coord_sys   = 0
+geometry.prob_lo     = -4.0 -4.0
+geometry.prob_hi     =  4.0  4.0
+
+# ----- AMR mesh (NARROW): dx0 ~ 0.25 at L0, finest dxf ~ 0.03125 at L3 -----
+amr.n_cell           = 32 32
+amr.max_level        = 3
+amr.ref_ratio        = 2 2 2
+amr.regrid_int       = 4
+amr.blocking_factor  = 8
+amr.max_grid_size    = 32
+amr.n_error_buf      = 2 2 2
+amr.grid_eff         = 0.85
+amr.v                = 1
+
+# ----- output: 85 frames over t=55 (T_rot ~ 15.708) -----
+amr.plot_files_output = 1
+amr.plot_file         = ./plot/plt
+amr.plot_int          = 650       # 650,000 / 55 ~ 11,818 steps per frame; adjust as needed
+amr.derive_plot_vars  = pressure velocity density
+
+amr.checkpoint_files_output = 0
+amr.check_int               = 0
+amr.check_file              = ./plot/chk
+
+# ----- arena (managed for optional GPU build; harmless on CPU) -----
+amrex.the_arena_init_size         = 8
+amrex.the_device_arena_init_size  = 8
+amrex.the_managed_arena_init_size = 8
+amrex.the_arena_is_managed        = 1

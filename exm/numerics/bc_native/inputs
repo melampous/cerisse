@@ -1,0 +1,52 @@
+# Native Cerisse boundary-condition acoustic-packet validation.
+# The run script overrides mesh, domain length, final time, and BC mode.
+
+max_step  = 1000000
+stop_time = 0.055
+cfl       = 0.40
+
+cns.order_rk            = 3
+cns.stages_rk           = 4
+cns.lo_bc               = 1 -1
+cns.hi_bc               = 7 -1
+cns.nstep_screen_output = 100000
+cns.verbose             = 0
+
+prob.mode      = 0
+prob.bc_mode   = 1
+prob.mach      = 0.30
+prob.amp       = 1.0e-4
+prob.theta_deg = 30.0
+prob.x0        = 0.30
+prob.y0        = 0.50
+prob.sigma_x   = 0.045
+prob.sigma_y   = 0.090
+
+geometry.is_periodic = 0 1
+geometry.coord_sys   = 0
+geometry.prob_lo     = 0.0 0.0
+geometry.prob_hi     = 1.0 1.0
+
+amr.n_cell           = 128 64
+amr.max_level        = 0
+amr.ref_ratio        = 2
+amr.regrid_int       = 1000000
+amr.blocking_factor  = 8
+amr.max_grid_size    = 512
+amr.n_error_buf      = 0
+amr.grid_eff         = 0.90
+amr.v                = 0
+
+amr.plot_files_output = 1
+amr.plot_file         = ./plot/plt
+amr.plot_int          = 1000000
+amr.derive_plot_vars  = pressure velocity density
+
+amr.checkpoint_files_output = 0
+amr.check_int               = 0
+amr.check_file              = ./plot/chk
+
+amrex.the_arena_init_size         = 8
+amrex.the_device_arena_init_size  = 8
+amrex.the_managed_arena_init_size = 8
+amrex.the_arena_is_managed        = 1

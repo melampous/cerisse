@@ -25,9 +25,26 @@ struct ProbParm {
 typedef closures_dt<indicies_t, visc_suth_t, cond_suth_t,
                     calorifically_perfect_gas_t<indicies_t>>
     ProbClosures;
-typedef rhs_dt<riemann_t<false, ProbClosures>, no_diffusive_t, no_source_t>
-// typedef rhs_dt<rusanov_t<ProbClosures>, no_diffusive_t, no_source_t>
-    ProbRHS;
+
+#ifndef SOD_EULER_SCHEME_ID
+#define SOD_EULER_SCHEME_ID 0
+#endif
+
+#if (SOD_EULER_SCHEME_ID == 0)
+using ProbEuler = riemann_t<false, ProbClosures>;
+#elif (SOD_EULER_SCHEME_ID == 1)
+using ProbEuler = afd_hllc_teno5_t<ProbClosures>;
+#elif (SOD_EULER_SCHEME_ID == 2)
+using ProbEuler = afd_hllc_wenoz5_t<ProbClosures>;
+#elif (SOD_EULER_SCHEME_ID == 3)
+using ProbEuler = weno_t<ReconScheme::Teno5, ProbClosures>;
+#elif (SOD_EULER_SCHEME_ID == 4)
+using ProbEuler = weno_t<ReconScheme::WenoZ5, ProbClosures>;
+#else
+#error "Unknown SOD_EULER_SCHEME_ID"
+#endif
+
+typedef rhs_dt<ProbEuler, no_diffusive_t, no_source_t> ProbRHS;
 
 void inline inputs() {
   ParmParse pp;

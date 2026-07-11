@@ -2,14 +2,17 @@
 #include <CNS.h>
 #include <CNSconstants.h>
 #include <prob.h>
+#include <cmath>
 #include <iomanip>
+#include <limits>
+#include <memory>
 
 #ifdef AMREX_USE_GPIBM
 #include <ibm_solver.h>
 #endif
 using namespace amrex;
 
-Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
+Real CNS::advance(Real time, Real dt, int iteration, int ncycle) {
   BL_PROFILE("CNS::advance()");
 
   state[0].allocOldData();
@@ -22,6 +25,84 @@ Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
   int nghost= d_prob_closures->NGHOST;
   MultiFab Stemp(grids,dmap,ncons,nghost,MFInfo(),Factory());
 
+#ifdef AMREX_USE_GPIBM
+  // Moving geometry must follow the RK abscissa, not merely the end-of-step
+  // time.  Each AMR level receives its own (time,dt) from AMReX, so this also
+  // makes fine-level subcycles use their actual substep times.
+  std::unique_ptr<FabArray<BaseFab<uint8_t>>> old_markers;
+  Real prepared_ibm_time = std::numeric_limits<Real>::quiet_NaN();
+  if (CNS::ib_move) {
+#ifdef CNS_USE_FSI
+    auto& mfab = *IBM::ib.bmf_a[level];
+    old_markers = std::make_unique<FabArray<BaseFab<uint8_t>>>(
+        mfab.boxArray(), mfab.DistributionMap(), 1, mfab.nGrow(),
+        MFInfo().SetArena(The_Async_Arena()));
+#else
+    amrex::Abort("ib.move=1 requires a USE_FSI=TRUE build");
+#endif
+  }
+
+  auto prepare_ibm_stage = [&](Real stage_time, MultiFab& stage_state,
+                               bool rebuild_surface) {
+    if (!CNS::ib_move) return;
+
+#ifdef CNS_USE_FSI
+    const bool have_prepared_time = std::isfinite(prepared_ibm_time);
+    const Real scale = have_prepared_time
+        ? amrex::max(Real(1.0), amrex::max(std::abs(stage_time),
+                                           std::abs(prepared_ibm_time)))
+        : Real(1.0);
+    const bool same_time = have_prepared_time
+        && std::abs(stage_time - prepared_ibm_time)
+               <= Real(64.0) * std::numeric_limits<Real>::epsilon() * scale;
+
+    if (!same_time) {
+      // Snapshot this level's previous topology before replacing its marker MF.
+      auto& mfab_pre = *IBM::ib.bmf_a[level];
+      for (MFIter mfi(mfab_pre, false); mfi.isValid(); ++mfi) {
+        const Box& bx = mfi.fabbox();
+        auto const& dst = old_markers->array(mfi);
+        auto const& src = mfab_pre.const_array(mfi);
+        ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+          dst(i,j,k,0) = src(i,j,k,0);
+        });
+      }
+      // rebuildIBM destroys mfab_pre; make the queued snapshot complete first.
+      Gpu::streamSynchronize();
+
+#ifdef CNS_FSI_DEFORMABLE
+      PROB::update_geometry(stage_time, IBM::ib.geom_a, IBM::ib.ngeom);
+      IBM::ib.rebuildGeometryData();
+#else
+      PROB::update_rigid_transforms(stage_time, IBM::ib.transform_a,
+                                    IBM::ib.ngeom);
+      for (int i = 0; i < IBM::ib.ngeom; ++i) {
+        IBM::ib.updateRigidTransform(i, IBM::ib.transform_a[i]);
+      }
+#endif
+
+      // Surface ownership/interpolation is only needed at the final synchronized
+      // subcycle.  Marker and GP geometry, however, is required at every stage.
+      rebuildIBM(false);
+      IBM::ib.fixExposedCells(*old_markers, stage_state, level);
+      prepared_ibm_time = stage_time;
+    }
+
+    PROB::Motion::sim_time = stage_time;
+
+    if (rebuild_surface && level == parent->finestLevel()) {
+      for (int lev = parent->finestLevel(); lev >= 0; --lev) {
+        IBM::ib.computeSurfIndices(lev);
+      }
+    }
+#else
+    amrex::ignore_unused(stage_time, stage_state, rebuild_surface);
+#endif
+  };
+#else
+  auto prepare_ibm_stage = [](Real, MultiFab&, bool) {};
+#endif
+
   FluxRegister* fr_as_crse = nullptr;
   if (do_reflux && level < parent->finestLevel()) {
     CNS& fine_level = getLevel(level + 1);
@@ -33,88 +114,92 @@ Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
     fr_as_fine = flux_reg.get();
   }
 
-#ifdef AMREX_USE_GPIBM
-  // Moving-geometry update.
-  //
-  // Geometry position is updated ONLY at the coarsest level (level 0).
-  // The transform is global — it applies to all levels simultaneously.
-  // Fine-level sub-cycles only rebuild markers and GPs at their own level
-  // (the geometry position was already set by the coarse-level advance).
-  //
-  // This prevents fine-level sub-steps from advancing the geometry to
-  // inconsistent times and avoids redundant transform updates.
-  if (CNS::ib_move) {
-    // Snapshot pre-move markers at THIS level
-    auto& mfab_pre = *IBM::ib.bmf_a[level];
-    FabArray<BaseFab<uint8_t>> old_markers(
-        mfab_pre.boxArray(), mfab_pre.DistributionMap(),
-        1, mfab_pre.nGrow(), MFInfo().SetArena(The_Managed_Arena()));
-    for (MFIter mfi(mfab_pre, false); mfi.isValid(); ++mfi) {
-      const Box& bx = mfi.fabbox();
-      auto const& dst = old_markers.array(mfi);
-      auto const& src = mfab_pre.const_array(mfi);
-      ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
-        dst(i,j,k,0) = src(i,j,k,0);
-      });
-    }
-
-    // Only the coarsest level updates the geometry transform.
-    // Fine levels reuse the transform already set by the coarse advance.
-    if (level == 0) {
-#ifdef CNS_USE_FSI
-#  ifdef CNS_FSI_DEFORMABLE
-      PROB::update_geometry(time + dt, IBM::ib.geom_a, IBM::ib.ngeom);
-      IBM::ib.rebuildGeometryData();
-#  else
-      PROB::update_rigid_transforms(time + dt, IBM::ib.transform_a, IBM::ib.ngeom);
-      for (int i = 0; i < IBM::ib.ngeom; ++i) {
-          IBM::ib.updateRigidTransform(i, IBM::ib.transform_a[i]);
-      }
-#  endif
-#endif
-    }
-
-    // Rebuild markers and GPs at THIS level only (geometry is already at t^{n+1})
-    rebuildIBM();
-
-    // Fill cells newly exposed by the geometry motion at this level
-    IBM::ib.fixExposedCells(old_markers, S1, level);
-  }
-#endif
-
   if (fr_as_crse) {
     fr_as_crse->setVal(Real(0.0));
   }
 
+  // Persistent NSCBC ghost cells are an ODE state coupled to the interior
+  // solution.  Integrate them with exactly the same RK coefficients used for
+  // S2; nscbc_ghost_state stores only the accepted end-of-step state.
+  std::unique_ptr<MultiFab> G_old;
+  std::unique_ptr<MultiFab> G_stage;
+  std::unique_ptr<MultiFab> G_rhs;
+  if (use_nscbc) {
+    if (!nscbc_ghost_state) {
+      amrex::Abort("NSCBC enabled but persistent ghost state is not allocated");
+    }
+    if (!nscbc_ghost_initialized) {
+      initialize_nscbc_ghost_state(time);
+    }
+    G_old = std::make_unique<MultiFab>(
+      grids, dmap, ncons, nghost, MFInfo(), Factory());
+    G_stage = std::make_unique<MultiFab>(
+      grids, dmap, ncons, nghost, MFInfo(), Factory());
+    G_rhs = std::make_unique<MultiFab>(
+      grids, dmap, ncons, nghost, MFInfo(), Factory());
+    MultiFab::Copy(*G_old, *nscbc_ghost_state, 0, 0, ncons, nghost);
+    MultiFab::Copy(*G_stage, *nscbc_ghost_state, 0, 0, ncons, nghost);
+  }
+
+  auto prepare_nscbc_stage = [&](MultiFab& stage_state) {
+    if (!use_nscbc) return;
+    copy_nscbc_ghost_to_state(stage_state, *G_stage);
+    compute_nscbc_ghost_rhs(stage_state, *G_rhs);
+  };
+
+  auto ghost_saxpy = [&](Real a) {
+    if (use_nscbc) {
+      MultiFab::Saxpy(*G_stage, a, *G_rhs, 0, 0, ncons, nghost);
+    }
+  };
+
   if (order_rk == -2) {
     // Original time integration ///////////////////////////////////////////////
     // RK2 stage 1
+    prepare_ibm_stage(time, S1, false);
     FillPatch(*this, Stemp, nghost, time, State_Type, 0, ncons);
-    compute_rhs(Stemp, Real(0.5) * dt, fr_as_crse, fr_as_fine);
+    prepare_nscbc_stage(Stemp);
+    compute_rhs(Stemp, Real(0.5) * dt, fr_as_crse, fr_as_fine, time);
     // U^* = U^n + dt*dUdt^n
     MultiFab::LinComb(S2, Real(1.0), S1, 0, dt, Stemp, 0, 0, ncons, 0);
+    ghost_saxpy(dt);
     // RK2 stage 2
     // After fillpatch Sborder = U^n+dt*dUdt^n
     state[0].setNewTimeLevel(time + dt);
+    prepare_ibm_stage(time + dt, S2, false);
     FillPatch(*this, Stemp, nghost, time + dt, State_Type, 0, ncons);
-    compute_rhs(Stemp, Real(0.5) * dt, fr_as_crse, fr_as_fine);
+    prepare_nscbc_stage(Stemp);
+    compute_rhs(Stemp, Real(0.5) * dt, fr_as_crse, fr_as_fine, time + dt);
     // S_new = 0.5*(Sborder+S_old) = U^n + 0.5*dt*dUdt^n
     MultiFab::LinComb(S2, Real(0.5), S1, 0, Real(0.5), S2, 0, 0, ncons, 0);
     // S_new += 0.5*dt*dSdt
     MultiFab::Saxpy(S2, Real(0.5) * dt, Stemp, 0, 0, ncons, 0);
+    if (use_nscbc) {
+      MultiFab::LinComb(*G_stage, Real(0.5), *G_old, 0,
+                        Real(0.5), *G_stage, 0, 0, ncons, nghost);
+      ghost_saxpy(Real(0.5) * dt);
+    }
     // We now have S_new = U^{n+1} = (U^n+0.5*dt*dUdt^n) + 0.5*dt*dUdt^*
 
 
     ////////////////////////////////////////////////////////////////////////////
   } else if (order_rk == 0) {  // returns rhs
+    if (CNS::ib_move) {
+      amrex::Abort("order_rk=0 RHS-output mode does not support moving IBM");
+    }
+    prepare_ibm_stage(time, S1, false);
     FillPatch(*this, Stemp, nghost, time, State_Type, 0, ncons);
-    compute_rhs(Stemp, dt, fr_as_crse, fr_as_fine);
+    prepare_nscbc_stage(Stemp);
+    compute_rhs(Stemp, dt, fr_as_crse, fr_as_fine, time);
     MultiFab::Copy(S2, Stemp, 0, 0, ncons, 0);
   } else if (order_rk == 1) {
+    prepare_ibm_stage(time, S1, false);
     FillPatch(*this, Stemp, nghost, time, State_Type, 0,
               ncons);  // filled at t_n to evalulate f(t_n,y_n).
-    compute_rhs(Stemp, dt, fr_as_crse, fr_as_fine);
+    prepare_nscbc_stage(Stemp);
+    compute_rhs(Stemp, dt, fr_as_crse, fr_as_fine, time);
     MultiFab::LinComb(S2, Real(1.0), S1, 0, dt, Stemp, 0, 0, ncons, 0);
+    ghost_saxpy(dt);
   } else if (order_rk == 2) {
     // Low-storage SSP-RK(m,2): m stages, C=m-1, C_eff=1-1/m.
     // Ref: Gottlieb et al., "Strong Stability Preserving Runge-Kutta and
@@ -125,21 +210,33 @@ Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
     state[0].setNewTimeLevel(time);
     // First m-1 forward-Euler increments
     for (int i = 1; i <= m - 1; i++) {
-      FillPatch(*this, Stemp, nghost, time + dt * Real(i - 1) / (m - 1),
-                State_Type, 0, ncons);
-      compute_rhs(Stemp, dt / Real(m - 1), fr_as_crse, fr_as_fine);
+      const Real stage_time = time + dt * Real(i - 1) / (m - 1);
+      prepare_ibm_stage(stage_time, S2, false);
+      FillPatch(*this, Stemp, nghost, stage_time, State_Type, 0, ncons);
+      prepare_nscbc_stage(Stemp);
+      compute_rhs(Stemp, dt / Real(m - 1), fr_as_crse, fr_as_fine,
+                  stage_time);
       MultiFab::Saxpy(S2, dt / Real(m - 1), Stemp, 0, 0, ncons, 0);
+      ghost_saxpy(dt / Real(m - 1));
       state[State_Type].setNewTimeLevel(
           time + dt * Real(i) /
                      (m - 1));  // important to do this for correct fillpatch
                                 // interpolations for the proceeding stages
     }
     // final stage
+    prepare_ibm_stage(time + dt, S2, false);
     FillPatch(*this, Stemp, nghost, time + dt, State_Type, 0, ncons);
-    compute_rhs(Stemp, dt / Real(m - 1), fr_as_crse, fr_as_fine);
+    prepare_nscbc_stage(Stemp);
+    compute_rhs(Stemp, dt / Real(m - 1), fr_as_crse, fr_as_fine, time + dt);
     MultiFab::LinComb(S2, Real(m - 1), S2, 0, dt, Stemp, 0, 0, ncons, 0);
     MultiFab::LinComb(S2, Real(1.0) / m, S1, 0, Real(1.0) / m, S2, 0, 0, ncons,
                       0);
+    if (use_nscbc) {
+      MultiFab::LinComb(*G_stage, Real(m - 1), *G_stage, 0,
+                        dt, *G_rhs, 0, 0, ncons, nghost);
+      MultiFab::LinComb(*G_stage, Real(1.0) / m, *G_old, 0,
+                        Real(1.0) / m, *G_stage, 0, 0, ncons, nghost);
+    }
 
     state[State_Type].setNewTimeLevel(time + dt);
   }
@@ -153,7 +250,7 @@ Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
       // compute_rhs_overlap, which overlaps the same-level ghost exchange
       // with the interior flux computation. The setOld/NewTimeLevel calls
       // are kept EXACTLY as in the legacy path (other machinery depends on
-      // them, and compute_rhs_overlap reads curTime() like compute_rhs).
+      // them). Both RHS paths receive the RK stage time explicitly.
 #if defined(AMREX_USE_GPIBM) || defined(CNS_USE_EB)
       if (CNS::overlap_comm != 0) {
         amrex::Abort("cns.overlap_comm=1 is not supported in IBM/EB builds");
@@ -171,6 +268,7 @@ Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
       }
 
       state[0].setOldTimeLevel(time);
+      prepare_ibm_stage(time, S1, false);
       if (use_ovl) {
         // stage-1 valid data = S1 (old), fill time = time
         compute_rhs_overlap(Stemp, dt, fr_as_crse, fr_as_fine, time, S1,
@@ -178,39 +276,56 @@ Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
       } else {
         FillPatch(*this, Stemp, nghost, time, State_Type, 0,
                   ncons);  // filled at t_n to evalulate f(t_n,y_n).
-        compute_rhs(Stemp, dt, fr_as_crse, fr_as_fine);
+        prepare_nscbc_stage(Stemp);
+        compute_rhs(Stemp, dt, fr_as_crse, fr_as_fine, time);
       }
       MultiFab::LinComb(S2, Real(1.0), S1, 0, dt, Stemp, 0, 0, ncons, 0);
+      ghost_saxpy(dt);
 
       state[0].setNewTimeLevel(
           time + dt);  // same time as upcoming FillPatch ensures we copy S2 to
                        // Sborder, without time interpolation
+      prepare_ibm_stage(time + dt, S2, false);
       if (use_ovl) {
         // stage-2 valid data = S2 (new), fill time = time + dt
         compute_rhs_overlap(Stemp, dt / 4, fr_as_crse, fr_as_fine, time + dt,
                             S2, prims_ovl);
       } else {
         FillPatch(*this, Stemp, nghost, time + dt, State_Type, 0, ncons);
-        compute_rhs(Stemp, dt / 4, fr_as_crse, fr_as_fine);
+        prepare_nscbc_stage(Stemp);
+        compute_rhs(Stemp, dt / 4, fr_as_crse, fr_as_fine, time + dt);
       }
       MultiFab::Xpay(Stemp, dt, S2, 0, 0, ncons, 0);
       MultiFab::LinComb(S2, Real(3.0) / 4, S1, 0, Real(1.0) / 4, Stemp, 0, 0,
                         ncons, 0);
+      if (use_nscbc) {
+        ghost_saxpy(dt);
+        MultiFab::LinComb(*G_stage, Real(3.0) / 4, *G_old, 0,
+                          Real(1.0) / 4, *G_stage, 0, 0, ncons, nghost);
+      }
 
       state[0].setNewTimeLevel(
           time + dt / 2);  // same time as upcoming FillPatch ensures we copy S2
                            // to Sborder, without time interpolation
+      prepare_ibm_stage(time + dt / 2, S2, false);
       if (use_ovl) {
         // stage-3 valid data = S2 (new), fill time = time + dt/2
         compute_rhs_overlap(Stemp, dt * Real(2.0) / 3, fr_as_crse, fr_as_fine,
                             time + dt / 2, S2, prims_ovl);
       } else {
         FillPatch(*this, Stemp, nghost, time + dt / 2, State_Type, 0, ncons);
-        compute_rhs(Stemp, dt * Real(2.0) / 3, fr_as_crse, fr_as_fine);
+        prepare_nscbc_stage(Stemp);
+        compute_rhs(Stemp, dt * Real(2.0) / 3, fr_as_crse, fr_as_fine,
+                    time + dt / 2);
       }
       MultiFab::Xpay(Stemp, dt, S2, 0, 0, ncons, 0);
       MultiFab::LinComb(S2, Real(1.0) / 3, S1, 0, Real(2.0) / 3, Stemp, 0, 0,
                         ncons, 0);
+      if (use_nscbc) {
+        ghost_saxpy(dt);
+        MultiFab::LinComb(*G_stage, Real(1.0) / 3, *G_old, 0,
+                          Real(2.0) / 3, *G_stage, 0, 0, ncons, nghost);
+      }
 
       state[State_Type].setNewTimeLevel(
           time + dt);  // important to do this for correct fillpatch
@@ -222,32 +337,48 @@ Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
       // Ref: Gottlieb et al., §4.2, p. 85.
 
       state[0].setOldTimeLevel(time);
+      prepare_ibm_stage(time, S1, false);
       FillPatch(*this, Stemp, nghost, time, State_Type, 0, ncons);
-      compute_rhs(Stemp, dt / 2, fr_as_crse, fr_as_fine);
+      prepare_nscbc_stage(Stemp);
+      compute_rhs(Stemp, dt / 2, fr_as_crse, fr_as_fine, time);
       MultiFab::LinComb(S2, Real(1.0), S1, 0, dt / 2, Stemp, 0, 0, ncons, 0);
+      ghost_saxpy(dt / 2);
 
       state[0].setNewTimeLevel(
           time + dt / 2);  // same time as upcoming FillPatch ensures we copy S2
                            // to Sborder, without time interpolation
+      prepare_ibm_stage(time + dt / 2, S2, false);
       FillPatch(*this, Stemp, nghost, time + dt / 2, State_Type, 0, ncons);
-      compute_rhs(Stemp, dt / 2, fr_as_crse, fr_as_fine);
+      prepare_nscbc_stage(Stemp);
+      compute_rhs(Stemp, dt / 2, fr_as_crse, fr_as_fine, time + dt / 2);
       MultiFab::Saxpy(S2, dt / 2, Stemp, 0, 0, ncons, 0);
+      ghost_saxpy(dt / 2);
 
       state[0].setNewTimeLevel(
           time + dt);  // same time as upcoming FillPatch ensures we copy S2 to
                        // Sborder, without time interpolation
+      prepare_ibm_stage(time + dt, S2, false);
       FillPatch(*this, Stemp, nghost, time + dt, State_Type, 0, ncons);
-      compute_rhs(Stemp, dt / 6, fr_as_crse, fr_as_fine);
+      prepare_nscbc_stage(Stemp);
+      compute_rhs(Stemp, dt / 6, fr_as_crse, fr_as_fine, time + dt);
       MultiFab::LinComb(S2, Real(2.0) / 3, S1, 0, Real(1.0) / 3, S2, 0, 0,
                         ncons, 0);
       MultiFab::Saxpy(S2, dt / 6, Stemp, 0, 0, ncons, 0);
+      if (use_nscbc) {
+        MultiFab::LinComb(*G_stage, Real(2.0) / 3, *G_old, 0,
+                          Real(1.0) / 3, *G_stage, 0, 0, ncons, nghost);
+        ghost_saxpy(dt / 6);
+      }
 
       state[0].setNewTimeLevel(
           time + dt / 2);  // same time as upcoming FillPatch ensures we copy S2
                            // to Sborder, without time interpolation
+      prepare_ibm_stage(time + dt / 2, S2, false);
       FillPatch(*this, Stemp, nghost, time + dt / 2, State_Type, 0, ncons);
-      compute_rhs(Stemp, dt / 2, fr_as_crse, fr_as_fine);
+      prepare_nscbc_stage(Stemp);
+      compute_rhs(Stemp, dt / 2, fr_as_crse, fr_as_fine, time + dt / 2);
       MultiFab::Saxpy(S2, dt / 2, Stemp, 0, 0, ncons, 0);
+      ghost_saxpy(dt / 2);
 
       state[State_Type].setNewTimeLevel(
           time + dt);  // important to do this for correct fillpatch
@@ -261,6 +392,16 @@ Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
     }
 
   }
+
+  if (use_nscbc) {
+    MultiFab::Copy(*nscbc_ghost_state, *G_stage, 0, 0, ncons, nghost);
+    nscbc_ghost_initialized = true;
+  }
+
+  // Leave markers, GP geometry, wall clock and surface ownership at the
+  // accepted state time.  On subcycled AMR levels, surface indices are only
+  // assembled after the final subcycle reaches the synchronized coarse time.
+  prepare_ibm_stage(time + dt, S2, iteration >= ncycle);
 
 #if ENSURE_MASSFRACSUM_ONE  
   clip_species_state(S2);
@@ -599,8 +740,10 @@ Real CNS::advance(Real time, Real dt, int /*iteration*/, int /*ncycle*/) {
     // clipping floors (smallr ~ 1e-19, ei_min ~ 2.5e-8). That catches
     // silent clipping — the scheme may have kept marching because prims
     // were clamped, but the underlying conservative state is unphysical.
+    // The order_rk=0 diagnostic intentionally stores dU/dt in S2; an RHS is
+    // not a conservative state and is not required to have positive entries.
     // ------------------------------------------------------------------------
-    {
+    if (order_rk != 0) {
       const bool strict = CNS::strict_positivity;
       // Threshold: 1e6 × the hard clipping floor. Well below any physical
       // value (nominal rho ~ 1, nominal eint ~ 2e5 J/kg) yet far enough

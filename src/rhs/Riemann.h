@@ -125,6 +125,58 @@ class riemann_t {
     return dsgn * min(dlim, Math::abs(dcen));
   }
 
+#if AMREX_USE_GPIBM
+  AMREX_GPU_DEVICE AMREX_FORCE_INLINE void one_sided_gp_slope(
+      const IntVect& iv, const int dir, const int side,
+      const Array4<Real>& dq, const Array4<Real>& q,
+      const cls_t& cls) const {
+    const IntVect ivd = IntVect::TheDimensionVector(dir);
+    const IntVect nb = iv + side * ivd;
+    const Real rho = q(iv, cls.QRHO);
+    const Real cspeed = q(iv, cls.QC) + Real(1.0e-40);
+    const Real drho = side * (q(nb, cls.QRHO) - q(iv, cls.QRHO));
+    const Real dp = side * (q(nb, cls.QPRES) - q(iv, cls.QPRES));
+    const Real dun =
+        side * (q(nb, cls.QU + dir) - q(iv, cls.QU + dir));
+    const int t1 = dir == 0 ? 1 : 0;
+    const int t2 = dir == 2 ? 1 : 2;
+
+    // Same characteristic increments used by the centred MUSCL path.  With
+    // a single fluid neighbour these reconstruct the arithmetic midpoint,
+    // so the GP side of the interface remains second-order in smooth flow.
+    dq(iv, 0) = Real(0.5) * dp / cspeed - Real(0.5) * rho * dun;
+    dq(iv, 1) = drho - dp / (cspeed * cspeed);
+    dq(iv, 2) = Real(0.5) * dp / cspeed + Real(0.5) * rho * dun;
+    dq(iv, 3) = side * (q(nb, cls.QU + t1) - q(iv, cls.QU + t1));
+    dq(iv, 4) = side * (q(nb, cls.QU + t2) - q(iv, cls.QU + t2));
+    for (int n = 0; n < NUM_SPECIES; ++n) {
+      dq(iv, 5 + n) =
+          side * (q(nb, cls.QFS + n) - q(iv, cls.QFS + n));
+    }
+  }
+
+  AMREX_GPU_DEVICE AMREX_FORCE_INLINE bool handle_ibm_gp_slope(
+      const IntVect& iv, const int dir, const Array4<Real>& dq,
+      const Array4<Real>& q, const cls_t& cls,
+      const Array4<uint8_t>& marker) const {
+    if (marker(iv, 0) == 0) return false;
+
+    const IntVect ivd = IntVect::TheDimensionVector(dir);
+    const bool reconstructed_gp = marker(iv, 1) != 0;
+    const bool fluid_left = marker(iv - ivd, 0) == 0;
+    const bool fluid_right = marker(iv + ivd, 0) == 0;
+    if (reconstructed_gp && (fluid_left != fluid_right)) {
+      one_sided_gp_slope(iv, dir, fluid_right ? 1 : -1, dq, q, cls);
+      return true;
+    }
+    if (reconstructed_gp && fluid_left && fluid_right) {
+      return false;  // both neighbours are valid: use the centred limiter
+    }
+    for (int n = 0; n < cls.NSLOPE; ++n) dq(iv, n) = Real(0.0);
+    return true;
+  }
+#endif
+
   // \brief Positivity-preserving order-reduction sensor for one axis.
   // In a strong rarefaction the characteristic MUSCL reconstruction is amplified
   // by 1/c (the acoustic slopes carry dp/c, and the low sound speed of a
@@ -244,11 +296,13 @@ class riemann_t {
       const cls_t& cls) const {
 #endif
 
-#if (AMREX_USE_GPIBM || CNS_USE_EB )
-    // reduce order in a GP(IB) or partial cell (EB)     
-    const bool reduce_order =  marker(i,j,k,1) || marker(i,j,k,0); 
-    
-    if (reduce_order) {
+#if AMREX_USE_GPIBM
+    if (handle_ibm_gp_slope(IntVect(AMREX_D_DECL(i, j, k)), 0, dq, q,
+                            cls, marker)) {
+      return;
+    }
+#elif CNS_USE_EB
+    if (marker(i,j,k,1) || marker(i,j,k,0)) {
       for (int n = 0; n < cls.NSLOPE; ++n) { dq(i,j,k,n) = 0.0;}
       return;
     }
@@ -327,10 +381,13 @@ class riemann_t {
       const cls_t& cls) const {
 #endif
 
-#if (AMREX_USE_GPIBM || CNS_USE_EB )
-    // reduce order in a GP(IB) or partial cell (EB)     
-    const bool reduce_order =  marker(i,j,k,1) || marker(i,j,k,0); 
-    if (reduce_order) {
+#if AMREX_USE_GPIBM
+    if (handle_ibm_gp_slope(IntVect(AMREX_D_DECL(i, j, k)), 1, dq, q,
+                            cls, marker)) {
+      return;
+    }
+#elif CNS_USE_EB
+    if (marker(i,j,k,1) || marker(i,j,k,0)) {
       for (int n = 0; n < cls.NSLOPE; ++n) { dq(i,j,k,n) = 0.0;}
       return;
    }
@@ -405,10 +462,13 @@ class riemann_t {
       const cls_t& cls) const {
 #endif
   
-#if (AMREX_USE_GPIBM || CNS_USE_EB )
-    // reduce order in a GP(IB) or partial cell (EB)     
-    const bool reduce_order =  marker(i,j,k,1) || marker(i,j,k,0); 
-    if (reduce_order) {
+#if AMREX_USE_GPIBM
+    if (handle_ibm_gp_slope(IntVect(AMREX_D_DECL(i, j, k)), 2, dq, q,
+                            cls, marker)) {
+      return;
+    }
+#elif CNS_USE_EB
+    if (marker(i,j,k,1) || marker(i,j,k,0)) {
       for (int n = 0; n < cls.NSLOPE; ++n) { dq(i,j,k,n) = 0.0;}
       return;
     }

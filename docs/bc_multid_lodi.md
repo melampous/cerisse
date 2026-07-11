@@ -434,6 +434,85 @@ temp/bc_rhs_nscbc_mixed_quick/native_bc_validation_report.pdf
 temp/cylinder_side_domain_sensitivity_manifest/cylinder_side_domain_sensitivity.md
 ```
 
+## Persistent Ghost-State NSCBC (Salvador Architecture)
+
+The current core implementation now follows the architecture on Salvador's
+`nscbc` branch: physical ghost cells are persistent ODE unknowns, their normal
+characteristic amplitudes are evaluated in `(rho,u,T)`, and the ghost state is
+advanced with the same Runge-Kutta stages as the interior solution.  This is a
+ghost-cell NSCBC formulation, not the older case-local algebraic ghost fill and
+not the experimental boundary-cell RHS correction described above.
+
+The imported architecture required several corrections before it could be used
+in the current solver:
+
+- the entropy amplitude now contains the required `1/gamma` density factor;
+- persistent ghosts are advanced by Euler, legacy RK2, SSPRK(m,2), SSPRK(3,3),
+  and SSPRK(4,3), rather than only Euler/legacy RK2;
+- parameters are captured by value in GPU kernels;
+- allocation is performed after the final AMR layout is known, including
+  initial regrid and restart paths;
+- transverse derivatives are evaluated on the synchronized valid boundary
+  plane.  Reading duplicated physical ghosts across tangential FAB seams made
+  the original form box-decomposition dependent and caused an all-NaN failure;
+  the corrected result is identical for `max_grid_size=512` and `32`, and for
+  one versus two MPI ranks in the native 30-degree test.
+
+Activate the persistent mode independently on each physical face:
+
+```text
+# 0=off, 1=relaxed inflow, 2=pure outflow, 3=pressure-relaxed outflow
+cns.nscbc_lo = 0 0
+cns.nscbc_hi = 2 0
+
+# The ordinary AMReX BC initializes/falls back around the persistent state.
+cns.lo_bc = 1 -1
+cns.hi_bc = 2 -1
+
+cns.nscbc_order            = 2
+cns.nscbc_use_transverse   = 1
+cns.nscbc_transverse_relax = 0.25
+```
+
+For type 1, velocity components, `nscbc_Ttarget`, and `nscbc_eta` must be set
+explicitly.  For type 3, `nscbc_Ptarget`, `nscbc_sigma`, `nscbc_Lchar`, and
+`nscbc_Mmax` must be set explicitly.  Targets use the same units as the solved
+state; the parser deliberately rejects omitted targets.  The transverse
+coefficient remains a model parameter;
+`0.25` is the best current generic value from the native 30-degree sweep, not a
+universal constant.
+
+Corrected native results are:
+
+```text
+case          N=48          N=96          interpretation
+normal        3.831e-09     2.593e-10     clean convergence
+15 deg sound  1.479e-04     8.373e-04     very small, not decreasing
+30 deg sound  1.717e-03     6.264e-03     small, but not grid-convergent
+45 deg sound  1.178e-02     1.288e-02     about 1.3 percent residual
+60 deg sound  2.654e-02     2.007e-02     decreases, about 2 percent residual
+entropy       5.418e-03     9.437e-04     strong convergence
+```
+
+On a 192x192, 160-step CPU benchmark, median advance time was 8.812 s versus
+8.353 s for fixed characteristic code 7 (`+5.5%`).  The 2D CPU/CUDA paths,
+3D CPU path, two-level AMR subcycling, and CPU/CUDA restart smoke tests pass.
+Uniform type-1 inflow and type-3 pressure-outflow tests preserve density,
+pressure, and velocity to machine precision for 100 steps when targets are
+specified in the solver's units.
+Restart currently reconstructs the persistent ghosts from the checkpointed
+interior state; the ghost ODE history itself is not checkpointed, so restart is
+stable but not bitwise continuous at the boundary.
+
+This mode is theoretically and operationally stronger than the previous local
+ghost fill, but it is still an opt-in research implementation.  Remaining
+production gaps are perturbed pressure/inflow reflection tests, 3D runtime convergence,
+exact checkpointing of the ghost state, Cartesian-corner policy, reacting or
+thermally-perfect species energy closure, explicit viscous/source compatibility,
+RZ geometric compatibility, and the cylinder/SRP side-domain plus sponge
+sensitivity matrix.  In particular, the non-decreasing 30-degree residual means
+it must not be described as a universal non-reflecting boundary.
+
 ## Production Path
 
 For production use, this should remain opt-in until restart-based cylinder/SRP

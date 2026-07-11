@@ -5,12 +5,13 @@
 #include <CNS.h>
 
 #include "diff_ops.H"
+#include "IbmFluxUtils.h"
 template <bool isAD, bool isIB, int order, typename cls_t>
 class centraldif_t {
   public:
   static constexpr bool rz_pressure_split_capable = false;  // RZ pressure-split is WENO-only
 
-  AMREX_GPU_HOST_DEVICE
+  AMREX_GPU_HOST
   centraldif_t() {
     // initialize coefficients for flux interpolation based on order
     calc_CDcoeffs<order>(INTcoef,CDcoef);
@@ -28,26 +29,68 @@ class centraldif_t {
 
   
   //////////////////////////////////////////////////////
+#if (AMREX_USE_GPIBM || CNS_USE_EB)
+  void inline eflux_ibm(const Geometry& geom, const MFIter& mfi,
+                    const Array4<Real>& prims, std::array<FArrayBox*, AMREX_SPACEDIM> const &flxt,
+                    const Array4<Real>& cons, const cls_t* cls,
+                    const Array4<uint8_t>& ibMarkers) {
+#else
   void inline eflux(const Geometry& geom, const MFIter& mfi,
                     const Array4<Real>& prims, std::array<FArrayBox*, AMREX_SPACEDIM> const &flxt,
                     const Array4<Real>& cons, const cls_t* cls) {
+#endif
                       
     // const Box& bx  = mfi.growntilebox(0);
     // const Box& bxg = mfi.growntilebox(cls->NGHOST);
-    const Box& bxgnodal = mfi.grownnodaltilebox(
-        -1, 0);  // extent is 0,N_cell+1 in all directions -- -1 means for all
-                 // directions. amrex::surroundingNodes(bx) does the same
-
     // ---------------------------------------------------------------------  //
     // loop over directions
     for (int dir = 0; dir < AMREX_SPACEDIM; dir++) {
       GpuArray<int, 3> vdir = {int(dir == 0), int(dir == 1), int(dir == 2)};
 
       auto const& flx = flxt[dir]->array(); 
+      const Box bxface = mfi.grownnodaltilebox(dir, 0);
 
       // compute interface fluxes at i-1/2, j-1/2, k-1/2
-      ParallelFor(bxgnodal,
+      ParallelFor(bxface,
                   [=,*this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+#if (AMREX_USE_GPIBM || CNS_USE_EB)
+                    // Make the capture explicit before the constexpr branch;
+                    // NVCC rejects a variable first captured from inside an
+                    // extended-lambda if-constexpr context.
+                    const cls_t* local_cls = cls;
+                    const auto local_prims = prims;
+                    const IntVect iv(AMREX_D_DECL(i, j, k));
+                    const IntVect ivd = IntVect::TheDimensionVector(dir);
+                    if (ibm_flux::is_solid_solid_face(iv, ivd, ibMarkers)) {
+                      ibm_flux::zero_flux<decltype(flx), cls_t>(iv, flx);
+                      return;
+                    }
+                    const bool full_stencil = ibm_flux::stencil_all_fluid(
+                        iv, ivd, -halfsten, order, ibMarkers);
+                    if (!full_stencil) {
+                      if constexpr (order >= 4) {
+                        if (ibm_flux::one_sided_polynomial_flux(
+                                iv, dir, local_prims, flx, ibMarkers,
+                                *local_cls)) {
+                          return;
+                        }
+                      }
+                      const bool adjacent_valid =
+                          ibm_flux::adjacent_states_valid<
+                              decltype(prims), decltype(ibMarkers), cls_t>(
+                              iv, ivd, local_prims, ibMarkers);
+                      if (!adjacent_valid) {
+                        ibm_flux::zero_flux<decltype(flx), cls_t>(iv, flx);
+                        return;
+                      }
+                      // A symmetric two-point face flux is the matched
+                      // second-order closure for all higher-order central
+                      // variants when only one reconstructed GP layer exists.
+                      ibm_flux::two_point_central_flux(
+                          iv, dir, local_prims, flx, *local_cls);
+                      return;
+                    }
+#endif
                     this->flux_dir(i, j, k,dir, vdir, cons, prims, flx, cls);
                   });
     }

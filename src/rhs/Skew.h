@@ -3,6 +3,8 @@
 
 #include <AMReX_FArrayBox.H>
 
+#include "IbmFluxUtils.h"
+
 
 //-------------------
 // discontinuity sensor function
@@ -234,10 +236,6 @@ class skew_t {
 
     //const Box& bx  = mfi.growntilebox(0);
     const Box& bxg = mfi.growntilebox(cls->NGHOST);
-    const Box& bxgnodal = mfi.grownnodaltilebox(
-        -1, 0);  // extent is 0,N_cell+1 in all directions -- -1 means for all
-                 // directions. amrex::surroundingNodes(bx) does the same
-    
     //FArrayBox consf(bxg, cls_t::NCONS, The_Async_Arena());
     FArrayBox lambda_maxf(bxg, 1, The_Async_Arena());
 
@@ -271,15 +269,16 @@ class skew_t {
       int Qdir =  cls_t::QRHO + dir + 1; 
 
       auto const& flx = flxt[dir]->array(); 
+      const Box bxface = mfi.grownnodaltilebox(dir, 0);
   
 
 #if (AMREX_USE_GPIBM || CNS_USE_EB )  
-      ParallelFor(bxgnodal,
+      ParallelFor(bxface,
                   [=,*this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
                     this->flux_dir_ibm(i, j, k,Qdir, vdir, cons, prims, lambda_max, flx, cls,ibMarkers);
                   });
 #else    
-      ParallelFor(bxgnodal,
+      ParallelFor(bxface,
                   [=,*this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
                     this->flux_dir(i, j, k,Qdir, vdir, cons, prims, lambda_max, flx, cls);
                   });                  
@@ -291,12 +290,12 @@ class skew_t {
 
 #if (AMREX_USE_GPIBM || CNS_USE_EB )  
 
-        ParallelFor(bxgnodal,
+        ParallelFor(bxface,
                   [=,*this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
                     this->fluxdissip_dir_ibm(i, j, k,Qdir, vdir, cons, prims, lambda_max, flx, cls, ibMarkers);
                   });             
 #else
-        ParallelFor(bxgnodal,
+        ParallelFor(bxface,
                   [=,*this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
                     this->fluxdissip_dir(i, j, k,Qdir, vdir, cons, prims, lambda_max, flx, cls);
                   });  
@@ -356,11 +355,16 @@ class skew_t {
     Real V[order],P[order];
     Real U[order][cls_t::NCONS];
 
+    const IntVect iv(AMREX_D_DECL(i, j, k));
+    const IntVect ivd(AMREX_D_DECL(vdir[0], vdir[1], vdir[2]));
     int il= i-vdir[0]; int jl= j-vdir[1]; int kl= k-vdir[2];
-    const bool close_to_wall = marker(i,j,k,1) || marker(il,jl,kl,1);           // //  flux close to a GP (IBM) or a cut-cell (EB)
-    const bool intersolid_flx = marker(i,j,k,0) &&  marker(il,jl,kl,0);    // inter-flux
+    if (ibm_flux::is_solid_solid_face(iv, ivd, marker)) {
+      ibm_flux::zero_flux<decltype(flx), cls_t>(iv, flx);
+      return;
+    }
 
-    if (intersolid_flx) return;  // flux =0  inside solid 
+    const bool full_stencil =
+        ibm_flux::stencil_all_fluid(iv, ivd, -halfsten, order, marker);
       
 
 #ifdef CNS_USE_EB   
@@ -370,9 +374,21 @@ class skew_t {
 #endif
 
 
-    // reduce to second order scheme close to wall
-    if (close_to_wall)
+    // Reduce to the matched two-point skew flux whenever any point in the
+    // native footprint is an unreconstructed solid cell.
+    if (!full_stencil)
     {   
+      if constexpr (order >= 4) {
+        if (ibm_flux::one_sided_polynomial_flux(
+                iv, Qdir - 1, prims, flx, marker, *cls)) {
+          return;
+        }
+      }
+      if (!ibm_flux::is_usable(iv - ivd, marker) ||
+          !ibm_flux::is_usable(iv, marker)) {
+        ibm_flux::zero_flux<decltype(flx), cls_t>(iv, flx);
+        return;
+      }
       //il= i-vdir[0]; jl= j-vdir[1]; kl= k-vdir[2];
       for (int l = 0; l < 2; l++) {  
         V[l] = prims(il,jl,kl,Qdir); 
@@ -420,102 +436,82 @@ class skew_t {
     const Array4<Real>& prims, const Array4<Real>& /*lambda*/, const Array4<Real>& flx,
     const cls_t* /*cls*/,const Array4<uint8_t>& marker) const {
 
-    int il= i-vdir[0]; int jl= j-vdir[1]; int kl= k-vdir[2];
-    const bool close_to_wall  = marker(i,j,k,1) || marker(il,jl,kl,1);          //  flux close to a GP (IBM) or a cut-cell (EB)
-    const bool intersolid_flx = marker(i,j,k,0) &&  marker(il,jl,kl,0);  
+    const IntVect iv(AMREX_D_DECL(i, j, k));
+    const IntVect ivd(AMREX_D_DECL(vdir[0], vdir[1], vdir[2]));
+    const IntVect ivl = iv - ivd;
+    if (ibm_flux::is_solid_solid_face(iv, ivd, marker)) return;
+    if (!ibm_flux::is_usable(ivl, marker) ||
+        !ibm_flux::is_usable(iv, marker)) return;
 
-    if (intersolid_flx) return;  // flux =0  inside solid
+    // The sensor reads offsets [-2,+1].  For Skew2 that is wider than the
+    // convective footprint, so both footprints must pass the marker audit.
+    const bool full_diss_stencil =
+        ibm_flux::stencil_usable(iv, ivd, -halfsten, order, marker) &&
+        ibm_flux::stencil_usable(iv, ivd, -2, 4, marker);
 
-#ifdef CNS_USE_EB   
-    // in EBM wall flux will be computed afterwards
-    // const bool next_to_wall = marker(i,j,k,0) || marker(il,jl,kl,0);
-    // if (next_to_wall) return;  
-#endif
-
-    int i0[3],i1[3],i2[3],i3[3];
- 
-    // calculate sensor    
-    Real p0,p1,p2,p3;
-    Real sen_num= Real(0.0),sen_denom=Real(1.0e-16);
-    // loop over sensor variables
-    int nv = 0;
+    Real sen_num = Real(0.0);
+    Real sen_denom = Real(1.0e-16);
     Real sen = Real(0.0);
-    if (close_to_wall)
-    {          
-
-      const bool wall_right = marker(i,j,k,0) || marker(i+vdir[0],j+vdir[1],k+vdir[2],0); // wall i(IB) or i+1 (EB)
-
-      if (wall_right)       // solid towards the right use i-2,i-1,i(GP/CUT)
-      {
-        i1[0] = i - 2*vdir[0]; i1[1] = j - 2*vdir[1];i1[2] = k - 2*vdir[2];
-        for (int l=0;l<3;l++) {i2[l]=i1[l]+vdir[l];i3[l]=i2[l]+vdir[l];}
-      } 
-      else                  // solid towards the left, use i-1(GP/CUT),i,i+1
-      {
-        i1[0] = i - vdir[0]; i1[1] = j - vdir[1];i1[2] = k - vdir[2];
-        for (int l=0;l<3;l++) {i2[l]=i1[l]+vdir[l];i3[l]=i2[l]+vdir[l];}
+    if (full_diss_stencil) {
+      for (int l = 0; l < NVARSEN; ++l) {
+        const int nv = NSEN[l];
+        const Real p0 = prims(iv - 2 * ivd, nv);
+        const Real p1 = prims(ivl, nv);
+        const Real p2 = prims(iv, nv);
+        const Real p3 = prims(iv + ivd, nv);
+        const Real local = amrex::max(disconSensor(p0, p1, p2),
+                                      disconSensor(p1, p2, p3));
+        sen_num += local * local;
+        sen_denom += local;
       }
-
-      for (int l=0;l<NVARSEN;l++)
-      { 
-        nv = NSEN[l];       
-        p1 =  prims(i1[0],i1[1],i1[2],nv);
-        p2 =  prims(i2[0],i2[1],i2[2],nv);
-        p3 =  prims(i3[0],i3[1],i3[2],nv);
-        sen  = disconSensor(p1,p2,p3);
-        sen_num += sen*sen;sen_denom +=sen;      
-      }
-      sen = sen_num/sen_denom;
-
-    } 
-    else
-    {
-      i0[0] = i - 2*vdir[0]; i0[1] = j - 2*vdir[1];i0[2] = k - 2*vdir[2];
-      for (int l=0;l<3;l++) {
-        i1[l]=i0[l]+vdir[l];i2[l]=i1[l]+vdir[l];i3[l]=i2[l]+vdir[l];
-      }
-      for (int l=0;l<NVARSEN;l++)
-      { 
-        nv = NSEN[l];       
-        p0 =  prims(i0[0],i0[1],i0[2],nv);
-        p1 =  prims(i1[0],i1[1],i1[2],nv);
-        p2 =  prims(i2[0],i2[1],i2[2],nv);
-        p3 =  prims(i3[0],i3[1],i3[2],nv);        
-        sen  = std::max(disconSensor(p0,p1,p2), disconSensor(p1,p2,p3) );
-        sen_num += sen*sen;sen_denom +=sen;
-      }
-      sen = sen_num/sen_denom; //
-
-    }  
-
-    // reduce order close to BC by making sensor  = 1   
-    // sen = (i < mask_sen(idir,1)) ? 1.0 : sen;  
-    // sen = (i > mask_sen(idir,2)) ? 1.0 : sen;  
-    
-    // spectral radius Jacobian matrix (u + c)  
-    //Real rr = std::max(lambda(il, jl, kl, 0), lambda(i, j, k, 0));          
-    Real rr = std::abs( prims(i,j,k,Qdir) ) + prims(i, j, k, cls_t::QC);              
-    Real eps2 = Cshock*rr*sen;
-    Real eps4 = std::max(0.0, Cdamp*rr - eps2);
-
-    // shock capturing and damping 
-    if (close_to_wall)
-    {
-      for (int nvar = 0; nvar < cls_t::NCONS; nvar++) { 
-        flx(i, j, k, nvar) -=  eps2*( cons(i,j,k,nvar) -  cons(il,jl,kl,nvar)) ;         
-      } 
-    } 
-    else
-    {
-      int ii= i-halfsten*vdir[0]; int jj= j-halfsten*vdir[1]; int kk= k-halfsten*vdir[2];                    
-      for (int l = 0; l < order; l++) { 
-        for (int nvar = 0; nvar < cls_t::NCONS; nvar++) { 
-          flx(i, j, k, nvar) -=  eps2*coefshock(l)*cons(ii,jj,kk,nvar);
-          flx(i, j, k, nvar) +=   eps4*coefdamp(l)*cons(ii,jj,kk,nvar);     
+      sen = sen_num / sen_denom;
+    } else {
+      const bool left_triplet =
+          ibm_flux::is_usable(iv - 2 * ivd, marker) &&
+          ibm_flux::is_usable(ivl, marker) &&
+          ibm_flux::is_usable(iv, marker);
+      const bool right_triplet =
+          ibm_flux::is_usable(ivl, marker) &&
+          ibm_flux::is_usable(iv, marker) &&
+          ibm_flux::is_usable(iv + ivd, marker);
+      if (left_triplet || right_triplet) {
+        const IntVect first = left_triplet ? iv - 2 * ivd : ivl;
+        for (int l = 0; l < NVARSEN; ++l) {
+          const int nv = NSEN[l];
+          const Real local = disconSensor(prims(first, nv),
+                                          prims(first + ivd, nv),
+                                          prims(first + 2 * ivd, nv));
+          sen_num += local * local;
+          sen_denom += local;
         }
-        ii +=  vdir[0];jj +=  vdir[1];kk +=  vdir[2];      
+        sen = sen_num / sen_denom;
+      } else {
+        // No safe three-point sensor exists in a one-cell fluid gap.
+        sen = Real(1.0);
       }
-    }   
+    }
+
+    const Real rr = amrex::max(
+        std::abs(prims(ivl, Qdir)) + prims(ivl, cls_t::QC),
+        std::abs(prims(iv, Qdir)) + prims(iv, cls_t::QC));
+    const Real eps2 = Cshock * rr * sen;
+    const Real eps4 = amrex::max(Real(0.0), Cdamp * rr - eps2);
+
+    if (!full_diss_stencil) {
+      for (int nvar = 0; nvar < cls_t::NCONS; ++nvar) {
+        flx(iv, nvar) -= eps2 * (cons(iv, nvar) - cons(ivl, nvar));
+      }
+      return;
+    }
+
+    IntVect point = iv - halfsten * ivd;
+    for (int l = 0; l < order; ++l) {
+      for (int nvar = 0; nvar < cls_t::NCONS; ++nvar) {
+        flx(iv, nvar) -= eps2 * coefshock(l) * cons(point, nvar);
+        flx(iv, nvar) += eps4 * coefdamp(l) * cons(point, nvar);
+      }
+      point += ivd;
+    }
   }
 
   // .............................................................
