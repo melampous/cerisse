@@ -216,14 +216,16 @@ AMREX_GPU_HOST_DEVICE constexpr int ipow(int base, int exp) {
 // x2 = disIM(1).  Slot layout in the primsNormal array:
 //   q(1,.) = surface (wall)   q(2,.) = IP1   q(3,.) = IP2
 //
-//   ibm_zero_grad_surface : surface value enforcing dphi/dn|_0 = 0 to 2nd order
-//   ibm_wall_normal_deriv : one-sided dphi/dn|_0 to 2nd order (heat flux, shear)
+//   ibm_normal_grad_surface : surface value for a prescribed dphi/dn|_0
+//   ibm_zero_grad_surface   : prescribed-gradient helper with dphi/dn|_0 = 0
+//   ibm_fluid_extrap_surface: unconstrained one-sided extrapolation to the wall
+//   ibm_wall_normal_deriv   : one-sided dphi/dn|_0 (heat flux, shear)
 //
-// Both use the general (non-uniform) spacing x1, x2 and reduce *exactly* to the
-// previous 1st-order single-image-point form when EO < 2, when fewer than two
-// image points are valid (n_valid < 2), or when the two image points are nearly
-// coincident.  q(3,.)/disIM(1) are read only inside `if constexpr (EO >= 2)`,
-// so they are never instantiated (no out-of-bounds) for EO = 1.
+// The derivative-based helpers use the general (non-uniform) spacing x1, x2.
+// Every helper reduces to the previous single-image-point form when EO < 2,
+// when fewer than two image points are valid (n_valid < 2), or when the image
+// points are nearly coincident.  q(3,.)/disIM(1) are read only inside
+// `if constexpr (EO >= 2)`, so they are never instantiated for EO = 1.
 //
 // Coefficients are the derivatives of the Lagrange basis through {0, x1, x2}:
 //   cs = -(x1+x2)/(x1 x2),  c1 = x2/(x1 (x2-x1)),  c2 = -x1/(x2 (x2-x1))
@@ -231,19 +233,53 @@ AMREX_GPU_HOST_DEVICE constexpr int ipow(int base, int exp) {
 // with -1/cs = x1 x2/(x1+x2).  For x2 = 2 x1 this collapses to (4 phi1 - phi2)/3.
 // ============================================================================
 
+enum class ibm_pressure_closure_t : int {
+    zero_gradient = 0,
+    fluid_extrapolation = 1,
+    prescribed_gradient = 2,
+    shock_aware_fluid_extrapolation = 3,
+    euler_slip_analytic_curvature = 4
+};
+
+/// Shape operator in the local surface basis used by primsNormal:
+///   B_ab = t_a . (grad n) t_b,  a,b in {1,2}.
+/// The IBM normal points from solid into fluid, so a convex sphere/circle has
+/// positive principal curvature (+1/R).  In 2-D only k11 is used.  Analytic
+/// geometry callbacks return valid=0 outside their declared smooth region;
+/// the wall closure then falls back to fluid-side pressure extrapolation.
+struct ibm_shape_operator_t {
+    Real k11;
+    Real k12;
+    Real k22;
+    int valid;
+};
+
+struct ibm_pressure_reconstruction_t {
+    Real value;
+    Real unlimited_value;
+    Real shock_sensor;
+    Real fallback_fraction;
+};
+
+/// Reconstruct the surface value from image-point values and a prescribed
+/// outward-normal derivative.  The derivative and disIM must use the same
+/// normal orientation (surface -> fluid).  For EO>=2 this inverts the same
+/// one-sided Lagrange derivative used by ibm_wall_normal_deriv; EO=1 uses the
+/// linear relation phi_s = phi_1 - x_1 dphi/dn.
 template <int EO, typename QArr, typename DisArr>
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Real ibm_zero_grad_surface(const QArr& q, int n, const DisArr& disIM, int n_valid)
+Real ibm_normal_grad_surface(
+    const QArr& q, int n, const DisArr& disIM, int n_valid,
+    Real normal_derivative)
 {
     const Real u1 = q(2, n);   // IP1
     constexpr Real eps = Real(1.0e-12);
     if constexpr (EO >= 3) {
-        // 3rd-order form: enforce dphi/dn|_0 = 0 with the three-point one-sided
-        // derivative on {0, x1, x2, x3} (Lagrange-basis derivatives at s=0):
+        // Higher-order prescribed-gradient form on {0, x1, x2, x3}, using
+        // Lagrange-basis derivatives at s=0:
         //   cs = -(1/x1 + 1/x2 + 1/x3)
         //   c1 = x2 x3/(x1 (x1-x2)(x1-x3)),  c2/c3 by cyclic index swap.
-        // phi_s = -(c1 u1 + c2 u2 + c3 u3)/cs. Exact for cubics; O(h^4) value
-        // when the exact solution satisfies dphi/dn = 0 (verified numerically).
+        // phi_s = (dphi/dn - c1 u1 - c2 u2 - c3 u3)/cs.
         if (n_valid >= 3) {
             const Real x1 = disIM(0);
             const Real x2 = disIM(1);
@@ -260,7 +296,8 @@ Real ibm_zero_grad_surface(const QArr& q, int n, const DisArr& disIM, int n_vali
                 const Real c1 = x2 * x3 / (x1 * (x1 - x2) * (x1 - x3));
                 const Real c2 = x1 * x3 / (x2 * (x2 - x1) * (x2 - x3));
                 const Real c3 = x1 * x2 / (x3 * (x3 - x1) * (x3 - x2));
-                return -(c1 * u1 + c2 * u2 + c3 * u3) / cs;
+                return (normal_derivative -
+                        (c1 * u1 + c2 * u2 + c3 * u3)) / cs;
             }
         }
     }
@@ -272,14 +309,207 @@ Real ibm_zero_grad_surface(const QArr& q, int n, const DisArr& disIM, int n_vali
                 const Real u2 = q(3, n);   // IP2
                 const Real c1 =  x2 / (x1 * (x2 - x1));
                 const Real c2 = -x1 / (x2 * (x2 - x1));
-                return (x1 * x2 / (x1 + x2)) * (c1 * u1 + c2 * u2);
+                const Real cs = -(x1 + x2) / (x1 * x2);
+                return (normal_derivative - (c1 * u1 + c2 * u2)) / cs;
             }
         }
     } else {
         amrex::ignore_unused(disIM, n_valid);
     }
-    return u1;   // 1st-order zero-gradient: copy nearest image point
+    const Real x1 = disIM(0);
+    return (n_valid >= 1 && x1 > Real(0.0))
+               ? u1 - x1 * normal_derivative
+               : u1;
 }
+
+template <int EO, typename QArr, typename DisArr>
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real ibm_zero_grad_surface(const QArr& q, int n, const DisArr& disIM, int n_valid)
+{
+    return ibm_normal_grad_surface<EO>(
+        q, n, disIM, n_valid, Real(0.0));
+}
+
+/// Reconstruct a wall value without imposing a Neumann condition.  Pressure at
+/// an inviscid wall is determined by the interior solution, not by a universal
+/// dp/dn=0 condition.  A linear extrapolation through IP1/IP2 gives an O(h^2)
+/// wall value; IP1/IP2/IP3 give an O(h^3) value.  The EO=1 fallback is the
+/// nearest image-point value and therefore retains the legacy behaviour.
+template <int EO, typename QArr, typename DisArr>
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real ibm_fluid_extrap_surface(
+    const QArr& q, int n, const DisArr& disIM, int n_valid)
+{
+    const Real u1 = q(2, n);
+    constexpr Real eps = Real(1.0e-12);
+    if constexpr (EO >= 3) {
+        if (n_valid >= 3) {
+            const Real x1 = disIM(0);
+            const Real x2 = disIM(1);
+            const Real x3 = disIM(2);
+            const bool distinct =
+                x1 > Real(0.0) &&
+                amrex::Math::abs(x2 - x1) > eps * amrex::max(x1, x2) &&
+                amrex::Math::abs(x3 - x2) > eps * amrex::max(x2, x3) &&
+                amrex::Math::abs(x3 - x1) > eps * amrex::max(x1, x3);
+            if (distinct) {
+                const Real u2 = q(3, n);
+                const Real u3 = q(4, n);
+                const Real l1 = x2 * x3 / ((x1 - x2) * (x1 - x3));
+                const Real l2 = x1 * x3 / ((x2 - x1) * (x2 - x3));
+                const Real l3 = x1 * x2 / ((x3 - x1) * (x3 - x2));
+                return l1 * u1 + l2 * u2 + l3 * u3;
+            }
+        }
+    }
+    if constexpr (EO >= 2) {
+        if (n_valid >= 2) {
+            const Real x1 = disIM(0);
+            const Real x2 = disIM(1);
+            if (x1 > Real(0.0) &&
+                amrex::Math::abs(x2 - x1) > eps * amrex::max(x1, x2)) {
+                return (x2 * u1 - x1 * q(3, n)) / (x2 - x1);
+            }
+        }
+    } else {
+        amrex::ignore_unused(disIM, n_valid);
+    }
+    return u1;
+}
+
+/// Irreversible-compression sensor on the first two image points.  IP1 is
+/// nearest the wall and IP2 is farther into the fluid.  The reversible part
+/// of a compression is estimated by a trapezoidal integral of c^2 d(rho),
+/// leaving only pressure rise in excess of the local acoustic/isentropic
+/// relation.  Expansions and smooth isentropic curvature gradients therefore
+/// do not trigger the shock fallback.  The normalized sensor is clamped to two.
+/// A value of zero also denotes an unavailable two-point stencil; callers use
+/// n_valid separately to distinguish that case.
+template <int EO, typename QArr>
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real ibm_pressure_shock_sensor(
+    const QArr& q, int np, int nrho, int nc, int n_valid)
+{
+    if constexpr (EO >= 2) {
+        if (n_valid >= 2) {
+            const Real p1 = q(2, np);
+            const Real p2 = q(3, np);
+            const Real rho1 = q(2, nrho);
+            const Real rho2 = q(3, nrho);
+            const Real c1 = q(2, nc);
+            const Real c2 = q(3, nc);
+            if (!(p1 > Real(0.0)) || !(p2 > Real(0.0)) ||
+                !(rho1 > Real(0.0)) || !(rho2 > Real(0.0)) ||
+                !(c1 > Real(0.0)) || !(c2 > Real(0.0)) ||
+                !amrex::Math::isfinite(p1) || !amrex::Math::isfinite(p2) ||
+                !amrex::Math::isfinite(rho1) || !amrex::Math::isfinite(rho2) ||
+                !amrex::Math::isfinite(c1) || !amrex::Math::isfinite(c2)) {
+                return Real(2.0);
+            }
+            const Real dp = p1 - p2;
+            const Real drho = rho1 - rho2;
+            if (dp <= Real(0.0) || drho <= Real(0.0)) return Real(0.0);
+            const Real c2_bar = Real(0.5) * (c1 * c1 + c2 * c2);
+            const Real irreversible = dp - c2_bar * drho;
+            const Real sensor = Real(2.0) *
+                amrex::max(irreversible, Real(0.0)) / (p1 + p2);
+            return amrex::min(sensor, Real(2.0));
+        }
+    } else {
+        amrex::ignore_unused(q, np, nrho, nc, n_valid);
+    }
+    return Real(0.0);
+}
+
+/// Fluid-side pressure extrapolation with a continuous shock-triggered return
+/// to the nearest image-point value.  The unlimited reconstruction is retained
+/// exactly for sensor <= sensor_low.  Between sensor_low and sensor_high a
+/// cubic smoothstep blends to IP1; at and above sensor_high the result is IP1.
+/// Invalid/non-positive extrapolates also return IP1 independently of the
+/// sensor.  The two thresholds use the shock sensor above and must
+/// satisfy 0 <= sensor_low < sensor_high <= 2.
+template <int EO, typename QArr, typename DisArr>
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+ibm_pressure_reconstruction_t ibm_shock_aware_pressure_surface(
+    const QArr& q, int np, int nrho, int nc,
+    const DisArr& disIM, int n_valid,
+    Real sensor_low, Real sensor_high)
+{
+    const Real p1 = q(2, np);
+    const Real unlimited = ibm_fluid_extrap_surface<EO>(
+        q, np, disIM, n_valid);
+
+    if constexpr (EO < 2) {
+        amrex::ignore_unused(sensor_low, sensor_high);
+        return {p1, unlimited, Real(0.0), Real(1.0)};
+    }
+
+    if (n_valid < 2) {
+        return {p1, unlimited, Real(0.0), Real(1.0)};
+    }
+
+    const Real sensor = ibm_pressure_shock_sensor<EO>(
+        q, np, nrho, nc, n_valid);
+    if (!(p1 > Real(0.0)) || !amrex::Math::isfinite(p1)) {
+        Real safe_value = p1;
+        if constexpr (EO >= 2) {
+            const Real p2 = q(3, np);
+            if (p2 > Real(0.0) && amrex::Math::isfinite(p2)) safe_value = p2;
+        }
+        return {safe_value, unlimited, sensor, Real(1.0)};
+    }
+    if (!(unlimited > Real(0.0)) || !amrex::Math::isfinite(unlimited)) {
+        return {p1, unlimited, sensor, Real(1.0)};
+    }
+
+    constexpr Real eps = Real(1.0e-12);
+    const Real width = amrex::max(sensor_high - sensor_low, eps);
+    const Real xi = amrex::max(
+        Real(0.0), amrex::min(Real(1.0), (sensor - sensor_low) / width));
+    Real fallback = xi * xi * (Real(3.0) - Real(2.0) * xi);
+    Real value = (Real(1.0) - fallback) * unlimited + fallback * p1;
+    if (!(value > Real(0.0)) || !amrex::Math::isfinite(value)) {
+        value = p1;
+        fallback = Real(1.0);
+    }
+    return {value, unlimited, sensor, fallback};
+}
+
+namespace ibm_detail {
+
+template <typename WallModel>
+using pressure_closure_expr = decltype(WallModel::pressure_closure);
+
+/// Surface-only pressure diagnostics with a no-op fallback for custom wall
+/// models.  Built-in walls expose the compile-time policy and thresholds, but
+/// ibm_solver.h does not need to include or know their concrete definitions.
+template <int EO, typename WallModel, typename Cls, typename QArr, typename DisArr>
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+void dispatch_pressure_closure_diagnostics(
+    const QArr& q, const DisArr& disIM, int n_valid,
+    Real& shock_sensor, Real& fallback_fraction)
+{
+    shock_sensor = Real(-1.0);
+    fallback_fraction = Real(-1.0);
+    if constexpr (is_detected_v<pressure_closure_expr, WallModel>) {
+        shock_sensor = ibm_pressure_shock_sensor<EO>(
+            q, Cls::QPRES, Cls::QRHO, Cls::QC, n_valid);
+        if constexpr (
+            WallModel::pressure_closure ==
+            ibm_pressure_closure_t::shock_aware_fluid_extrapolation) {
+            const auto result = ibm_shock_aware_pressure_surface<EO>(
+                q, Cls::QPRES, Cls::QRHO, Cls::QC, disIM, n_valid,
+                WallModel::pressure_sensor_low,
+                WallModel::pressure_sensor_high);
+            shock_sensor = result.shock_sensor;
+            fallback_fraction = result.fallback_fraction;
+        }
+    } else {
+        amrex::ignore_unused(q, disIM, n_valid);
+    }
+}
+
+} // namespace ibm_detail
 
 /// Positivity-guarded variant for positive-definite primitives (P, T, Y).
 /// The 2nd-order two-point form (x2^2 u1 - x1^2 u2)/(x2^2 - x1^2) goes
@@ -294,7 +524,28 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Real ibm_zero_grad_surface_pos(const QArr& q, int n, const DisArr& disIM, int n_valid)
 {
     const Real v = ibm_zero_grad_surface<EO>(q, n, disIM, n_valid);
-    return (v > Real(0.0)) ? v : q(2, n);
+    return (v > Real(0.0) && amrex::Math::isfinite(v)) ? v : q(2, n);
+}
+
+template <int EO, typename QArr, typename DisArr>
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real ibm_normal_grad_surface_pos(
+    const QArr& q, int n, const DisArr& disIM, int n_valid,
+    Real normal_derivative)
+{
+    const Real v = ibm_normal_grad_surface<EO>(
+        q, n, disIM, n_valid, normal_derivative);
+    return (v > Real(0.0) && amrex::Math::isfinite(v)) ? v : q(2, n);
+}
+
+template <int EO, typename QArr, typename DisArr>
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real ibm_fluid_extrap_surface_pos(
+    const QArr& q, int n, const DisArr& disIM, int n_valid)
+{
+    const Real v = ibm_fluid_extrap_surface<EO>(
+        q, n, disIM, n_valid);
+    return (v > Real(0.0) && amrex::Math::isfinite(v)) ? v : q(2, n);
 }
 
 template <int EO, typename QArr, typename DisArr>
@@ -463,6 +714,8 @@ struct surfPhys_t {
   Gpu::ManagedVector<Real> tau2;        // reconstructed local surface shear stress 2
   Gpu::ManagedVector<Real> temperature; // reconstructed temperature
   Gpu::ManagedVector<Real> dTdn;        // reconstructed grad(T)·n
+  Gpu::ManagedVector<Real> pressure_shock_sensor; // irreversible IP1/IP2 compression
+  Gpu::ManagedVector<Real> pressure_fallback;    // shock-aware return-to-IP1 fraction
   
   // Helper function to resize all vectors
   // Note: resize() initializes new elements to 0 / default constructor.
@@ -481,6 +734,8 @@ struct surfPhys_t {
     tau2.resize(n);
     temperature.resize(n);
     dTdn.resize(n);
+    pressure_shock_sensor.resize(n);
+    pressure_fallback.resize(n);
     ip_quality.resize(n);
 
     // Initialize new elements with specific defaults if n > old_n
@@ -491,6 +746,8 @@ struct surfPhys_t {
             rank[i] = -1;
             elemfound[i] = 0; // false
             ip_quality[i] = -1;
+            pressure_shock_sensor[i] = Real(-1.0);
+            pressure_fallback[i] = Real(-1.0);
         }
     }
   }
@@ -510,6 +767,8 @@ struct surfPhys_t {
       tau2.clear();        tau2.shrink_to_fit();
       temperature.clear(); temperature.shrink_to_fit();
       dTdn.clear();        dTdn.shrink_to_fit();
+      pressure_shock_sensor.clear(); pressure_shock_sensor.shrink_to_fit();
+      pressure_fallback.clear();    pressure_fallback.shrink_to_fit();
       ip_quality.clear();  ip_quality.shrink_to_fit();
   }
 
@@ -527,6 +786,8 @@ struct surfPhys_t {
         tau2.shrink_to_fit();
         temperature.shrink_to_fit();
         dTdn.shrink_to_fit();
+        pressure_shock_sensor.shrink_to_fit();
+        pressure_fallback.shrink_to_fit();
         ip_quality.shrink_to_fit();
     }
   }
@@ -540,6 +801,8 @@ struct surfPhys_t {
         rank[i] = -1;
         elemfound[i] = 0; // false
         ip_quality[i] = -1;
+        pressure_shock_sensor[i] = Real(-1.0);
+        pressure_fallback[i] = Real(-1.0);
     }
   }
 

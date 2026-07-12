@@ -686,7 +686,10 @@ static void extrapolate(
         // positive lower bound that prevents the ghost from crossing zero.
         if (n == cls_t::QT || n == cls_t::QPRES) {
             const Real floor_val = GP_POS_FLOOR_FRAC * prims(1, n);
-            if (prims(0, n) < floor_val) prims(0, n) = floor_val;
+            if (!amrex::Math::isfinite(prims(0, n)) ||
+                prims(0, n) < floor_val) {
+                prims(0, n) = floor_val;
+            }
         }
     }
 }

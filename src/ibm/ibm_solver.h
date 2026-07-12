@@ -8,6 +8,7 @@
 
 #include "ibm_containers.h"
 
+#include <cstring>  // std::memcpy in surface MPI packing
 #include <iomanip>  // std::setprecision, std::fixed
 #include <sstream>
 
@@ -1495,6 +1496,63 @@ public:
     amrex::Print() << "\n";
   }
 
+  /// Report the pressure-shock sensor and shock-aware fallback used by
+  /// the latest surface reconstruction.  A negative fallback marks a closure
+  /// for which limiting is not applicable.
+  void reportSurfPressureDiagnostics(int lev)
+  {
+    int sensor_faces = 0;
+    int limiter_faces = 0;
+    int triggered_faces = 0;
+    int full_fallback_faces = 0;
+    Real sensor_sum = Real(0.0);
+    Real sensor_max = Real(0.0);
+    Real fallback_sum = Real(0.0);
+    Real fallback_max = Real(0.0);
+
+    for (int f = 0; f < ntotalfaces; ++f) {
+      if (surfphys_soa.elemfound[f] != 1 || surfphys_soa.lev[f] != lev) continue;
+
+      const Real sensor = surfphys_soa.pressure_shock_sensor[f];
+      if (sensor >= Real(0.0) && amrex::Math::isfinite(sensor)) {
+        sensor_faces++;
+        sensor_sum += sensor;
+        sensor_max = amrex::max(sensor_max, sensor);
+      }
+
+      const Real fallback = surfphys_soa.pressure_fallback[f];
+      if (fallback >= Real(0.0) && amrex::Math::isfinite(fallback)) {
+        limiter_faces++;
+        fallback_sum += fallback;
+        fallback_max = amrex::max(fallback_max, fallback);
+        if (fallback > Real(1.0e-12)) triggered_faces++;
+        if (fallback >= Real(1.0) - Real(1.0e-12)) full_fallback_faces++;
+      }
+    }
+
+    ParallelDescriptor::ReduceIntSum(sensor_faces);
+    ParallelDescriptor::ReduceIntSum(limiter_faces);
+    ParallelDescriptor::ReduceIntSum(triggered_faces);
+    ParallelDescriptor::ReduceIntSum(full_fallback_faces);
+    ParallelDescriptor::ReduceRealSum(sensor_sum);
+    ParallelDescriptor::ReduceRealMax(sensor_max);
+    ParallelDescriptor::ReduceRealSum(fallback_sum);
+    ParallelDescriptor::ReduceRealMax(fallback_max);
+
+    if (sensor_faces > 0) {
+      amrex::Print() << "[Surf-P-Diag] Level " << lev
+                     << " sensor mean=" << sensor_sum / Real(sensor_faces)
+                     << " max=" << sensor_max << " faces=" << sensor_faces << "\n";
+    }
+    if (limiter_faces > 0) {
+      amrex::Print() << "[Surf-P-Diag] Level " << lev
+                     << " fallback mean=" << fallback_sum / Real(limiter_faces)
+                     << " max=" << fallback_max
+                     << " triggered=" << triggered_faces << "/" << limiter_faces
+                     << " full=" << full_fallback_faces << "\n";
+    }
+  }
+
   // ========================================================================
   // Ghost‐point reconstruction — single‐kernel, level‐wide
   // ========================================================================
@@ -2228,6 +2286,8 @@ public:
     auto* sp_dTdn        = surfphys_soa.dTdn.data();
     auto* sp_tau1        = surfphys_soa.tau1.data();
     auto* sp_tau2        = surfphys_soa.tau2.data();
+    auto* sp_pshock      = surfphys_soa.pressure_shock_sensor.data();
+    auto* sp_pfallback   = surfphys_soa.pressure_fallback.data();
     const int* sp_ifab   = surfphys_soa.ifab.data();
 
     const auto* si_imp_ip_ijk    = surfimp_soa.imp_ip_ijk.data();
@@ -2343,6 +2403,12 @@ public:
       // 6) Extract surface quantities
       Real P_surf = primsNormal(1, cls_t::QPRES);
       Real T_surf = primsNormal(1, cls_t::QT);
+      Real pressure_shock_sensor;
+      Real pressure_fallback;
+      ibm_detail::dispatch_pressure_closure_diagnostics<
+          eorder_tparm_surf, wallmodel, cls_t>(
+              primsNormal, si_disIM[f_idx], n_valid_surf,
+              pressure_shock_sensor, pressure_fallback);
 
       // Wall-normal gradients via 2nd-order one-sided stencil (surface + IP1 +
       // IP2, general spacing) when >=2 image points are valid; else 1st-order
@@ -2369,10 +2435,19 @@ public:
       sp_dTdn[f_idx]        = dTdn;
       sp_tau1[f_idx]        = tau1;
       sp_tau2[f_idx]        = tau2;
+      sp_pshock[f_idx]      = pressure_shock_sensor;
+      sp_pfallback[f_idx]   = pressure_fallback;
     }); // end ParallelFor
 
     // Ensure GPU writes are visible to CPU before gatherSurfData / plotSURF
     Gpu::streamSynchronize();
+
+    bool pressure_diag = false;
+    {
+      ParmParse pp("ib");
+      pp.query("surf_pressure_diag", pressure_diag);
+    }
+    if (pressure_diag) reportSurfPressureDiagnostics(lev);
   }
 
 

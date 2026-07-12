@@ -42,6 +42,7 @@ void gatherSurfData()
         int rank;      // Owning rank
         int ipq;       // Interpolation quality (number of fluid points)
         Real p, T, dTdn, tau1, tau2; // Physical quantities
+        Real pshock, pfallback;       // Pressure-closure diagnostics
     };
     static_assert(std::is_trivially_copyable<SurfOut>::value,
                   "SurfOut must be trivially copyable for MPI");
@@ -65,6 +66,8 @@ void gatherSurfData()
         s.dTdn = surfphys_soa.dTdn[i];
         s.tau1 = surfphys_soa.tau1[i];
         s.tau2 = surfphys_soa.tau2[i];
+        s.pshock = surfphys_soa.pressure_shock_sensor[i];
+        s.pfallback = surfphys_soa.pressure_fallback[i];
         send.push_back(s);
     }
 
@@ -82,8 +85,23 @@ void gatherSurfData()
     int total = 0;
     if (my_rank == 0) {
         displs.resize(nprocs, 0);
-        for (int r = 1; r < nprocs; ++r) displs[r] = displs[r - 1] + counts[r - 1];
-        for (int r = 0; r < nprocs; ++r) total += counts[r];
+        std::size_t total_records = 0;
+        for (int r = 0; r < nprocs; ++r) {
+            if (counts[r] < 0) {
+                amrex::Abort("gatherSurfData: negative count detected");
+            }
+            total_records += static_cast<std::size_t>(counts[r]);
+        }
+        const auto max_mpi_records = static_cast<std::size_t>(
+            std::numeric_limits<int>::max()) / sizeof(SurfOut);
+        if (total_records > max_mpi_records) {
+            amrex::Abort(
+                "gatherSurfData: total byte count exceeds MPI_Gatherv int range");
+        }
+        total = static_cast<int>(total_records);
+        for (int r = 1; r < nprocs; ++r) {
+            displs[r] = displs[r - 1] + counts[r - 1];
+        }
     }
 
     // ======================================================================
@@ -91,21 +109,22 @@ void gatherSurfData()
     // ======================================================================
     const int typesize = sizeof(SurfOut);
 
-    std::vector<char> sendbuf(reinterpret_cast<char*>(send.data()),
-                              reinterpret_cast<char*>(send.data()) + nlocal * typesize);
+    std::vector<char> sendbuf(static_cast<std::size_t>(nlocal) * typesize);
+    if (nlocal > 0) {
+        std::memcpy(sendbuf.data(), send.data(), sendbuf.size());
+    }
 
     std::vector<char> recvbuf;
     std::vector<int> counts_b, displs_b;
     char* recvptr = nullptr;
 
     if (my_rank == 0) {
-        recvbuf.resize(total * typesize);
+        recvbuf.resize(static_cast<std::size_t>(total) * typesize);
         recvptr = recvbuf.data();
 
         counts_b.resize(nprocs);
         displs_b.resize(nprocs);
         for (int r = 0; r < nprocs; ++r) {
-            if (counts[r] < 0) amrex::Abort("gatherSurfData: negative count detected");
             if (counts[r] > std::numeric_limits<int>::max() / typesize) {
                 amrex::Abort("gatherSurfData: Gatherv byte count overflow");
             }
@@ -121,10 +140,14 @@ void gatherSurfData()
     // Step 5: Unpack on root back into SoA
     // ======================================================================
     if (my_rank == 0) {
-        auto* rec = reinterpret_cast<const SurfOut*>(recvbuf.data());
-
         for (int k = 0; k < total; ++k) {
-            const auto& s = rec[k];
+            // vector<char> does not guarantee SurfOut alignment. Copy each
+            // record into aligned storage instead of reinterpret_casting the
+            // receive buffer, which would otherwise be undefined behaviour.
+            SurfOut s{};
+            std::memcpy(&s, recvbuf.data() +
+                            static_cast<std::size_t>(k) * typesize,
+                        typesize);
             const int i = s.elem;
 
             if (i < 0 || i >= ntotalfaces) {
@@ -140,6 +163,8 @@ void gatherSurfData()
             surfphys_soa.dTdn[i]        = s.dTdn;
             surfphys_soa.tau1[i]        = s.tau1;
             surfphys_soa.tau2[i]        = s.tau2;
+            surfphys_soa.pressure_shock_sensor[i] = s.pshock;
+            surfphys_soa.pressure_fallback[i] = s.pfallback;
         }
     }
 }
@@ -342,6 +367,9 @@ void plotSURF(
         write_scalar_field("Tau1",        surfphys_soa.tau1);
         write_scalar_field("Tau2",        surfphys_soa.tau2);
         write_scalar_field("dTdn",        surfphys_soa.dTdn);
+        write_scalar_field("PressureShockSensor",
+                           surfphys_soa.pressure_shock_sensor);
+        write_scalar_field("PressureFallbackFraction", surfphys_soa.pressure_fallback);
 
         write_int_field("Rank",       surfphys_soa.rank);
         write_int_field("Level",      surfphys_soa.lev);
