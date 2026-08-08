@@ -1,0 +1,55 @@
+#!/bin/bash
+#PBS -N srp_sch3dv
+#PBS -q cx
+#PBS -l walltime=01:00:00
+#PBS -l select=1:ncpus=4:mem=16gb
+#PBS -j oe
+#PBS -o /rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2/post_latest_plt09000/schlieren3d/variants.log
+
+set -euo pipefail
+
+source /etc/profile.d/modules.sh
+source /etc/profile.d/z00_lmod.sh
+module purge
+module load tools/prod yt/4.3.0-foss-2022a VTK/9.2.2-foss-2022a
+
+CASE=/rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2
+OUT=${CASE}/post_latest_plt09000/schlieren3d
+CACHE=${OUT}/plt09000_density_gradient_volume.npz
+COMMON=(
+  --plotfile "${CASE}/plot/plt09000"
+  --stl "${CASE}/trinozzle.stl"
+  --output-dir "${OUT}"
+  --cache "${CACHE}"
+  --image-size 1800 1125
+  --opacity-scale 4.0
+  --opacity-unit-distance 0.0030
+)
+
+export OMP_NUM_THREADS=4
+mkdir -p "${OUT}"
+date -u
+hostname
+
+xvfb-run -a -s "-screen 0 1800x1125x24" \
+  python3 "${CASE}/render_srp_tri_schlieren3d.py" "${COMMON[@]}" \
+    --output-name candidate_upstream \
+    --camera-position -0.42 0.02 0.53 \
+    --camera-focal 0.18 0.275 0.275 \
+    --camera-view-angle 29.0
+
+xvfb-run -a -s "-screen 0 1800x1125x24" \
+  python3 "${CASE}/render_srp_tri_schlieren3d.py" "${COMMON[@]}" \
+    --output-name candidate_side \
+    --camera-position -0.12 0.64 0.49 \
+    --camera-focal 0.19 0.275 0.275 \
+    --camera-view-angle 27.0
+
+xvfb-run -a -s "-screen 0 1800x1125x24" \
+  python3 "${CASE}/render_srp_tri_schlieren3d.py" "${COMMON[@]}" \
+    --output-name candidate_high \
+    --camera-position -0.18 0.52 0.66 \
+    --camera-focal 0.19 0.275 0.275 \
+    --camera-view-angle 27.0
+
+date -u

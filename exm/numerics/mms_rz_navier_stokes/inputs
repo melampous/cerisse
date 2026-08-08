@@ -1,0 +1,64 @@
+# Smooth, time-dependent, point-sampled Navier--Stokes MMS in R-Z coordinates.
+max_step = 8
+stop_time = 1.0e-2
+time_step = 1.25e-3
+
+cns.order_rk = 3
+cns.stages_rk = 3
+cns.lo_bc = 3 -1
+cns.hi_bc = 1 -1
+cns.nstep_screen_output = 1000
+cns.verbose = 0
+cns.do_reflux = 0
+
+geometry.is_periodic = 0 1
+geometry.coord_sys = 1
+geometry.prob_lo = 0.0 0.0
+geometry.prob_hi = 1.0 1.0
+
+amr.n_cell = 16 16
+amr.max_level = 0
+amr.max_grid_size = 128
+amr.blocking_factor = 8
+amr.plot_files_output = 1
+amr.plot_file = output/plt
+amr.plot_int = 8
+amr.checkpoint_files_output = 0
+amr.v = 0
+
+# Optional fixed Level-1 radial band for the AMR interface verification.
+# The default leaves the established uniform hierarchy unchanged.
+prob.static_radial_refinement = 0
+prob.refine_radial_lo = 0.25
+prob.refine_radial_hi = 0.75
+
+# Scalars and axial velocity are even in r. Radial velocity is odd in r.
+prob.rho0 = 1.0
+prob.temperature0 = 1.0
+prob.uz0 = 0.30
+prob.rho_amp = 0.050
+prob.temperature_amp = 0.060
+prob.ur_amp = 0.080
+prob.uz_amp = 0.050
+prob.rho_r2 = 0.20
+prob.temperature_r2 = 0.25
+prob.ur_r2 = 0.15
+prob.uz_r2 = 0.10
+prob.temperature_phase = 0.21
+prob.ur_phase = 0.13
+prob.uz_phase = 0.35
+prob.omega = 1.0
+
+# Match the default point-valued R-Z path used by the production cases.
+cns.rz_euler_annular_average = 0
+cns.rz_euler_point_flux = 0
+cns.rz_euler_annular_pressure_consistency = 0
+cns.rz_euler_cell_average_deconvolution = 0
+cns.rz_weno_epsilon_relative = 1.0e-6
+cns.rz_viscous_annular_average = 0
+cns.rz_visc_hoop = 1
+
+# Exclude every optional near-axis or shock-only modification.
+cns.rz_pressure_split = 0
+
+amrex.the_arena_is_managed = 0

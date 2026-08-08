@@ -1,0 +1,21 @@
+started_utc=2026-08-08T05:31:06Z
+host=ip-10-0-141-49.us-east-2.compute.internal
+restart=/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_llfdiag_3way_20260808/testG_thermodynamic_continuation/output/run165/chk03300
+geometry=/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_chain_20260807T115518Z/geometry/test1853_run165_single_master_SI.stl
+target_max_step=4000
+capacity_block_deadline_guard=2026-08-08T10:45:00Z
+run_class=nonconservative_temperature_floor_rescue
+production_validation=0
+temperature_floor_K=10
+cfl=0.01
+regrid_int=4,4
+check_int=100
+plot_int=200
+surface_int=100
+strict_positivity=1
+soft_positivity=1
+soft_floor_semantics=preserve_momentum_raise_total_energy
+90a733b431a9a27782862877ee29f3aa8025910c8571032ff0c4cc077f131a5d  main3d.gnu.TPROF.MPI.CUDA.ex
+9659136e1277bcaf6d7da08fdcbb55881b6f4f2000045b95dca5f5e9c185b5b0  inputs.run165
+e7d0dbf2aa6613f2877af587531ff4eec8389602d5f89b763fe5ffd43c9d6864  prob.h
+09c1625881e34cffd0b14a9800cab24fe783d4eb697f37bfa00289e953c25890  /shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_llfdiag_3way_20260808/testG_thermodynamic_continuation/output/run165/chk03300/Header

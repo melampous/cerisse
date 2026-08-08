@@ -1,0 +1,229 @@
+{
+  "analysis": "nearest_surface_recovery_history",
+  "results": [
+    {
+      "label": "step3200",
+      "file": "/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_llfdiag_3way_20260808/testG_thermodynamic_continuation/output/run165/test1853_run165_single_master_SI/test1853_run165_single_master_SI_03200.vtp",
+      "target_m": [
+        0.00290625,
+        0.005181818182,
+        -0.007363636364
+      ],
+      "face_index": 10300,
+      "centroid_m": [
+        0.0032401011946300664,
+        0.005081885028630495,
+        -0.007307106163352728
+      ],
+      "centroid_distance_m": 0.00035304237547851994,
+      "normal": [
+        -0.9388768753917958,
+        0.19655623028139793,
+        -0.2826231787948477
+      ],
+      "Pressure": 2691.774548243289,
+      "Temperature": 135.25887983175073,
+      "TauNormal": 0.0,
+      "Tau1": -0.0,
+      "Tau2": -0.0,
+      "dTdn": 17042.72978508171,
+      "PressureShockSensor": 0.0,
+      "PressureFallbackFraction": 0.0,
+      "Level": 2,
+      "IP_quality": 27,
+      "IP_fit_order": 2
+    },
+    {
+      "label": "step3300",
+      "file": "/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_llfdiag_3way_20260808/testG_thermodynamic_continuation/output/run165/test1853_run165_single_master_SI/test1853_run165_single_master_SI_03300.vtp",
+      "target_m": [
+        0.00290625,
+        0.005181818182,
+        -0.007363636364
+      ],
+      "face_index": 10300,
+      "centroid_m": [
+        0.0032401011946300664,
+        0.005081885028630495,
+        -0.007307106163352728
+      ],
+      "centroid_distance_m": 0.00035304237547851994,
+      "normal": [
+        -0.9388768753917958,
+        0.19655623028139793,
+        -0.2826231787948477
+      ],
+      "Pressure": 2878.6840900226966,
+      "Temperature": 149.2842364788509,
+      "TauNormal": 0.0,
+      "Tau1": -0.0,
+      "Tau2": -0.0,
+      "dTdn": 13122.974692330507,
+      "PressureShockSensor": 0.0,
+      "PressureFallbackFraction": 0.0,
+      "Level": 2,
+      "IP_quality": 27,
+      "IP_fit_order": 2
+    },
+    {
+      "label": "step3366",
+      "file": "/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_llfdiag_3way_20260808/testI_energy_history_replay/output/run165/test1853_run165_single_master_SI/test1853_run165_single_master_SI_03366.vtp",
+      "target_m": [
+        0.00290625,
+        0.005181818182,
+        -0.007363636364
+      ],
+      "face_index": 10300,
+      "centroid_m": [
+        0.0032401011946300664,
+        0.005081885028630495,
+        -0.007307106163352728
+      ],
+      "centroid_distance_m": 0.00035304237547851994,
+      "normal": [
+        -0.9388768753917958,
+        0.19655623028139793,
+        -0.2826231787948477
+      ],
+      "Pressure": 1436.3197309043255,
+      "Temperature": 129.67474226246222,
+      "TauNormal": 0.0,
+      "Tau1": 0.0,
+      "Tau2": 0.0,
+      "dTdn": 31996.661457948972,
+      "PressureShockSensor": 0.0,
+      "PressureFallbackFraction": 0.0,
+      "Level": 2,
+      "IP_quality": 27,
+      "IP_fit_order": 2
+    },
+    {
+      "label": "step3400_soft",
+      "file": "/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_llfdiag_3way_20260808/testH_soft_Tmin_continuation/output/run165/test1853_run165_single_master_SI/test1853_run165_single_master_SI_03400.vtp",
+      "target_m": [
+        0.00290625,
+        0.005181818182,
+        -0.007363636364
+      ],
+      "face_index": 10300,
+      "centroid_m": [
+        0.0032401011946300664,
+        0.005081885028630495,
+        -0.007307106163352728
+      ],
+      "centroid_distance_m": 0.00035304237547851994,
+      "normal": [
+        -0.9388768753917958,
+        0.19655623028139793,
+        -0.2826231787948477
+      ],
+      "Pressure": 1306.6599161928948,
+      "Temperature": 132.2686573452826,
+      "TauNormal": 0.0,
+      "Tau1": 0.0,
+      "Tau2": 0.0,
+      "dTdn": 38118.03405300447,
+      "PressureShockSensor": 0.0,
+      "PressureFallbackFraction": 0.0,
+      "Level": 2,
+      "IP_quality": 27,
+      "IP_fit_order": 2
+    },
+    {
+      "label": "step3600_soft",
+      "file": "/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_llfdiag_3way_20260808/testH_soft_Tmin_continuation/output/run165/test1853_run165_single_master_SI/test1853_run165_single_master_SI_03600.vtp",
+      "target_m": [
+        0.00290625,
+        0.005181818182,
+        -0.007363636364
+      ],
+      "face_index": 10300,
+      "centroid_m": [
+        0.0032401011946300664,
+        0.005081885028630495,
+        -0.007307106163352728
+      ],
+      "centroid_distance_m": 0.00035304237547851994,
+      "normal": [
+        -0.9388768753917958,
+        0.19655623028139793,
+        -0.2826231787948477
+      ],
+      "Pressure": 1512.5241995464112,
+      "Temperature": 145.01414909075854,
+      "TauNormal": 0.0,
+      "Tau1": 0.0,
+      "Tau2": -0.0,
+      "dTdn": 21237.003842925402,
+      "PressureShockSensor": 0.0,
+      "PressureFallbackFraction": 0.0,
+      "Level": 2,
+      "IP_quality": 27,
+      "IP_fit_order": 2
+    },
+    {
+      "label": "step3800_soft",
+      "file": "/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_llfdiag_3way_20260808/testH_soft_Tmin_continuation/output/run165/test1853_run165_single_master_SI/test1853_run165_single_master_SI_03800.vtp",
+      "target_m": [
+        0.00290625,
+        0.005181818182,
+        -0.007363636364
+      ],
+      "face_index": 10300,
+      "centroid_m": [
+        0.0032401011946300664,
+        0.005081885028630495,
+        -0.007307106163352728
+      ],
+      "centroid_distance_m": 0.00035304237547851994,
+      "normal": [
+        -0.9388768753917958,
+        0.19655623028139793,
+        -0.2826231787948477
+      ],
+      "Pressure": 1417.6636011495204,
+      "Temperature": 140.7616574499187,
+      "TauNormal": 0.0,
+      "Tau1": -0.0,
+      "Tau2": -0.0,
+      "dTdn": 20988.07712441417,
+      "PressureShockSensor": 0.0,
+      "PressureFallbackFraction": 0.0,
+      "Level": 2,
+      "IP_quality": 27,
+      "IP_fit_order": 2
+    },
+    {
+      "label": "step4000_soft",
+      "file": "/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_llfdiag_3way_20260808/testH_soft_Tmin_continuation/output/run165/test1853_run165_single_master_SI/test1853_run165_single_master_SI_04000.vtp",
+      "target_m": [
+        0.00290625,
+        0.005181818182,
+        -0.007363636364
+      ],
+      "face_index": 10300,
+      "centroid_m": [
+        0.0032401011946300664,
+        0.005081885028630495,
+        -0.007307106163352728
+      ],
+      "centroid_distance_m": 0.00035304237547851994,
+      "normal": [
+        -0.9388768753917958,
+        0.19655623028139793,
+        -0.2826231787948477
+      ],
+      "Pressure": 1565.4856879307906,
+      "Temperature": 145.20241658241824,
+      "TauNormal": 0.0,
+      "Tau1": -0.0,
+      "Tau2": -0.0,
+      "dTdn": 18813.51632102469,
+      "PressureShockSensor": 0.0,
+      "PressureFallbackFraction": 0.0,
+      "Level": 2,
+      "IP_quality": 27,
+      "IP_fit_order": 2
+    }
+  ]
+}

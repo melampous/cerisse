@@ -1,0 +1,12 @@
+built_utc=2026-08-08T02:36:15Z
+host=ip-10-0-141-49.us-east-2.compute.internal
+cuda_release=12.6
+cuda_arch=90
+amr_solver=/shared/cerisse_local_0808_thermodynamic_prolongation
+method=pure_shared_gp_full_cartesian
+cut_control=disabled
+prolongation_floor=max(pressure_rhoe,rho*cv*T_min)
+73e43ba52c8aaf3217915ab292c7bbc82dad2946c0d431589419439d529b2b95  /shared/cerisse_local_0808_thermodynamic_prolongation/src/set/EulerAdmissibleProlongation.H
+e74778ed255559da17e12bab66cd72d23396ba28cf3947924a9554f57cdf4eeb  /shared/cerisse_local_0808_thermodynamic_prolongation/src/set/CNS_setup.cpp
+44ea7ff2377020f2fa3d4085c0cfd2f9de296be5592ba176e90fd98245b99a33  /shared/cerisse_local_0808_thermodynamic_prolongation/src/CNS.cpp
+90a733b431a9a27782862877ee29f3aa8025910c8571032ff0c4cc077f131a5d  main3d.gnu.TPROF.MPI.CUDA.ex

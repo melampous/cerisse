@@ -6,7 +6,7 @@
 #include <array>
 #include <cstdint>
 
-#include "IbmFluxUtils.h"
+#include "IBMSharedGPFluxUtils.h"
 #include "diff_ops.H"
 
 // Heat conduction only.  This class contributes the conductive energy flux
@@ -18,6 +18,9 @@ class diffusiveheat_t {
                 "diffusiveheat_t supports orders 2, 4, and 6 only");
 
   static constexpr int halfsten = param::order / 2;
+  // The conductive metric flux vanishes at the axis; do not overwrite an
+  // inviscid metric h-flux stored in the shared radial face slot.
+  static constexpr bool rz_radial_axis_face_addition_is_zero = true;
 
   AMREX_GPU_HOST_DEVICE constexpr diffusiveheat_t() = default;
   AMREX_GPU_HOST_DEVICE ~diffusiveheat_t() = default;
@@ -62,6 +65,9 @@ class diffusiveheat_t {
       const cls_t* cls) {
 #endif
     const auto dxinv = geom.InvCellSizeArray();
+    const auto dx = geom.CellSizeArray();
+    const auto prob_lo = geom.ProbLoArray();
+    const bool is_rz = geom.IsRZ();
     const Box bxg = mfi.growntilebox(cls->NGHOST);
 
     // Conductivity is reused by every directional face stencil.  Cache only
@@ -88,6 +94,10 @@ class diffusiveheat_t {
       amrex::ParallelFor(
           bxface, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
             const IntVect iv{AMREX_D_DECL(i, j, k)};
+            if (is_rz && dir == 0 &&
+                !(prob_lo[0] + Real(i) * dx[0] > Real(0.0))) {
+              return;
+            }
 #if (AMREX_USE_GPIBM || CNS_USE_EB)
             if (ibm_flux::is_solid_solid_face(iv, ivd, ibMarkers)) {
               return;

@@ -1,0 +1,112 @@
+{
+  "source": "exm/underexpanded_jet/2d/panda_m119_L4_nscbc_4090/X_steady.npz",
+  "record_start_ms": 4.000437160895806,
+  "record_end_ms": 9.999886788926858,
+  "record_length_ms": 5.999449628031051,
+  "samples": 12107,
+  "sample_rate_hz": 2017851.761507838,
+  "full_record_bin_width_hz": 166.66818877573618,
+  "experimental_frequency_hz": 8400.0,
+  "candidate_frequency_hz": 9833.423137768435,
+  "candidate_strouhal_D_over_Uj": 0.6880687264444029,
+  "experimental_strouhal_D_over_Uj": 0.5877685950413223,
+  "original_six_near_field_probes": [
+    "lp02",
+    "lp04",
+    "lp06",
+    "lp07",
+    "cl01",
+    "cl02"
+  ],
+  "phase_audit": {
+    "frequency_hz": 9852.791804237491,
+    "phase_rad": [
+      2.91838935587185e-18,
+      -0.09534568777824526,
+      -2.705427877170933,
+      -3.5985101799769477,
+      -5.910705900187608,
+      -4.0126517438216895,
+      -1.8039666308261617,
+      -3.4679057899966184,
+      -2.4437038330184904,
+      -1.8608409340667025
+    ],
+    "coherence": [
+      1.0000000000000004,
+      0.9681131911491092,
+      0.9302101887712411,
+      0.792968956883996,
+      0.48231928313337785,
+      0.4435491773570548,
+      0.3539673745865435,
+      0.0655150544969292,
+      0.03254061089752306,
+      0.13765185631775764
+    ],
+    "fits": [
+      {
+        "last_probe": "lp05",
+        "phase_speed_m_per_s": -241.24009672028453,
+        "phase_rmse_deg": 24.02638512765325
+      },
+      {
+        "last_probe": "lp06",
+        "phase_speed_m_per_s": -344.0495750177722,
+        "phase_rmse_deg": 50.78780600612165
+      },
+      {
+        "last_probe": "lp07",
+        "phase_speed_m_per_s": -539.2408210796538,
+        "phase_rmse_deg": 75.07083916722215
+      }
+    ]
+  },
+  "candidate_coherent_mode_rank": 7,
+  "candidate_coherent_mode": {
+    "frequency_hz": 9852.791804237491,
+    "leading_mode_fraction": 0.40105419576124635
+  },
+  "top_coherent_modes": [
+    {
+      "frequency_hz": 1970.558360847498,
+      "leading_mode_fraction": 0.45682829311152806
+    },
+    {
+      "frequency_hz": 4926.395902118746,
+      "leading_mode_fraction": 0.42055824983960527
+    },
+    {
+      "frequency_hz": 13793.908525932486,
+      "leading_mode_fraction": 0.42025465630448466
+    },
+    {
+      "frequency_hz": 2955.837541271247,
+      "leading_mode_fraction": 0.41879101558390974
+    },
+    {
+      "frequency_hz": 6896.954262966243,
+      "leading_mode_fraction": 0.40814308489377527
+    },
+    {
+      "frequency_hz": 18720.304428051233,
+      "leading_mode_fraction": 0.40338563738326577
+    },
+    {
+      "frequency_hz": 9852.791804237491,
+      "leading_mode_fraction": 0.40105419576124635
+    },
+    {
+      "frequency_hz": 5911.675082542494,
+      "leading_mode_fraction": 0.3981820658753329
+    },
+    {
+      "frequency_hz": 3941.116721694996,
+      "leading_mode_fraction": 0.3935147173497248
+    },
+    {
+      "frequency_hz": 12808.629345508738,
+      "leading_mode_fraction": 0.3845648477057856
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+purpose=R-Z full Euler time-dependent manufactured-solution matrix
+execution_mode=serial
+rhs_case_count=10
+evolution_case_count=5
+analysis_required=1

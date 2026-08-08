@@ -1,29 +1,49 @@
-max_step  = 4400
-stop_time = 16.9
-time_step = 0.004
+# WENO-Z5 linear-acoustic validation.
+# mode=0: periodic monochromatic right-running wave.
+# mode=1: periodic Gaussian right-running packet for a fixed AMR-patch test.
+
+max_step  = 1000000
+stop_time = 1.0
+cfl       = 0.30
+
 cns.order_rk  = 3
 cns.stages_rk = 3
+cns.do_reflux = 0
+
+prob.mode       = 0
+prob.amplitude  = 1.0e-5
+prob.n_waves    = 2
+prob.mean_mach  = 0.0
+prob.packet_x0  = 0.20
+prob.packet_sigma = 0.05
+prob.packet_n_waves = 8
+prob.refine_lo  = 0.40
+prob.refine_hi  = 0.70
+
 geometry.is_periodic = 1 1 1
 geometry.coord_sys   = 0
 geometry.prob_lo     = 0.0 0.0 0.0
 geometry.prob_hi     = 1.0 0.25 0.25
+
 cns.lo_bc = -1 -1 -1
 cns.hi_bc = -1 -1 -1
-cns.nstep_screen_output = 500
+cns.nstep_screen_output = 1000000
 cns.verbose = 0
-amr.n_cell          = 16 4 4
+
+amr.n_cell          = 32 4 4
 amr.max_level       = 0
-amr.ref_ratio       = 2 2 2
-amr.blocking_factor_x = 4 4 4
-amr.blocking_factor_y = 4 4 4
-amr.blocking_factor_z = 4 4 4
-amr.max_grid_size_x   = 16 16 16
-amr.n_error_buf     = 0 0 0
-amr.grid_eff        = 0.7
+amr.ref_ratio       = 2
+amr.regrid_int      = -1
+amr.blocking_factor = 4
+amr.max_grid_size   = 256
+amr.n_error_buf     = 0
+amr.grid_eff        = 0.90
 amr.v               = 0
-fabarray.mfiter_tile_size = 16 16 16
-amr.checkpoint_files_output = 0
+
 amr.plot_files_output = 1
 amr.plot_file         = ./plot/plt
-amr.plot_int          = 400
-amr.derive_plot_vars  = pressure x_velocity
+amr.plot_int          = 1000000
+amr.derive_plot_vars  = pressure x_velocity density
+
+amr.checkpoint_files_output = 0
+amrex.the_arena_is_managed = 0

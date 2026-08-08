@@ -1,0 +1,37 @@
+DEBUG             = FALSE
+DIM               = 3
+COMP              = gnu
+CXXSTD            = c++20
+PRECISION         = DOUBLE
+TINY_PROFILE      = TRUE
+CLIP_MINTEMP      = TRUE
+
+USE_MPI           = TRUE
+USE_CUDA          = TRUE
+CUDA_ARCH         = 90
+USE_OMP           = FALSE
+USE_GPIBM         = TRUE
+USE_EB            = FALSE
+AMREX_NO_PROBINIT = TRUE
+
+IBM_EXPERIMENTAL_CUT_CONTROL = FALSE
+
+ifneq ($(USE_EB),FALSE)
+  $(error Test1853 no-jet build requires pure GP-IBM)
+endif
+ifneq ($(IBM_EXPERIMENTAL_CUT_CONTROL),FALSE)
+  $(error Test1853 no-jet build forbids cut-control flow)
+endif
+
+# The problem intentionally fails closed if this compile-time state differs
+# from prob.jet_enabled at runtime.  Keep this in a separate build directory.
+DEFINES += -DTEST1853_JET_ENABLED=0
+
+# Deliberately omit CNS_IBM_PROBLEM_SUPPORT_CAP.  Production source discovers
+# the generic problem support hook automatically.
+AMR_SOLVER = /shared/cerisse_local_0808_support_hook
+AMREX_HOME = $(AMR_SOLVER)/lib/amrex
+
+CEXE_headers += prob.h
+include $(AMR_SOLVER)/src/Make.CNS
+

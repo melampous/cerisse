@@ -1,0 +1,46 @@
+{
+  "file": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/stl/test1853_run262_263_tri_n3at120.stl",
+  "kind": "stl",
+  "sha256": "3c29d3706ab5488ca2740649c22e74ff02c760eca8ab439146928b2c6a8b0999",
+  "triangles": 360834,
+  "unique_vertices": 180419,
+  "bounds_lo": [
+    1.6301153898239136,
+    -63.5,
+    -63.5
+  ],
+  "bounds_hi": [
+    268.13763427734375,
+    63.5,
+    63.5
+  ],
+  "weld_tolerance": 1e-07,
+  "edge_length": {
+    "min": 0.240679376283422,
+    "mean": 0.6771335952076449,
+    "max": 2.8636512099252984
+  },
+  "area": 124499.89538571077,
+  "signed_volume": 3198241.721384439,
+  "normal_closure": [
+    1.1550582712516189e-10,
+    -4.813927034774679e-13,
+    -1.794120407794253e-13
+  ],
+  "normal_closure_relative": 9.27767603722165e-16,
+  "degenerate_facets": 0,
+  "weld_collapsed_facets": 0,
+  "boundary_edges": 0,
+  "nonmanifold_edges": 0,
+  "inconsistent_edges": 0,
+  "duplicate_facets": 0,
+  "connected_components": 1,
+  "zero_stored_normals": 0,
+  "mismatched_stored_normals": 0,
+  "reversed_stored_normals": 0,
+  "fluid_spacing_ratios": [],
+  "self_intersection_checked": false,
+  "warnings": [],
+  "failures": [],
+  "passed": true
+}

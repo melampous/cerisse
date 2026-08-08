@@ -70,3 +70,35 @@ docs/thesis/
 .codex/
 docs/theory/*.aux
 docs/theory/*.out
+
+# ---- added 2026-08-08, solver unification ----
+# Build variants: the tmp_build_dir rule above misses suffixed variants such as
+# tmp_build_fallback_nonreg_afd_teno, which leaked ~2.6 GB of .o/.d into the
+# untracked set.
+**/tmp_build*
+**/o/2d.*.EXE/
+**/o/3d.*.EXE/
+**/*.ex.*backup
+
+# Simulation and analysis output kept outside the repo
+**/output/
+**/aws_plt/
+**/*.npz
+**/Level_[0-9]*/
+**/*_metadata/
+
+# Thesis working trees live beside the repo, not in it
+/thesis-overleaf-work/
+/thesis-overleaf-supervisor-*/
+/thesis_archive/
+/thesis_sync_backups/
+/tmp_thesis_*/
+/tmp_ch[0-9]*/
+/tmp_*.tex
+/tmp_*.md
+/tmp_*.bib
+/pr_figs_tmp/
+
+# Editor and agent scratch
+.vscode/*.bak_*
+/.codex/

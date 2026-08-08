@@ -1,0 +1,39 @@
+#!/bin/bash
+#PBS -N srp_axislate
+#PBS -q cx
+#PBS -l walltime=01:30:00
+#PBS -l select=1:ncpus=1:mem=24gb
+#PBS -j oe
+#PBS -J 0-6
+
+set -euo pipefail
+
+source /etc/profile.d/modules.sh
+source /etc/profile.d/z00_lmod.sh
+module purge
+module load tools/prod yt/4.3.0-foss-2022a
+
+CASE=/rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2
+ROOT=${CASE}/post_latest_plt09000/bowshock_safe_mean/axis_profiles/late_snapshots
+STEPS=(06000 06500 07000 07500 08000 08500 09000)
+INDEX=${PBS_ARRAY_INDEX:?PBS_ARRAY_INDEX is required}
+STEP=${STEPS[${INDEX}]}
+OUT=${ROOT}/plt${STEP}
+export MPLCONFIGDIR=${TMPDIR:-/tmp}/mpl-axis-${PBS_JOBID}
+export OMP_NUM_THREADS=1
+mkdir -p "${MPLCONFIGDIR}" "${OUT}" "${ROOT}/logs"
+
+date -u
+hostname
+python3 "${CASE}/extract_srp_tri_axis_profiles.py" \
+  --plotfile "${CASE}/plot/plt${STEP}" \
+  --output-dir "${OUT}" \
+  --x-min 0.009 \
+  --x-max 0.631 \
+  --p-inf 574.56 \
+  --body-diameter 0.127 \
+  --body-centre-x 0.300 \
+  --nozzle-plane-x 0.299 \
+  --dpi 180 \
+  2>&1 | tee "${ROOT}/logs/plt${STEP}_${PBS_JOBID}.log"
+date -u

@@ -6,6 +6,7 @@
 #include <AMReX_Math.H>
 
 #include <cmath>
+#include <limits>
 
 
 // shortcuts for different manual bc to be used within bcnormal in prob.h
@@ -56,6 +57,19 @@ class manual_bc_t
     int use_convective_sensor = 1;
     int use_convective_extrapolation = 0;
     int use_pressure_relax_sensor = 1;
+  };
+
+  // Status returned by the ideal-gas characteristic boundary algebra below.
+  // These routines never clip a non-admissible state: the caller must treat
+  // every non-success status as a failed boundary update.
+  enum class characteristic_bc_status_t : int {
+    success = 0,
+    invalid_normal = 1,
+    invalid_interior_state = 2,
+    invalid_target_state = 3,
+    wrong_flow_regime = 4,
+    reverse_flow = 5,
+    no_subsonic_solution = 6,
   };
 
     manual_bc_t() {}
@@ -372,6 +386,439 @@ class manual_bc_t
     cls->RYP2E(rho, Y, p, e_ext);
     U[cls_t::UET] =
       rho * e_ext + Real(0.5) * rho * (u * u + v * v + w * w);
+  }
+
+  static AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE bool
+  characteristic_finite_positive(const Real x)
+  {
+    return std::isfinite(x) && x > Real(0.0);
+  }
+
+  static AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+  characteristic_bc_status_t characteristic_unit_normal(
+    const Real nx, const Real ny, const Real nz,
+    Real& nnx, Real& nny, Real& nnz)
+  {
+    const Real magnitude = std::sqrt(nx * nx + ny * ny + nz * nz);
+    if (!characteristic_finite_positive(magnitude)) {
+      return characteristic_bc_status_t::invalid_normal;
+    }
+    nnx = nx / magnitude;
+    nny = ny / magnitude;
+    nnz = nz / magnitude;
+    return characteristic_bc_status_t::success;
+  }
+
+  // .......................................................................//
+  // \brief  Prescribed full state at a supersonic inlet.
+  //
+  // The supplied normal points out of the computational domain.  This helper
+  // is deliberately restricted to a target state for which every Euler
+  // characteristic enters the domain (u_n + c < 0).  It returns a status
+  // instead of silently applying a subsonic or non-admissible target.
+  static AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+  characteristic_bc_status_t bc_characteristic_supersonic_inlet(
+    const Real nx, const Real ny, const Real nz, const cls_t* cls,
+    const Real rho_target, const Real u_target, const Real v_target,
+    const Real w_target, const Real p_target,
+    const Real Uinner[cls_t::NCONS], Real* Ughost,
+    const Real* Ytarget = nullptr)
+  {
+    static_assert(NUM_SPECIES == 1,
+                  "ideal-gas characteristic BC is currently single-species");
+    Real nnx = Real(0.0), nny = Real(0.0), nnz = Real(0.0);
+    const auto normal_status =
+      characteristic_unit_normal(nx, ny, nz, nnx, nny, nnz);
+    if (normal_status != characteristic_bc_status_t::success) {
+      return normal_status;
+    }
+
+    Real qi[cls_t::NPRIM] = {Real(0.0)};
+    cls->cons2prims_point(Uinner, qi);
+    const Real gamma = qi[cls_t::QG];
+    if (!characteristic_finite_positive(rho_target) ||
+        !characteristic_finite_positive(p_target) ||
+        !(gamma > Real(1.0)) || !std::isfinite(gamma) ||
+        !std::isfinite(u_target + v_target + w_target)) {
+      return characteristic_bc_status_t::invalid_target_state;
+    }
+
+    const Real sound = std::sqrt(gamma * p_target / rho_target);
+    const Real un = u_target * nnx + v_target * nny + w_target * nnz;
+    if (!std::isfinite(sound) || !(un + sound < Real(0.0))) {
+      return characteristic_bc_status_t::wrong_flow_regime;
+    }
+
+    Real Y[NUM_SPECIES] = {Real(1.0)};
+#if NUM_SPECIES > 1
+    if (Ytarget != nullptr) {
+      for (int n = 0; n < NUM_SPECIES; ++n) Y[n] = Ytarget[n];
+    }
+#else
+    amrex::ignore_unused(Ytarget);
+#endif
+    cons_from_prims(cls, rho_target, u_target, v_target, w_target,
+                    p_target, Y, Ughost);
+    return characteristic_bc_status_t::success;
+  }
+
+  // .......................................................................//
+  // \brief  Subsonic total-condition inlet for a calorically perfect gas.
+  //
+  // Prescribed data are total pressure, total temperature, and the complete
+  // velocity direction.  The sole outgoing acoustic invariant
+  //
+  //   J+ = u_n + 2 c / (gamma - 1)
+  //
+  // is taken from the interior state.  A scalar, monotone solve then recovers
+  // a subsonic target Mach number.  No static pressure or mass flow is imposed
+  // independently, so the characteristic count is not over-specified.
+  static AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+  characteristic_bc_status_t bc_characteristic_total_inlet(
+    const Real nx, const Real ny, const Real nz, const cls_t* cls,
+    const Real total_pressure, const Real total_temperature,
+    const Real direction_x, const Real direction_y, const Real direction_z,
+    const Real Uinner[cls_t::NCONS], Real* Ughost,
+    const Real* Ytarget = nullptr)
+  {
+    static_assert(NUM_SPECIES == 1,
+                  "ideal-gas characteristic BC is currently single-species");
+    Real nnx = Real(0.0), nny = Real(0.0), nnz = Real(0.0);
+    const auto normal_status =
+      characteristic_unit_normal(nx, ny, nz, nnx, nny, nnz);
+    if (normal_status != characteristic_bc_status_t::success) {
+      return normal_status;
+    }
+
+    const Real direction_norm = std::sqrt(
+      direction_x * direction_x + direction_y * direction_y +
+      direction_z * direction_z);
+    if (!characteristic_finite_positive(total_pressure) ||
+        !characteristic_finite_positive(total_temperature) ||
+        !characteristic_finite_positive(direction_norm)) {
+      return characteristic_bc_status_t::invalid_target_state;
+    }
+    const Real dx = direction_x / direction_norm;
+    const Real dy = direction_y / direction_norm;
+    const Real dz = direction_z / direction_norm;
+    const Real direction_normal = dx * nnx + dy * nny + dz * nnz;
+    if (!(direction_normal < Real(0.0)) ||
+        !std::isfinite(direction_normal)) {
+      return characteristic_bc_status_t::invalid_target_state;
+    }
+
+    Real qi[cls_t::NPRIM] = {Real(0.0)};
+    cls->cons2prims_point(Uinner, qi);
+    const Real rhoi = qi[cls_t::QRHO];
+    const Real pi = qi[cls_t::QPRES];
+    const Real ci = qi[cls_t::QC];
+    const Real gamma = qi[cls_t::QG];
+    const Real gm1 = gamma - Real(1.0);
+    const Real ui = qi[cls_t::QU];
+    const Real vi = qi[cls_t::QV];
+    const Real wi = qi[cls_t::QW];
+    if (!characteristic_finite_positive(rhoi) ||
+        !characteristic_finite_positive(pi) ||
+        !characteristic_finite_positive(ci) ||
+        !(gamma > Real(1.0)) || !std::isfinite(gamma + ui + vi + wi)) {
+      return characteristic_bc_status_t::invalid_interior_state;
+    }
+    const Real uni = ui * nnx + vi * nny + wi * nnz;
+    if (uni >= Real(0.0)) {
+      return characteristic_bc_status_t::reverse_flow;
+    }
+    if (uni <= -ci) {
+      return characteristic_bc_status_t::wrong_flow_regime;
+    }
+
+    Real Y[NUM_SPECIES] = {Real(1.0)};
+#if NUM_SPECIES > 1
+    if (Ytarget != nullptr) {
+      for (int n = 0; n < NUM_SPECIES; ++n) Y[n] = Ytarget[n];
+    } else {
+      for (int n = 0; n < NUM_SPECIES; ++n) Y[n] = qi[cls_t::QFS + n];
+    }
+#else
+    amrex::ignore_unused(Ytarget);
+#endif
+
+    Real total_density = Real(0.0);
+    cls->PYT2R(total_pressure, Y, total_temperature, total_density);
+    if (!characteristic_finite_positive(total_density)) {
+      return characteristic_bc_status_t::invalid_target_state;
+    }
+    const Real gas_constant =
+      total_pressure / (total_density * total_temperature);
+    const Real total_sound =
+      std::sqrt(gamma * gas_constant * total_temperature);
+    if (!characteristic_finite_positive(gas_constant) ||
+        !characteristic_finite_positive(total_sound)) {
+      return characteristic_bc_status_t::invalid_target_state;
+    }
+
+    const Real jplus = uni + Real(2.0) * ci / gm1;
+    const Real speed_sonic =
+      total_sound * std::sqrt(Real(2.0) / (gamma + Real(1.0)));
+    const Real speed_hi =
+      speed_sonic * (Real(1.0) - Real(1.e-12));
+    auto residual = [=] AMREX_GPU_HOST_DEVICE (const Real speed) noexcept {
+      const Real sound_squared =
+        total_sound * total_sound - Real(0.5) * gm1 * speed * speed;
+      if (!(sound_squared > Real(0.0))) {
+        return -std::numeric_limits<Real>::infinity();
+      }
+      return direction_normal * speed +
+             Real(2.0) * std::sqrt(sound_squared) / gm1 - jplus;
+    };
+    const Real f_lo = residual(Real(0.0));
+    const Real f_hi = residual(speed_hi);
+    const Real tolerance = Real(1.e-12) *
+      amrex::max(Real(1.0), amrex::Math::abs(jplus));
+    if (!std::isfinite(f_lo + f_hi) || f_lo < -tolerance ||
+        f_hi > tolerance) {
+      return characteristic_bc_status_t::no_subsonic_solution;
+    }
+
+    Real lo = Real(0.0);
+    Real hi = speed_hi;
+    for (int iteration = 0; iteration < 56; ++iteration) {
+      const Real mid = Real(0.5) * (lo + hi);
+      if (residual(mid) > Real(0.0)) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    const Real speed = Real(0.5) * (lo + hi);
+    const Real sound_squared =
+      total_sound * total_sound - Real(0.5) * gm1 * speed * speed;
+    const Real sound = std::sqrt(sound_squared);
+    const Real temperature = sound_squared / (gamma * gas_constant);
+    const Real temperature_ratio = temperature / total_temperature;
+    const Real pressure = total_pressure *
+      std::pow(temperature_ratio, gamma / gm1);
+    Real rho = Real(0.0);
+    cls->PYT2R(pressure, Y, temperature, rho);
+    const Real un = speed * direction_normal;
+    if (!characteristic_finite_positive(sound) ||
+        !characteristic_finite_positive(temperature) ||
+        !characteristic_finite_positive(pressure) ||
+        !characteristic_finite_positive(rho) ||
+        !(un < Real(0.0) && un > -sound)) {
+      return characteristic_bc_status_t::no_subsonic_solution;
+    }
+
+    cons_from_prims(cls, rho, speed * dx, speed * dy, speed * dz,
+                    pressure, Y, Ughost);
+    return characteristic_bc_status_t::success;
+  }
+
+  // .......................................................................//
+  // \brief  Static-pressure subsonic outlet for a calorically perfect gas.
+  //
+  // Only the incoming acoustic mode is prescribed through p_back.  Entropy,
+  // tangential velocity, composition, and J+ are inherited from the interior.
+  // A supersonic outflow is copied exactly and is therefore independent of the
+  // supplied back pressure.  Reverse flow is reported instead of being forced
+  // through an outflow formula.
+  static AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+  characteristic_bc_status_t bc_characteristic_pressure_outlet(
+    const Real nx, const Real ny, const Real nz, const cls_t* cls,
+    const Real back_pressure,
+    const Real Uinner[cls_t::NCONS], Real* Ughost)
+  {
+    static_assert(NUM_SPECIES == 1,
+                  "ideal-gas characteristic BC is currently single-species");
+    Real nnx = Real(0.0), nny = Real(0.0), nnz = Real(0.0);
+    const auto normal_status =
+      characteristic_unit_normal(nx, ny, nz, nnx, nny, nnz);
+    if (normal_status != characteristic_bc_status_t::success) {
+      return normal_status;
+    }
+    if (!characteristic_finite_positive(back_pressure)) {
+      return characteristic_bc_status_t::invalid_target_state;
+    }
+
+    Real qi[cls_t::NPRIM] = {Real(0.0)};
+    cls->cons2prims_point(Uinner, qi);
+    const Real rhoi = qi[cls_t::QRHO];
+    const Real pi = qi[cls_t::QPRES];
+    const Real ci = qi[cls_t::QC];
+    const Real gamma = qi[cls_t::QG];
+    const Real gm1 = gamma - Real(1.0);
+    const Real ui = qi[cls_t::QU];
+    const Real vi = qi[cls_t::QV];
+    const Real wi = qi[cls_t::QW];
+    if (!characteristic_finite_positive(rhoi) ||
+        !characteristic_finite_positive(pi) ||
+        !characteristic_finite_positive(ci) ||
+        !(gamma > Real(1.0)) || !std::isfinite(gamma + ui + vi + wi)) {
+      return characteristic_bc_status_t::invalid_interior_state;
+    }
+    const Real uni = ui * nnx + vi * nny + wi * nnz;
+    if (uni < Real(0.0)) {
+      return characteristic_bc_status_t::reverse_flow;
+    }
+    if (uni >= ci) {
+      for (int n = 0; n < cls_t::NCONS; ++n) Ughost[n] = Uinner[n];
+      return characteristic_bc_status_t::success;
+    }
+
+    const Real entropy_constant = pi / std::pow(rhoi, gamma);
+    const Real rho =
+      std::pow(back_pressure / entropy_constant, Real(1.0) / gamma);
+    const Real sound = std::sqrt(gamma * back_pressure / rho);
+    const Real jplus = uni + Real(2.0) * ci / gm1;
+    const Real un = jplus - Real(2.0) * sound / gm1;
+    if (!characteristic_finite_positive(entropy_constant) ||
+        !characteristic_finite_positive(rho) ||
+        !characteristic_finite_positive(sound) ||
+        !(un >= Real(0.0) && un < sound)) {
+      return characteristic_bc_status_t::no_subsonic_solution;
+    }
+
+    const Real utx = ui - uni * nnx;
+    const Real uty = vi - uni * nny;
+    const Real utz = wi - uni * nnz;
+    const Real u = utx + un * nnx;
+    const Real v = uty + un * nny;
+    const Real w = utz + un * nnz;
+    Real Y[NUM_SPECIES] = {Real(1.0)};
+#if NUM_SPECIES > 1
+    for (int n = 0; n < NUM_SPECIES; ++n) Y[n] = qi[cls_t::QFS + n];
+#endif
+    cons_from_prims(cls, rho, u, v, w, back_pressure, Y, Ughost);
+    return characteristic_bc_status_t::success;
+  }
+
+  // .......................................................................//
+  // \brief  Algebraic characteristic far-field boundary for an ideal gas.
+  //
+  // The normal points out of the computational domain.  Characteristic
+  // amplitudes are linearised about the far-field state.  The outgoing
+  // acoustic amplitude is inherited from the interior; the incoming acoustic
+  // amplitude is zero relative to the target.  Entropy and tangential modes
+  // come from the interior at outflow and from the target at inflow.  Keeping
+  // the entropy amplitude separate is essential: nonlinear isentropic J+/J-
+  // matching spuriously converts a pure entropy wave into sound.  This is a
+  // one-dimensional normal-characteristic boundary, not an exact
+  // multidimensional non-reflecting condition.
+  static AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+  characteristic_bc_status_t bc_characteristic_farfield(
+    const Real nx, const Real ny, const Real nz, const cls_t* cls,
+    const Real rho_far, const Real u_far, const Real v_far,
+    const Real w_far, const Real p_far,
+    const Real Uinner[cls_t::NCONS], Real* Ughost)
+  {
+    static_assert(NUM_SPECIES == 1,
+                  "ideal-gas characteristic BC is currently single-species");
+    Real nnx = Real(0.0), nny = Real(0.0), nnz = Real(0.0);
+    const auto normal_status =
+      characteristic_unit_normal(nx, ny, nz, nnx, nny, nnz);
+    if (normal_status != characteristic_bc_status_t::success) {
+      return normal_status;
+    }
+
+    Real qi[cls_t::NPRIM] = {Real(0.0)};
+    cls->cons2prims_point(Uinner, qi);
+    const Real rhoi = qi[cls_t::QRHO];
+    const Real pi = qi[cls_t::QPRES];
+    const Real ci = qi[cls_t::QC];
+    const Real gamma = qi[cls_t::QG];
+    const Real ui = qi[cls_t::QU];
+    const Real vi = qi[cls_t::QV];
+    const Real wi = qi[cls_t::QW];
+    if (!characteristic_finite_positive(rhoi) ||
+        !characteristic_finite_positive(pi) ||
+        !characteristic_finite_positive(ci) ||
+        !(gamma > Real(1.0)) ||
+        !std::isfinite(gamma + ui + vi + wi)) {
+      return characteristic_bc_status_t::invalid_interior_state;
+    }
+    if (!characteristic_finite_positive(rho_far) ||
+        !characteristic_finite_positive(p_far) ||
+        !std::isfinite(u_far + v_far + w_far)) {
+      return characteristic_bc_status_t::invalid_target_state;
+    }
+
+    const Real cf = std::sqrt(gamma * p_far / rho_far);
+    const Real uni = ui * nnx + vi * nny + wi * nnz;
+    const Real unf = u_far * nnx + v_far * nny + w_far * nnz;
+    if (!characteristic_finite_positive(cf) ||
+        !std::isfinite(uni + unf)) {
+      return characteristic_bc_status_t::invalid_target_state;
+    }
+
+    if (uni <= -ci) {
+      if (!(unf + cf < Real(0.0))) {
+        return characteristic_bc_status_t::wrong_flow_regime;
+      }
+      Real Y[NUM_SPECIES] = {Real(1.0)};
+      cons_from_prims(cls, rho_far, u_far, v_far, w_far, p_far, Y, Ughost);
+      return characteristic_bc_status_t::success;
+    }
+    if (uni >= ci) {
+      for (int n = 0; n < cls_t::NCONS; ++n) Ughost[n] = Uinner[n];
+      return characteristic_bc_status_t::success;
+    }
+
+    const Real impedance = rho_far * cf;
+    const Real pressure_delta_i = pi - p_far;
+    const Real normal_velocity_delta_i = uni - unf;
+    const Real acoustic_outgoing =
+      pressure_delta_i + impedance * normal_velocity_delta_i;
+    const Real pressure_delta = Real(0.5) * acoustic_outgoing;
+    const Real normal_velocity_delta =
+      acoustic_outgoing / (Real(2.0) * impedance);
+    const Real p = p_far + pressure_delta;
+    const Real un = unf + normal_velocity_delta;
+    const Real velocity_scale = amrex::max(
+      amrex::max(ci, cf),
+      amrex::max(amrex::Math::abs(uni), amrex::Math::abs(unf)));
+    const Real zero_velocity_tolerance =
+      Real(64.0) * std::numeric_limits<Real>::epsilon() * velocity_scale;
+    const bool boundary_inflow =
+      un < -zero_velocity_tolerance ||
+      (amrex::Math::abs(un) <= zero_velocity_tolerance &&
+       unf < -zero_velocity_tolerance);
+
+    Real entropy_amplitude = Real(0.0);
+    Real utx = Real(0.0), uty = Real(0.0), utz = Real(0.0);
+    if (boundary_inflow) {
+      utx = u_far - unf * nnx;
+      uty = v_far - unf * nny;
+      utz = w_far - unf * nnz;
+    } else {
+      entropy_amplitude =
+        pressure_delta_i - cf * cf * (rhoi - rho_far);
+      utx = ui - uni * nnx;
+      uty = vi - uni * nny;
+      utz = wi - uni * nnz;
+    }
+
+    const Real rho = rho_far +
+      (pressure_delta - entropy_amplitude) / (cf * cf);
+    if (!characteristic_finite_positive(rho) ||
+        !characteristic_finite_positive(p)) {
+      return characteristic_bc_status_t::no_subsonic_solution;
+    }
+    const Real sound = std::sqrt(gamma * p / rho);
+    // A subsonic interior state can reconstruct to a supersonic outflow ghost
+    // state as an outgoing disturbance crosses M_n=1.  That transition is
+    // admissible: the incoming acoustic characteristic simply disappears.
+    // Reject only a reconstructed supersonic inflow, which is incompatible
+    // with this subsonic far-field closure and its prescribed target state.
+    const bool compatible_regime = un > -sound;
+    if (!characteristic_finite_positive(sound) || !compatible_regime) {
+      return characteristic_bc_status_t::no_subsonic_solution;
+    }
+
+    const Real u = utx + un * nnx;
+    const Real v = uty + un * nny;
+    const Real w = utz + un * nnz;
+    Real Y[NUM_SPECIES] = {Real(1.0)};
+    cons_from_prims(cls, rho, u, v, w, p, Y, Ughost);
+    return characteristic_bc_status_t::success;
   }
 
   static AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE void cons_rhs_from_prim_rhs(

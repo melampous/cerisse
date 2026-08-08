@@ -1,0 +1,11 @@
+time_s=0.00050000000000000901
+level=1
+finest_shape_rz=64x192
+dr_mm=1.06129666667
+dz_mm=1.06129666667
+axis_ring_r_mm=0.530648333333
+axis_mach1_location_mm=-122.722397226
+mach_min=0.0285059118364
+mach_max=9.25112929372
+pressure_min_Pa=256.604825088
+pressure_max_Pa=123997.155009

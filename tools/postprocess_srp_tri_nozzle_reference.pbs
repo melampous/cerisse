@@ -1,0 +1,33 @@
+#!/bin/bash
+#PBS -N srp_nozzle_ref
+#PBS -q cx
+#PBS -l walltime=00:45:00
+#PBS -l select=1:ncpus=1:mem=12gb
+#PBS -j oe
+
+set -euo pipefail
+
+CASE=/rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2
+OUT=${CASE}/post_latest_plt09000/bowshock_safe_mean/nozzle_marked_reference
+
+export MPLCONFIGDIR=${TMPDIR:-/tmp}/mpl-srp-nozzle-ref-${PBS_JOBID}
+mkdir -p "${MPLCONFIGDIR}" "${OUT}" "${OUT}/logs"
+
+date -u
+hostname
+module load tools/prod yt/4.3.0-foss-2022a
+python3 "${CASE}/postprocess_srp_tri_nozzle_reference.py" \
+  --plotfile "${CASE}/plot/plt09000" \
+  --extractor "${CASE}/postprocess_srp_tri_late_mean.py" \
+  --output-dir "${OUT}" \
+  --full-axial-crop 0.006666666666666667 0.60 \
+  --full-transverse-crop -0.02 0.57 \
+  --display-full-x 0.006666666666666667 0.60 \
+  --display-full-z 0.06545 0.48455 \
+  --zoom-x 0.075 0.325 \
+  --zoom-z 0.135 0.415 \
+  --schlieren-gref 72.18947715759369 \
+  --schlieren-k 4.0 \
+  --paper-dpi 600 \
+  2>&1 | tee "${OUT}/logs/render_${PBS_JOBID}.log"
+date -u

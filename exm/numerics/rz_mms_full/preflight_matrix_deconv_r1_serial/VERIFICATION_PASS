@@ -1,0 +1,16 @@
+{
+  "all_metrics_finite": true,
+  "initial_cell_averages_match_oracle": true,
+  "all_evolution_runs_reach_target_time": true,
+  "density_and_pressure_remain_positive": true,
+  "azimuthal_momentum_remains_zero": true,
+  "rhs_errors_decrease": true,
+  "rhs_asymptotic_order_is_at_least_1p7": true,
+  "rhs_axis_radial_momentum_is_second_order": true,
+  "rhs_first_three_radial_momentum_rings_are_second_order": true,
+  "rhs_radial_momentum_linf_is_second_order": true,
+  "pressure_operator_preserves_regular_quadratic": true,
+  "evolution_errors_decrease": true,
+  "evolution_asymptotic_order_is_at_least_1p7": true,
+  "evolution_first_three_radial_momentum_rings_converge": true
+}

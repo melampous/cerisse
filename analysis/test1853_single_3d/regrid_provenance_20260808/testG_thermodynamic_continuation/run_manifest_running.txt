@@ -1,0 +1,17 @@
+started_utc=2026-08-08T03:07:29Z
+host=ip-10-0-141-49.us-east-2.compute.internal
+restart=/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_llfdiag_3way_20260808/testB_normal_regrid/chk03059
+geometry=/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_chain_20260807T115518Z/geometry/test1853_run165_single_master_SI.stl
+target_max_step=4000
+capacity_block_deadline_guard=2026-08-08T10:45:00Z
+cfl=0.01
+regrid_int=4,4
+check_int=100
+plot_int=200
+surface_int=100
+strict_positivity=1
+soft_positivity=0
+prolongation_floor=max(pressure_rhoe,rho*cv*T_min)
+90a733b431a9a27782862877ee29f3aa8025910c8571032ff0c4cc077f131a5d  main3d.gnu.TPROF.MPI.CUDA.ex
+9659136e1277bcaf6d7da08fdcbb55881b6f4f2000045b95dca5f5e9c185b5b0  inputs.run165
+e7d0dbf2aa6613f2877af587531ff4eec8389602d5f89b763fe5ffd43c9d6864  prob.h

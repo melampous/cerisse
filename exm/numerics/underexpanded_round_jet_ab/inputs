@@ -1,0 +1,47 @@
+# Reduced Level-0 form of exm/underexpanded_jet/3d/npr3_lev4_ns.
+#
+# The canonical prob.h supplies the same NPR_0=3 sonic tanh-profile inflow,
+# ambient state, calorically perfect air model, and constant transport data.
+
+max_step  = 100000
+stop_time = 7.0e-5
+cfl       = 0.30
+
+cns.order_rk  = 3
+cns.stages_rk = 3
+
+cns.lo_bc = 1 2 2
+cns.hi_bc = 2 2 2
+cns.nstep_screen_output = 100
+cns.verbose = 0
+
+# AFD-HLLC-WENO-Z5 controls.  The runner changes only afd_shock_llf.
+cns.afd_correction            = 1
+cns.afd_shock_llf             = 1
+cns.afd_smoothness_threshold  = 0.08
+cns.afd_shock_pressure_jump   = 0.01
+cns.afd_shock_compression     = 0.001
+cns.afd_teno_cutoff           = 1.0e-4
+
+# Diagnostics are obtained from plotfiles.  The canonical probe set refers to
+# AMR Level 2 and is therefore disabled in this Level-0 regression.
+cns.record_probe = 0
+
+geometry.is_periodic = 0 0 0
+geometry.coord_sys   = 0
+geometry.prob_lo     =  0.0  -0.02  -0.02
+geometry.prob_hi     =  0.06  0.02   0.02
+amr.n_cell           = 96 64 64
+
+amr.max_level       = 0
+amr.blocking_factor = 16
+amr.max_grid_size   = 64
+
+amr.plot_files_output = 1
+amr.plot_file         = plot/plt
+amr.plot_int          = 100000
+amr.derive_plot_vars  = pressure velocity temperature
+amr.v                 = 1
+
+amr.checkpoint_files_output = 0
+amrex.the_arena_is_managed  = 0

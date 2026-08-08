@@ -1,0 +1,29 @@
+{
+  "test": "testE_admissible_prolongation",
+  "started_utc": "2026-08-08T01:57:33Z",
+  "finished_utc": "2026-08-08T01:57:58Z",
+  "exit_status": 6,
+  "restart": "testB_normal_regrid/chk03059",
+  "target_max_step": 3061,
+  "executable_sha256": "04965bd1d27da24ab025a16628a6840bba5fd7be4cb211daf6f559cbdf9efd97",
+  "method": "pure_shared_gp_full_cartesian",
+  "cut_control": "disabled",
+  "verdict": "original_negative_rhoe_regrid_failure_fixed_but_temperature_floor_gap_exposed",
+  "preflux_euler_failure": false,
+  "level0_step_3060_completed": true,
+  "failed_level": 1,
+  "failed_after_finite_dt_s": 1.116478628e-08,
+  "nonfinite_cells": 0,
+  "strict_floor_failure_cells": 18,
+  "minimum_density_kg_m3": 0.002807343791,
+  "minimum_internal_energy_density_J_m3": 8.619831296,
+  "scaled_floor_at_minimum_density_J_m3": 20.14982304,
+  "reported_specific_internal_energy_J_kg": {
+    "minimum": 238.153075,
+    "maximum": 3999.260767
+  },
+  "original_testD_bad_cells": 12,
+  "original_testD_cells_present_in_testE_failure_set": 12,
+  "additional_neighbour_cells": 6,
+  "next_gate": "rebuild_with_density_dependent_cv_Tmin_prolongation_floor_and_replay_once_with_separate_authorization"
+}

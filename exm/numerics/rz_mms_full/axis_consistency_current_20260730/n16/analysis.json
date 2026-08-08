@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/axis_consistency_current_20260730/n16/plot/plt00001",
+  "quantity": "rhs",
+  "state_semantics": "cylindrical_volume_average",
+  "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+  "nr": 16,
+  "nz": 16,
+  "dr": 0.0625,
+  "dz": 0.0625,
+  "plot_time": 0.00400353568166588,
+  "exact_time": 0.0,
+  "errors": {
+    "radial_momentum": {
+      "l1": 0.00021558634926291338,
+      "l2": 0.0002616148550565208,
+      "linf": 0.000654000847343697,
+      "axis_linf": 1.9604448869629722e-05,
+      "first_three_rings_linf": 7.784721038198682e-05
+    },
+    "axial_momentum": {
+      "l1": 0.00019645009956956546,
+      "l2": 0.0002370096936087212,
+      "linf": 0.000544381103205302,
+      "axis_linf": 0.0005276275200461616,
+      "first_three_rings_linf": 0.0005306874375530443
+    },
+    "azimuthal_momentum": {
+      "l1": 0.0,
+      "l2": 0.0,
+      "linf": 0.0,
+      "axis_linf": 0.0,
+      "first_three_rings_linf": 0.0
+    },
+    "energy": {
+      "l1": 0.0010337787678227541,
+      "l2": 0.001248576554729253,
+      "linf": 0.0027600825278208674,
+      "axis_linf": 0.0017513160514417703,
+      "first_three_rings_linf": 0.0018028148726923487
+    },
+    "density": {
+      "l1": 8.586169948224618e-05,
+      "l2": 9.896190056639333e-05,
+      "linf": 0.0002478463774733784,
+      "axis_linf": 0.00023609249245294325,
+      "first_three_rings_linf": 0.0002478463774733784
+    }
+  }
+}

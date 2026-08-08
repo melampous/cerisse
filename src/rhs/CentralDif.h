@@ -5,12 +5,10 @@
 #include <CNS.h>
 
 #include "diff_ops.H"
-#include "IbmFluxUtils.h"
+#include "IBMSharedGPFluxUtils.h"
 template <bool isAD, bool isIB, int order, typename cls_t>
 class centraldif_t {
   public:
-  static constexpr bool rz_pressure_split_capable = false;  // RZ pressure-split is WENO-only
-
   AMREX_GPU_HOST
   centraldif_t() {
     // initialize coefficients for flux interpolation based on order

@@ -1,0 +1,22 @@
+#!/bin/bash
+#PBS -N srp_tri_post
+#PBS -q cx
+#PBS -l walltime=02:00:00
+#PBS -l select=1:ncpus=1:mem=16gb
+#PBS -j oe
+#PBS -o /rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2/post_latest_plt09000/pbs.log
+
+set -euo pipefail
+
+CASE=/rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2
+OUT=${CASE}/post_latest_plt09000
+export MPLCONFIGDIR=${TMPDIR:-/tmp}/mpl-${PBS_JOBID}
+mkdir -p "${MPLCONFIGDIR}" "${OUT}"
+
+date -u
+hostname
+python3 "${CASE}/postprocess_srp_tri_l2.py" \
+  --plotfile "${CASE}/plot/plt09000" \
+  --reader /rds/general/user/jq319/home/schlieren.py \
+  --output-dir "${OUT}" 2>&1 | tee "${OUT}/run.log"
+date -u

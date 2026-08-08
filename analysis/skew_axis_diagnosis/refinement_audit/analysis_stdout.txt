@@ -1,0 +1,22 @@
+Filament dominant radii and widths (-60 <= z <= -20 mm):
+uniform_L1 pressure         r= 1.5919 mm width= 5.3065 mm p95=0.07277
+uniform_L1 density          r= 1.5919 mm width= 5.3065 mm p95=0.04899
+uniform_L1 temperature      r= 1.5919 mm width= 3.1839 mm p95=0.05799
+uniform_L1 radial_velocity  r= 2.6532 mm width= 5.3065 mm p95=0.09571
+uniform_L1 mach             r= 1.5919 mm width= 1.0613 mm p95=0.02670
+uniform_L2 pressure         r= 3.9799 mm width= 3.1839 mm p95=0.02606
+uniform_L2 density          r= 0.7960 mm width= 0.5306 mm p95=0.02491
+uniform_L2 temperature      r= 0.7960 mm width= 0.5306 mm p95=0.03166
+uniform_L2 radial_velocity  r= 2.3879 mm width= 5.3065 mm p95=0.02958
+uniform_L2 mach             r= 0.7960 mm width= 0.5306 mm p95=0.01468
+Axis parity max/p95 (-80 <= z <= -5 mm):
+uniform_L1 pressure                     max=0.12233 p95=0.11840
+uniform_L1 density                      max=0.09173 p95=0.08667
+uniform_L1 temperature                  max=0.11452 p95=0.11326
+uniform_L1 axial_velocity               max=0.09447 p95=0.07472
+uniform_L1 radial_velocity_over_sound   max=0.03024 p95=0.02417
+uniform_L2 pressure                     max=0.03966 p95=0.02589
+uniform_L2 density                      max=0.06520 p95=0.05245
+uniform_L2 temperature                  max=0.08746 p95=0.06532
+uniform_L2 axial_velocity               max=0.09522 p95=0.06404
+uniform_L2 radial_velocity_over_sound   max=0.01974 p95=0.00984

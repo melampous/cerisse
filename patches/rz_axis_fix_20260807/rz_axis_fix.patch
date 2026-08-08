@@ -1,0 +1,67 @@
+1568a1569,1574
+>             // Near-axis metric-flux robustification constants (lambda-local
+>             // to avoid a constexpr-if device capture): first-order metric LLF
+>             // fallback on the innermost interior radial face. threshold < 0 =
+>             // always on that face; a positive value gates by density jump.
+>             constexpr int rz_axis_collar_faces = 1;
+>             constexpr Real rz_axis_shock_sensor_threshold = Real(0.003);
+1710a1717,1723
+>             // First-order metric fallback storage (immediate L/R cells).
+>             Real fo_cons[2][Closure::NCONS];
+>             Real fo_flux[2][Closure::NCONS];
+>             Real fo_density[2] = {Real(0.0), Real(0.0)};
+>             Real fo_pressure[2] = {Real(0.0), Real(0.0)};
+>             Real fo_radius[2] = {Real(0.0), Real(0.0)};
+> 
+1742a1756,1770
+>               if (reconstruct_radial_metric_flux &&
+>                   (sample_index == required_ghost_cells - 1 ||
+>                    sample_index == required_ghost_cells)) {
+>                 const int fo_side = sample_index - (required_ghost_cells - 1);
+>                 fo_density[fo_side] =
+>                     primitive_states(stencil_cell_index, Closure::QRHO);
+>                 fo_pressure[fo_side] =
+>                     primitive_states(stencil_cell_index, Closure::QPRES);
+>                 fo_radius[fo_side] = radial_origin +
+>                     (Real(stencil_cell_index[0]) + Real(0.5)) * radial_spacing;
+>                 for (int fo_c = 0; fo_c < Closure::NCONS; ++fo_c) {
+>                   fo_cons[fo_side][fo_c] = conservative_state[fo_c];
+>                   fo_flux[fo_side][fo_c] = physical_flux[fo_c];
+>                 }
+>               }
+1982a2011,2045
+>                 if (radial_face > Real(0.0) && face_index[0] >= 1 &&
+>                     face_index[0] <= rz_axis_collar_faces) {
+>                   const Real fo_dmin = amrex::min(fo_density[0], fo_density[1]);
+>                   const Real fo_djump = (fo_dmin > Real(0.0))
+>                       ? std::abs(fo_density[0] - fo_density[1]) / fo_dmin
+>                       : Real(1.0);
+>                   if (fo_djump > rz_axis_shock_sensor_threshold) {
+>                     const Real fo_inv_rface = Real(1.0) / radial_face;
+>                     const Real fo_alpha = llf_max_wave_speed;
+>                     Real fo_full[Closure::NCONS];
+>                     for (int fo_c = 0; fo_c < Closure::NCONS; ++fo_c) {
+>                       Real fo_adv_l = fo_flux[0][fo_c];
+>                       Real fo_adv_r = fo_flux[1][fo_c];
+>                       if (fo_c == Closure::UMX) {
+>                         fo_adv_l -= fo_pressure[0];
+>                         fo_adv_r -= fo_pressure[1];
+>                       }
+>                       // Metric-weighted flux average with an UN-weighted
+>                       // physical-jump LLF dissipation (vanishes for a uniform
+>                       // state; a metric-weighted dissipation would not).
+>                       fo_full[fo_c] = Real(0.5) * fo_inv_rface *
+>                           (fo_radius[0] * fo_adv_l + fo_radius[1] * fo_adv_r) -
+>                           Real(0.5) * fo_alpha *
+>                           (fo_cons[1][fo_c] - fo_cons[0][fo_c]);
+>                     }
+>                     const Real fo_pressure_face =
+>                         Real(0.5) * (fo_pressure[0] + fo_pressure[1]);
+>                     for (int fo_c = 0; fo_c < Closure::NCONS; ++fo_c) {
+>                       face_flux(face_index, fo_c) = fo_full[fo_c];
+>                     }
+>                     face_flux(face_index, Closure::UMX) =
+>                         fo_full[Closure::UMX] + fo_pressure_face;
+>                     radial_pressure_face_flux(face_index, 0) = fo_pressure_face;
+>                   }
+>                 }

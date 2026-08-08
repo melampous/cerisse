@@ -1,0 +1,48 @@
+# One RHS evaluation: plt00001 stores dU/dt rather than a physical state.
+max_step = 1
+time_step = 1.0e-5
+
+cns.order_rk = 0
+cns.stages_rk = 1
+cns.lo_bc = 3 6
+cns.hi_bc = 6 6
+cns.nstep_screen_output = 1
+cns.verbose = 0
+
+geometry.is_periodic = 0 0
+geometry.coord_sys = 1
+geometry.prob_lo = 0.0 0.0
+geometry.prob_hi = 1.0 1.0
+amr.n_cell = 16 16
+amr.max_level = 0
+amr.max_grid_size = 256
+amr.blocking_factor = 8
+
+# 0: p=p0+A*r^2; 1: curved tanh layer; 2: p=p0+A*r^2+B*r^4.
+# Set profile=0 and amplitude=0 for the constant-pressure gate.
+prob.profile = 0
+prob.cell_average = 0
+prob.gamma = 1.4
+prob.rho0 = 1.0
+prob.p0 = 2.0
+prob.amplitude = 0.25
+prob.quartic = 0.10
+prob.layer_z = 0.5
+prob.curvature = 0.20
+prob.width = 0.04
+
+# The paired pressure operator is automatic for selected all-fluid R-Z
+# characteristic LLF WENO/TENO builds. AFD-HLLC builds use their native R-Z
+# pressure treatment. The annular-pressure/deconvolution path is disabled for
+# this common comparison.
+cns.do_reflux = 0
+cns.rz_euler_annular_pressure_consistency = 0
+cns.rz_euler_cell_average_deconvolution = 0
+
+amr.plot_files_output = 1
+amr.plot_file = output/plt
+amr.plot_int = 1
+amr.checkpoint_files_output = 0
+amr.v = 0
+
+amrex.the_arena_is_managed = 0

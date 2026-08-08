@@ -1,0 +1,1774 @@
+{
+  "schema_version": 1,
+  "scope": "no-solid uniform level-0 ideal-gas R-Z Euler, LLF-WENO-Z5, SSPRK(4,3)",
+  "resolutions": [
+    16,
+    32,
+    64,
+    128,
+    256
+  ],
+  "rhs": {
+    "16": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/full_n16/plt00001",
+      "quantity": "rhs",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 16,
+      "nz": 16,
+      "dr": 0.0625,
+      "dz": 0.0625,
+      "plot_time": 0.00400353568166588,
+      "exact_time": 0.0,
+      "errors": {
+        "radial_momentum": {
+          "l1": 0.00021558634926291338,
+          "l2": 0.0002616148550565208,
+          "linf": 0.000654000847343697,
+          "axis_linf": 1.9604448869629722e-05,
+          "first_three_rings_linf": 7.784721038198682e-05
+        },
+        "axial_momentum": {
+          "l1": 0.00019645009956956546,
+          "l2": 0.0002370096936087212,
+          "linf": 0.000544381103205302,
+          "axis_linf": 0.0005276275200461616,
+          "first_three_rings_linf": 0.0005306874375530443
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 0.0010337787678227541,
+          "l2": 0.001248576554729253,
+          "linf": 0.0027600825278208674,
+          "axis_linf": 0.0017513160514417703,
+          "first_three_rings_linf": 0.0018028148726923487
+        },
+        "density": {
+          "l1": 8.586169948224618e-05,
+          "l2": 9.896190056639333e-05,
+          "linf": 0.0002478463774733784,
+          "axis_linf": 0.00023609249245294325,
+          "first_three_rings_linf": 0.0002478463774733784
+        }
+      }
+    },
+    "32": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/full_n32/plt00001",
+      "quantity": "rhs",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 32,
+      "nz": 32,
+      "dr": 0.03125,
+      "dz": 0.03125,
+      "plot_time": 0.00199981137667454,
+      "exact_time": 0.0,
+      "errors": {
+        "radial_momentum": {
+          "l1": 5.479936363020042e-05,
+          "l2": 6.82911704587461e-05,
+          "linf": 0.00018493016505408133,
+          "axis_linf": 2.956864602130264e-06,
+          "first_three_rings_linf": 1.0843953351533965e-05
+        },
+        "axial_momentum": {
+          "l1": 4.795527374356378e-05,
+          "l2": 5.804313088054783e-05,
+          "linf": 0.0002650112239899263,
+          "axis_linf": 8.270314379628385e-05,
+          "first_three_rings_linf": 8.441507929980718e-05
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 0.0002916035009795176,
+          "l2": 0.0003381368006756036,
+          "linf": 0.0011262090633067656,
+          "axis_linf": 0.0004448125467246544,
+          "first_three_rings_linf": 0.0004448125467246544
+        },
+        "density": {
+          "l1": 7.161391855946422e-06,
+          "l2": 1.4009647839861191e-05,
+          "linf": 0.00012190617362487291,
+          "axis_linf": 2.505431929788332e-05,
+          "first_three_rings_linf": 2.7888051124434765e-05
+        }
+      }
+    },
+    "64": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/full_n64/plt00001",
+      "quantity": "rhs",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 64,
+      "nz": 64,
+      "dr": 0.015625,
+      "dz": 0.015625,
+      "plot_time": 0.00099964307861788,
+      "exact_time": 0.0,
+      "errors": {
+        "radial_momentum": {
+          "l1": 1.3920918182251595e-05,
+          "l2": 1.7341732885001685e-05,
+          "linf": 4.752378472180907e-05,
+          "axis_linf": 4.2298598624270183e-07,
+          "first_three_rings_linf": 1.3795195959978752e-06
+        },
+        "axial_momentum": {
+          "l1": 1.1611137460773796e-05,
+          "l2": 1.3262435298191809e-05,
+          "linf": 2.6776428581787304e-05,
+          "axis_linf": 2.45775854226353e-05,
+          "first_three_rings_linf": 2.4838693704565262e-05
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 7.386896792414396e-05,
+          "l2": 8.473568432648406e-05,
+          "linf": 0.00016928215455264128,
+          "axis_linf": 0.00013284101287919237,
+          "first_three_rings_linf": 0.00013284101287919237
+        },
+        "density": {
+          "l1": 3.7906513593638486e-07,
+          "l2": 8.780980204781903e-07,
+          "linf": 1.037279073969749e-05,
+          "axis_linf": 9.697342117330476e-06,
+          "first_three_rings_linf": 1.037279073969749e-05
+        }
+      }
+    },
+    "128": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/full_n128/plt00001",
+      "quantity": "rhs",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 128,
+      "nz": 128,
+      "dr": 0.0078125,
+      "dz": 0.0078125,
+      "plot_time": 0.000499784684621025,
+      "exact_time": 0.0,
+      "errors": {
+        "radial_momentum": {
+          "l1": 3.4865645065391072e-06,
+          "l2": 4.344315189039734e-06,
+          "linf": 1.199539583932041e-05,
+          "axis_linf": 7.993526834918711e-08,
+          "first_three_rings_linf": 1.7331280107390178e-07
+        },
+        "axial_momentum": {
+          "l1": 2.9017399609818e-06,
+          "l2": 3.2859406979974472e-06,
+          "linf": 6.757868829566915e-06,
+          "axis_linf": 3.6197621753400466e-06,
+          "first_three_rings_linf": 3.6655015909353716e-06
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 1.8528955033528493e-05,
+          "l2": 2.1205475715807663e-05,
+          "linf": 4.234894873927919e-05,
+          "axis_linf": 2.8073362821318115e-05,
+          "first_three_rings_linf": 2.8073362821318115e-05
+        },
+        "density": {
+          "l1": 1.1906455705436177e-08,
+          "l2": 2.8308045120645314e-08,
+          "linf": 3.323992077350346e-07,
+          "axis_linf": 3.323992077350346e-07,
+          "first_three_rings_linf": 3.323992077350346e-07
+        }
+      }
+    },
+    "256": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/full_n256/plt00001",
+      "quantity": "rhs",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 256,
+      "nz": 256,
+      "dr": 0.00390625,
+      "dz": 0.00390625,
+      "plot_time": 0.000249882889475763,
+      "exact_time": 0.0,
+      "errors": {
+        "radial_momentum": {
+          "l1": 8.720170604694366e-07,
+          "l2": 1.0864003872360356e-06,
+          "linf": 3.0085909580312986e-06,
+          "axis_linf": 1.6715162800180094e-08,
+          "first_three_rings_linf": 2.186971747794586e-08
+        },
+        "axial_momentum": {
+          "l1": 7.25515595004242e-07,
+          "l2": 8.2123759102198e-07,
+          "linf": 1.6936289417984751e-06,
+          "axis_linf": 9.059589791485245e-07,
+          "first_three_rings_linf": 9.170700287428057e-07
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 4.633348153304275e-06,
+          "l2": 5.302873607693815e-06,
+          "linf": 1.0602198081105518e-05,
+          "axis_linf": 7.02341606750867e-06,
+          "first_three_rings_linf": 7.02341606750867e-06
+        },
+        "density": {
+          "l1": 4.1424539581379606e-10,
+          "l2": 1.2135235083652565e-09,
+          "linf": 7.31387830438246e-08,
+          "axis_linf": 7.31387830438246e-08,
+          "first_three_rings_linf": 7.31387830438246e-08
+        }
+      }
+    }
+  },
+  "pressure_rhs": {
+    "16": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/preflight_matrix_deconv_r1_serial/runs/pressure_rhs_n16/output/plt00001",
+      "quantity": "rhs",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 16,
+      "nz": 16,
+      "dr": 0.0625,
+      "dz": 0.0625,
+      "plot_time": 0.00504064235771388,
+      "exact_time": 0.0,
+      "errors": {
+        "radial_momentum": {
+          "l1": 4.5694314443221384e-15,
+          "l2": 5.831028406015671e-15,
+          "linf": 1.8193779816044753e-14,
+          "axis_linf": 1.6507845437829793e-14,
+          "first_three_rings_linf": 1.6507845437829793e-14
+        },
+        "axial_momentum": {
+          "l1": 2.8431970610623334e-05,
+          "l2": 3.065941978462824e-05,
+          "linf": 4.362367395527311e-05,
+          "axis_linf": 3.5343973083745706e-05,
+          "first_three_rings_linf": 3.555096560320381e-05
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 0.00017782490307018144,
+          "l2": 0.00021327339844891114,
+          "linf": 0.0003282703603242204,
+          "axis_linf": 0.00026369973944763425,
+          "first_three_rings_linf": 0.0002653013075508692
+        },
+        "density": {
+          "l1": 2.7752956412279704e-15,
+          "l2": 3.4934517641030656e-15,
+          "linf": 1.131315580730409e-14,
+          "axis_linf": 8.253126168051859e-15,
+          "first_three_rings_linf": 8.253126168051859e-15
+        }
+      }
+    },
+    "32": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/preflight_matrix_deconv_r1_serial/runs/pressure_rhs_n32/output/plt00001",
+      "quantity": "rhs",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 32,
+      "nz": 32,
+      "dr": 0.03125,
+      "dz": 0.03125,
+      "plot_time": 0.00251949010428004,
+      "exact_time": 0.0,
+      "errors": {
+        "radial_momentum": {
+          "l1": 9.665161398591579e-15,
+          "l2": 1.2078703342078755e-14,
+          "linf": 3.7028539956462936e-14,
+          "axis_linf": 3.400285695370764e-14,
+          "first_three_rings_linf": 3.400285695370764e-14
+        },
+        "axial_momentum": {
+          "l1": 2.1821576409742456e-07,
+          "l2": 2.386115893377623e-07,
+          "linf": 4.878517979173269e-07,
+          "axis_linf": 3.92745382722659e-07,
+          "first_three_rings_linf": 3.9332061026881027e-07
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 5.275249438590957e-06,
+          "l2": 6.01964814585119e-06,
+          "linf": 1.0317983484359194e-05,
+          "axis_linf": 8.233326153794795e-06,
+          "first_three_rings_linf": 8.245830364003726e-06
+        },
+        "density": {
+          "l1": 4.551315339063315e-15,
+          "l2": 5.832954381558053e-15,
+          "linf": 2.422480651707206e-14,
+          "axis_linf": 1.7282813340869096e-14,
+          "first_three_rings_linf": 1.7282813340869096e-14
+        }
+      }
+    },
+    "64": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/preflight_matrix_deconv_r1_serial/runs/pressure_rhs_n64/output/plt00001",
+      "quantity": "rhs",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 64,
+      "nz": 64,
+      "dr": 0.015625,
+      "dz": 0.015625,
+      "plot_time": 0.00125933461523676,
+      "exact_time": 0.0,
+      "errors": {
+        "radial_momentum": {
+          "l1": 1.7501120694920447e-14,
+          "l2": 2.206646775678298e-14,
+          "linf": 8.661387579378399e-14,
+          "axis_linf": 6.85430716091534e-14,
+          "first_three_rings_linf": 8.270988061109819e-14
+        },
+        "axial_momentum": {
+          "l1": 2.6107419331500156e-09,
+          "l2": 2.7287739080883837e-09,
+          "linf": 4.059912475651295e-09,
+          "axis_linf": 3.2581023712285884e-09,
+          "first_three_rings_linf": 3.259330562388474e-09
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 1.6338062433339663e-07,
+          "l2": 1.8242289963551902e-07,
+          "linf": 3.031617571563894e-07,
+          "axis_linf": 2.411055917486693e-07,
+          "first_three_rings_linf": 2.411971571358862e-07
+        },
+        "density": {
+          "l1": 9.462562259487027e-15,
+          "l2": 1.209686946870959e-14,
+          "linf": 4.6432279874020936e-14,
+          "axis_linf": 4.2074289772645505e-14,
+          "first_three_rings_linf": 4.2074289772645505e-14
+        }
+      }
+    },
+    "128": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/preflight_matrix_deconv_r1_serial/runs/pressure_rhs_n128/output/plt00001",
+      "quantity": "rhs",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 128,
+      "nz": 128,
+      "dr": 0.0078125,
+      "dz": 0.0078125,
+      "plot_time": 0.000629598297461099,
+      "exact_time": 0.0,
+      "errors": {
+        "radial_momentum": {
+          "l1": 3.385366632643795e-14,
+          "l2": 4.25618503645975e-14,
+          "linf": 1.8644187214054975e-13,
+          "axis_linf": 1.8644187214054975e-13,
+          "first_three_rings_linf": 1.8644187214054975e-13
+        },
+        "axial_momentum": {
+          "l1": 3.7244523539416135e-11,
+          "l2": 4.035437003720446e-11,
+          "linf": 6.255196360882564e-11,
+          "axis_linf": 5.016864701445911e-11,
+          "first_three_rings_linf": 5.018896409580975e-11
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 5.087831890557172e-09,
+          "l2": 5.660735233688981e-09,
+          "linf": 9.307065840236106e-09,
+          "axis_linf": 7.389567329568747e-09,
+          "first_three_rings_linf": 7.39050102366301e-09
+        },
+        "density": {
+          "l1": 1.8307786183533504e-14,
+          "l2": 2.3371615136303387e-14,
+          "linf": 9.89439597716645e-14,
+          "axis_linf": 6.925874032563336e-14,
+          "first_three_rings_linf": 7.065798108864266e-14
+        }
+      }
+    },
+    "256": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/preflight_matrix_deconv_r1_serial/runs/pressure_rhs_n256/output/plt00001",
+      "quantity": "rhs",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 256,
+      "nz": 256,
+      "dr": 0.00390625,
+      "dz": 0.00390625,
+      "plot_time": 0.000314786124626661,
+      "exact_time": 0.0,
+      "errors": {
+        "radial_momentum": {
+          "l1": 6.796841284085463e-14,
+          "l2": 8.522916665302768e-14,
+          "linf": 4.0374127652231806e-13,
+          "axis_linf": 3.5341880856858306e-13,
+          "first_three_rings_linf": 3.5341880856858306e-13
+        },
+        "axial_momentum": {
+          "l1": 5.676792603566379e-13,
+          "l2": 6.303838760698056e-13,
+          "linf": 1.2174705688039467e-12,
+          "axis_linf": 9.66282609482505e-13,
+          "first_three_rings_linf": 9.66282609482505e-13
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 1.5864000034271373e-10,
+          "l2": 1.7647038097044224e-10,
+          "linf": 2.896300317634104e-10,
+          "axis_linf": 2.2961014686795345e-10,
+          "first_three_rings_linf": 2.2993638763846302e-10
+        },
+        "density": {
+          "l1": 3.6739183835990004e-14,
+          "l2": 4.6714675755783376e-14,
+          "linf": 1.974105769871168e-13,
+          "axis_linf": 1.6871362022979642e-13,
+          "first_three_rings_linf": 1.6871362022979642e-13
+        }
+      }
+    }
+  },
+  "evolution": {
+    "16": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/evolve_n16/plt00005",
+      "quantity": "state",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 16,
+      "nz": 16,
+      "dr": 0.0625,
+      "dz": 0.0625,
+      "plot_time": 0.02,
+      "exact_time": 0.02,
+      "errors": {
+        "radial_momentum": {
+          "l1": 4.270211943284728e-06,
+          "l2": 5.258259024558129e-06,
+          "linf": 1.3994327006092155e-05,
+          "axis_linf": 3.948005049127061e-07,
+          "first_three_rings_linf": 1.5631515861624576e-06
+        },
+        "axial_momentum": {
+          "l1": 4.624381972061357e-06,
+          "l2": 5.515519159275216e-06,
+          "linf": 1.2345033054028676e-05,
+          "axis_linf": 1.0120487940468159e-05,
+          "first_three_rings_linf": 1.0209342698686008e-05
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 1.8763510156928078e-05,
+          "l2": 2.2817951133921886e-05,
+          "linf": 5.41820218340483e-05,
+          "axis_linf": 3.268921389754098e-05,
+          "first_three_rings_linf": 3.335823270811389e-05
+        },
+        "density": {
+          "l1": 1.7622267068710098e-06,
+          "l2": 2.087845406167885e-06,
+          "linf": 4.435310711592422e-06,
+          "axis_linf": 4.227599925243908e-06,
+          "first_three_rings_linf": 4.435310711592422e-06
+        }
+      },
+      "admissibility": {
+        "minimum_density": 0.9419032312461516,
+        "minimum_cell_pressure": 0.9019065250021608
+      }
+    },
+    "32": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/evolve_n32/plt00010",
+      "quantity": "state",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 32,
+      "nz": 32,
+      "dr": 0.03125,
+      "dz": 0.03125,
+      "plot_time": 0.02,
+      "exact_time": 0.02,
+      "errors": {
+        "radial_momentum": {
+          "l1": 1.1002040047516725e-06,
+          "l2": 1.3852023429465605e-06,
+          "linf": 4.355123797308499e-06,
+          "axis_linf": 8.216900383240314e-08,
+          "first_three_rings_linf": 2.1339721023409808e-07
+        },
+        "axial_momentum": {
+          "l1": 1.1979019675965874e-06,
+          "l2": 1.4283989308385047e-06,
+          "linf": 6.185587941576198e-06,
+          "axis_linf": 1.6729947305837989e-06,
+          "first_three_rings_linf": 1.6973981766810198e-06
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 5.191425674550782e-06,
+          "l2": 6.160187235327945e-06,
+          "linf": 1.7468450049129558e-05,
+          "axis_linf": 8.039281927718633e-06,
+          "first_three_rings_linf": 8.127260853196816e-06
+        },
+        "density": {
+          "l1": 2.350182270126187e-07,
+          "l2": 3.3896532714933425e-07,
+          "linf": 2.639534648629649e-06,
+          "axis_linf": 7.159055743777287e-07,
+          "first_three_rings_linf": 7.159055743777287e-07
+        }
+      },
+      "admissibility": {
+        "minimum_density": 0.9405857889539961,
+        "minimum_cell_pressure": 0.9009825083705338
+      }
+    },
+    "64": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/evolve_n64/plt00021",
+      "quantity": "state",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 64,
+      "nz": 64,
+      "dr": 0.015625,
+      "dz": 0.015625,
+      "plot_time": 0.02,
+      "exact_time": 0.02,
+      "errors": {
+        "radial_momentum": {
+          "l1": 2.789381014942302e-07,
+          "l2": 3.51231602089162e-07,
+          "linf": 1.2396783772572473e-06,
+          "axis_linf": 1.7743702259548876e-08,
+          "first_three_rings_linf": 2.7105837327147863e-08
+        },
+        "axial_momentum": {
+          "l1": 2.9843532699581037e-07,
+          "l2": 3.3802945220737875e-07,
+          "linf": 6.657409888366494e-07,
+          "axis_linf": 3.8291738341245107e-07,
+          "first_three_rings_linf": 3.8376939048845315e-07
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 1.332027463792015e-06,
+          "l2": 1.5388649083488357e-06,
+          "linf": 3.7961052941071216e-06,
+          "axis_linf": 2.1586685337027234e-06,
+          "first_three_rings_linf": 2.1586685337027234e-06
+        },
+        "density": {
+          "l1": 4.7127272502403805e-08,
+          "l2": 5.72824024672811e-08,
+          "linf": 2.3059768960997928e-07,
+          "axis_linf": 1.0410532569338216e-07,
+          "first_three_rings_linf": 1.0791265636633796e-07
+        }
+      },
+      "admissibility": {
+        "minimum_density": 0.9402045388327158,
+        "minimum_cell_pressure": 0.9003621173448596
+      }
+    },
+    "128": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/evolve_n128/plt00041",
+      "quantity": "state",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 128,
+      "nz": 128,
+      "dr": 0.0078125,
+      "dz": 0.0078125,
+      "plot_time": 0.02,
+      "exact_time": 0.02,
+      "errors": {
+        "radial_momentum": {
+          "l1": 6.969679758365e-08,
+          "l2": 8.756053771569703e-08,
+          "linf": 3.4089785831345476e-07,
+          "axis_linf": 1.857448018744573e-09,
+          "first_three_rings_linf": 3.4843662365926977e-09
+        },
+        "axial_momentum": {
+          "l1": 7.466538425052382e-08,
+          "l2": 8.419468856755567e-08,
+          "linf": 1.7202521779280389e-07,
+          "axis_linf": 9.473723494579644e-08,
+          "first_three_rings_linf": 9.473723494579644e-08
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 3.3368867566393235e-07,
+          "l2": 3.8417170186602444e-07,
+          "linf": 1.0143830380116015e-06,
+          "axis_linf": 5.103144640195012e-07,
+          "first_three_rings_linf": 5.103144640195012e-07
+        },
+        "density": {
+          "l1": 1.1766726981146838e-08,
+          "l2": 1.491864801979686e-08,
+          "linf": 8.975129883737054e-08,
+          "axis_linf": 1.3783822083723862e-08,
+          "first_three_rings_linf": 1.3783822083723862e-08
+        }
+      },
+      "admissibility": {
+        "minimum_density": 0.9400845271946097,
+        "minimum_cell_pressure": 0.90016980775109
+      }
+    },
+    "256": {
+      "schema_version": 1,
+      "plotfile": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/evolve_n256/plt00081",
+      "quantity": "state",
+      "state_semantics": "cylindrical_volume_average",
+      "quadrature": "tensor Gauss-Legendre order 4 with radial Jacobian",
+      "nr": 256,
+      "nz": 256,
+      "dr": 0.00390625,
+      "dz": 0.00390625,
+      "plot_time": 0.02,
+      "exact_time": 0.02,
+      "errors": {
+        "radial_momentum": {
+          "l1": 1.737854807754411e-08,
+          "l2": 2.1774846712675743e-08,
+          "linf": 8.798715306693183e-08,
+          "axis_linf": 2.5026625230192313e-10,
+          "first_three_rings_linf": 4.2889582587779616e-10
+        },
+        "axial_momentum": {
+          "l1": 1.8671234233369334e-08,
+          "l2": 2.1050011815295983e-08,
+          "linf": 4.400139258509128e-08,
+          "axis_linf": 2.3676234695013676e-08,
+          "first_three_rings_linf": 2.3676234695013676e-08
+        },
+        "azimuthal_momentum": {
+          "l1": 0.0,
+          "l2": 0.0,
+          "linf": 0.0,
+          "axis_linf": 0.0,
+          "first_three_rings_linf": 0.0
+        },
+        "energy": {
+          "l1": 8.332114732366231e-08,
+          "l2": 9.578974559484612e-08,
+          "linf": 2.60841626964492e-07,
+          "axis_linf": 1.277106878028178e-07,
+          "first_three_rings_linf": 1.277132350985255e-07
+        },
+        "density": {
+          "l1": 2.9145919492307565e-09,
+          "l2": 3.6938160748793594e-09,
+          "linf": 2.917516317424429e-08,
+          "axis_linf": 3.4116216518498277e-09,
+          "first_three_rings_linf": 3.4116216518498277e-09
+        }
+      },
+      "admissibility": {
+        "minimum_density": 0.9400423059357691,
+        "minimum_cell_pressure": 0.9000809812056161
+      }
+    }
+  },
+  "convergence": {
+    "rhs": {
+      "density": {
+        "l1": [
+          8.586169948224618e-05,
+          7.161391855946422e-06,
+          3.7906513593638486e-07,
+          1.1906455705436177e-08,
+          4.1424539581379606e-10
+        ],
+        "l1_orders": [
+          3.5837028131143662,
+          4.239722332899973,
+          4.992629849369642,
+          4.845114545239894
+        ],
+        "l2": [
+          9.896190056639333e-05,
+          1.4009647839861191e-05,
+          8.780980204781903e-07,
+          2.8308045120645314e-08,
+          1.2135235083652565e-09
+        ],
+        "l2_orders": [
+          2.820452516345394,
+          3.9958948868507704,
+          4.955097965101943,
+          4.543938162201393
+        ],
+        "linf": [
+          0.0002478463774733784,
+          0.00012190617362487291,
+          1.037279073969749e-05,
+          3.323992077350346e-07,
+          7.31387830438246e-08
+        ],
+        "linf_orders": [
+          1.0236749831176044,
+          3.554895189098956,
+          4.963743341468229,
+          2.184208416496274
+        ],
+        "axis_linf": [
+          0.00023609249245294325,
+          2.505431929788332e-05,
+          9.697342117330476e-06,
+          3.323992077350346e-07,
+          7.31387830438246e-08
+        ],
+        "axis_linf_orders": [
+          3.2362209190251185,
+          1.3693980541361324,
+          4.866600533795397,
+          2.184208416496274
+        ],
+        "first_three_rings_linf": [
+          0.0002478463774733784,
+          2.7888051124434765e-05,
+          1.037279073969749e-05,
+          3.323992077350346e-07,
+          7.31387830438246e-08
+        ],
+        "first_three_rings_linf_orders": [
+          3.151727148065599,
+          1.4268430241509618,
+          4.963743341468229,
+          2.184208416496274
+        ]
+      },
+      "radial_momentum": {
+        "l1": [
+          0.00021558634926291338,
+          5.479936363020042e-05,
+          1.3920918182251595e-05,
+          3.4865645065391072e-06,
+          8.720170604694366e-07
+        ],
+        "l1_orders": [
+          1.9760347860289127,
+          1.9769047694783004,
+          1.997376291236629,
+          1.9993779080196101
+        ],
+        "l2": [
+          0.0002616148550565208,
+          6.82911704587461e-05,
+          1.7341732885001685e-05,
+          4.344315189039734e-06,
+          1.0864003872360356e-06
+        ],
+        "l2_orders": [
+          1.9376734965731377,
+          1.977450992724721,
+          1.9970473855347106,
+          1.9995728785155487
+        ],
+        "linf": [
+          0.000654000847343697,
+          0.00018493016505408133,
+          4.752378472180907e-05,
+          1.199539583932041e-05,
+          3.0085909580312986e-06
+        ],
+        "linf_orders": [
+          1.8223119344584322,
+          1.9602589306048392,
+          1.9861689684471275,
+          1.9953208870981236
+        ],
+        "axis_linf": [
+          1.9604448869629722e-05,
+          2.956864602130264e-06,
+          4.2298598624270183e-07,
+          7.993526834918711e-08,
+          1.6715162800180094e-08
+        ],
+        "axis_linf_orders": [
+          2.729040997043687,
+          2.805386410508661,
+          2.4037057846761605,
+          2.257674770673389
+        ],
+        "first_three_rings_linf": [
+          7.784721038198682e-05,
+          1.0843953351533965e-05,
+          1.3795195959978752e-06,
+          1.7331280107390178e-07,
+          2.186971747794586e-08
+        ],
+        "first_three_rings_linf_orders": [
+          2.843754529812176,
+          2.9746529567721907,
+          2.9927158276512684,
+          2.9863717291864424
+        ]
+      },
+      "axial_momentum": {
+        "l1": [
+          0.00019645009956956546,
+          4.795527374356378e-05,
+          1.1611137460773796e-05,
+          2.9017399609818e-06,
+          7.25515595004242e-07
+        ],
+        "l1_orders": [
+          2.0344015136920786,
+          2.0461801704875224,
+          2.0005191663290294,
+          1.9998397077239116
+        ],
+        "l2": [
+          0.0002370096936087212,
+          5.804313088054783e-05,
+          1.3262435298191809e-05,
+          3.2859406979974472e-06,
+          8.2123759102198e-07
+        ],
+        "l2_orders": [
+          2.0297488195897886,
+          2.129779628462087,
+          2.0129673638175376,
+          2.000434872475412
+        ],
+        "linf": [
+          0.000544381103205302,
+          0.0002650112239899263,
+          2.6776428581787304e-05,
+          6.757868829566915e-06,
+          1.6936289417984751e-06
+        ],
+        "linf_orders": [
+          1.0385635249833567,
+          3.3070180101489273,
+          1.9863232948727072,
+          1.9964505196695697
+        ],
+        "axis_linf": [
+          0.0005276275200461616,
+          8.270314379628385e-05,
+          2.45775854226353e-05,
+          3.6197621753400466e-06,
+          9.059589791485245e-07
+        ],
+        "axis_linf_orders": [
+          2.67350573802908,
+          1.7505989837476117,
+          2.763376369921496,
+          1.9983772796750696
+        ],
+        "first_three_rings_linf": [
+          0.0005306874375530443,
+          8.441507929980718e-05,
+          2.4838693704565262e-05,
+          3.6655015909353716e-06,
+          9.170700287428057e-07
+        ],
+        "first_three_rings_linf_orders": [
+          2.6522897579554443,
+          1.7649114320067807,
+          2.760506765738716,
+          1.9989068223734883
+        ]
+      },
+      "energy": {
+        "l1": [
+          0.0010337787678227541,
+          0.0002916035009795176,
+          7.386896792414396e-05,
+          1.8528955033528493e-05,
+          4.633348153304275e-06
+        ],
+        "l1_orders": [
+          1.8258475312134264,
+          1.9809677147187315,
+          1.9951869000301166,
+          1.9996545240845551
+        ],
+        "l2": [
+          0.001248576554729253,
+          0.0003381368006756036,
+          8.473568432648406e-05,
+          2.1205475715807663e-05,
+          5.302873607693815e-06
+        ],
+        "l2_orders": [
+          1.884605337098411,
+          1.9965654808223858,
+          1.9985328044804216,
+          1.9995905803613723
+        ],
+        "linf": [
+          0.0027600825278208674,
+          0.0011262090633067656,
+          0.00016928215455264128,
+          4.234894873927919e-05,
+          1.0602198081105518e-05
+        ],
+        "linf_orders": [
+          1.2932367386213321,
+          2.7339728665014453,
+          1.9990318327226702,
+          1.9979627569876761
+        ],
+        "axis_linf": [
+          0.0017513160514417703,
+          0.0004448125467246544,
+          0.00013284101287919237,
+          2.8073362821318115e-05,
+          7.02341606750867e-06
+        ],
+        "axis_linf_orders": [
+          1.9771700758709954,
+          1.7434968542200573,
+          2.242426832888732,
+          1.9989570820398208
+        ],
+        "first_three_rings_linf": [
+          0.0018028148726923487,
+          0.0004448125467246544,
+          0.00013284101287919237,
+          2.8073362821318115e-05,
+          7.02341606750867e-06
+        ],
+        "first_three_rings_linf_orders": [
+          2.018981869511257,
+          1.7434968542200573,
+          2.242426832888732,
+          1.9989570820398208
+        ]
+      }
+    },
+    "pressure_rhs": {
+      "density": {
+        "l1": [
+          2.7752956412279704e-15,
+          4.551315339063315e-15,
+          9.462562259487027e-15,
+          1.8307786183533504e-14,
+          3.6739183835990004e-14
+        ],
+        "l1_orders": [
+          -0.7136420830441408,
+          -1.055947340157773,
+          -0.9521545553880574,
+          -1.0048622292880114
+        ],
+        "l2": [
+          3.4934517641030656e-15,
+          5.832954381558053e-15,
+          1.209686946870959e-14,
+          2.3371615136303387e-14,
+          4.6714675755783376e-14
+        ],
+        "l2_orders": [
+          -0.7395735707783371,
+          -1.0523350465846324,
+          -0.9501236946818169,
+          -0.9991184167750248
+        ],
+        "linf": [
+          1.131315580730409e-14,
+          2.422480651707206e-14,
+          4.6432279874020936e-14,
+          9.89439597716645e-14,
+          1.974105769871168e-13
+        ],
+        "linf_orders": [
+          -1.0984837173489648,
+          -0.9386429775782655,
+          -1.091483517313756,
+          -0.9965157465589858
+        ],
+        "axis_linf": [
+          8.253126168051859e-15,
+          1.7282813340869096e-14,
+          4.2074289772645505e-14,
+          6.925874032563336e-14,
+          1.6871362022979642e-13
+        ],
+        "axis_linf_orders": [
+          -1.0663254816576682,
+          -1.2836008363785583,
+          -0.7190572295004471,
+          -1.284508393696033
+        ],
+        "first_three_rings_linf": [
+          8.253126168051859e-15,
+          1.7282813340869096e-14,
+          4.2074289772645505e-14,
+          7.065798108864266e-14,
+          1.6871362022979642e-13
+        ],
+        "first_three_rings_linf_orders": [
+          -1.0663254816576682,
+          -1.2836008363785583,
+          -0.7479136090634858,
+          -1.255652014132994
+        ]
+      },
+      "radial_momentum": {
+        "l1": [
+          4.5694314443221384e-15,
+          9.665161398591579e-15,
+          1.7501120694920447e-14,
+          3.385366632643795e-14,
+          6.796841284085463e-14
+        ],
+        "l1_orders": [
+          -1.0807791564083071,
+          -0.856581579547131,
+          -0.9518647761711797,
+          -1.0055523491839085
+        ],
+        "l2": [
+          5.831028406015671e-15,
+          1.2078703342078755e-14,
+          2.206646775678298e-14,
+          4.25618503645975e-14,
+          8.522916665302768e-14
+        ],
+        "l2_orders": [
+          -1.050643332554202,
+          -0.8693901231637957,
+          -0.947705161230361,
+          -1.0017863530808033
+        ],
+        "linf": [
+          1.8193779816044753e-14,
+          3.7028539956462936e-14,
+          8.661387579378399e-14,
+          1.8644187214054975e-13,
+          4.0374127652231806e-13
+        ],
+        "linf_orders": [
+          -1.025192366200991,
+          -1.2259605025459162,
+          -1.1060558322600977,
+          -1.114705183639113
+        ],
+        "axis_linf": [
+          1.6507845437829793e-14,
+          3.400285695370764e-14,
+          6.85430716091534e-14,
+          1.8644187214054975e-13,
+          3.5341880856858306e-13
+        ],
+        "axis_linf_orders": [
+          -1.0425041324854882,
+          -1.011354876434852,
+          -1.443643155095591,
+          -0.9226529158453758
+        ],
+        "first_three_rings_linf": [
+          1.6507845437829793e-14,
+          3.400285695370764e-14,
+          8.270988061109819e-14,
+          1.8644187214054975e-13,
+          3.5341880856858306e-13
+        ],
+        "first_three_rings_linf_orders": [
+          -1.0425041324854882,
+          -1.2824037174681115,
+          -1.1725943140623318,
+          -0.9226529158453758
+        ]
+      },
+      "axial_momentum": {
+        "l1": [
+          2.8431970610623334e-05,
+          2.1821576409742456e-07,
+          2.6107419331500156e-09,
+          3.7244523539416135e-11,
+          5.676792603566379e-13
+        ],
+        "l1_orders": [
+          7.025614958002711,
+          6.385151659699723,
+          6.131287740536347,
+          6.035808461034625
+        ],
+        "l2": [
+          3.065941978462824e-05,
+          2.386115893377623e-07,
+          2.7287739080883837e-09,
+          4.035437003720446e-11,
+          6.303838760698056e-13
+        ],
+        "l2_orders": [
+          7.005522468422861,
+          6.450267440633604,
+          6.079384141542432,
+          6.000350469339231
+        ],
+        "linf": [
+          4.362367395527311e-05,
+          4.878517979173269e-07,
+          4.059912475651295e-09,
+          6.255196360882564e-11,
+          1.2174705688039467e-12
+        ],
+        "linf_orders": [
+          6.482524522476407,
+          6.908850509077014,
+          6.020249641964569,
+          5.6830963716098895
+        ],
+        "axis_linf": [
+          3.5343973083745706e-05,
+          3.92745382722659e-07,
+          3.2581023712285884e-09,
+          5.016864701445911e-11,
+          9.66282609482505e-13
+        ],
+        "axis_linf_orders": [
+          6.491726100195553,
+          6.9134185696883,
+          6.021102093610538,
+          5.698197023723125
+        ],
+        "first_three_rings_linf": [
+          3.555096560320381e-05,
+          3.9332061026881027e-07,
+          3.259330562388474e-09,
+          5.018896409580975e-11,
+          9.66282609482505e-13
+        ],
+        "first_three_rings_linf_orders": [
+          6.498039148862853,
+          6.914986298135364,
+          6.021061698816973,
+          5.698781161838532
+        ]
+      },
+      "energy": {
+        "l1": [
+          0.00017782490307018144,
+          5.275249438590957e-06,
+          1.6338062433339663e-07,
+          5.087831890557172e-09,
+          1.5864000034271373e-10
+        ],
+        "l1_orders": [
+          5.075074254087585,
+          5.012930506464746,
+          5.005042088387868,
+          5.0032225117366895
+        ],
+        "l2": [
+          0.00021327339844891114,
+          6.01964814585119e-06,
+          1.8242289963551902e-07,
+          5.660735233688981e-09,
+          1.7647038097044224e-10
+        ],
+        "l2_orders": [
+          5.146881057037483,
+          5.0443204143596905,
+          5.010153585964293,
+          5.003491481869429
+        ],
+        "linf": [
+          0.0003282703603242204,
+          1.0317983484359194e-05,
+          3.031617571563894e-07,
+          9.307065840236106e-09,
+          2.896300317634104e-10
+        ],
+        "linf_orders": [
+          4.991651546773526,
+          5.088929458283918,
+          5.025617550372473,
+          5.0060433047605155
+        ],
+        "axis_linf": [
+          0.00026369973944763425,
+          8.233326153794795e-06,
+          2.411055917486693e-07,
+          7.389567329568747e-09,
+          2.2961014686795345e-10
+        ],
+        "axis_linf_orders": [
+          5.001276957569127,
+          5.093738362342218,
+          5.028031405402281,
+          5.00823159113625
+        ],
+        "first_three_rings_linf": [
+          0.0002653013075508692,
+          8.245830364003726e-06,
+          2.411971571358862e-07,
+          7.39050102366301e-09,
+          2.2993638763846302e-10
+        ],
+        "first_three_rings_linf_orders": [
+          5.007823193830561,
+          5.095379973760833,
+          5.028396920624913,
+          5.006365475187081
+        ]
+      }
+    },
+    "evolution": {
+      "density": {
+        "l1": [
+          1.7622267068710098e-06,
+          2.350182270126187e-07,
+          4.7127272502403805e-08,
+          1.1766726981146838e-08,
+          2.9145919492307565e-09
+        ],
+        "l1_orders": [
+          2.906554980447746,
+          2.3181385577101024,
+          2.001849109755793,
+          2.0133472563712496
+        ],
+        "l2": [
+          2.087845406167885e-06,
+          3.3896532714933425e-07,
+          5.72824024672811e-08,
+          1.491864801979686e-08,
+          3.6938160748793594e-09
+        ],
+        "l2_orders": [
+          2.6228052796048287,
+          2.564973800556451,
+          1.9409752021593534,
+          2.0139328619103694
+        ],
+        "linf": [
+          4.435310711592422e-06,
+          2.639534648629649e-06,
+          2.3059768960997928e-07,
+          8.975129883737054e-08,
+          2.917516317424429e-08
+        ],
+        "linf_orders": [
+          0.74875157063963,
+          3.5168336404802085,
+          1.3613733363177478,
+          1.6211920922436118
+        ],
+        "axis_linf": [
+          4.227599925243908e-06,
+          7.159055743777287e-07,
+          1.0410532569338216e-07,
+          1.3783822083723862e-08,
+          3.4116216518498277e-09
+        ],
+        "axis_linf_orders": [
+          2.561997636800112,
+          2.781725439083025,
+          2.916995984004524,
+          2.0144464189907
+        ],
+        "first_three_rings_linf": [
+          4.435310711592422e-06,
+          7.159055743777287e-07,
+          1.0791265636633796e-07,
+          1.3783822083723862e-08,
+          3.4116216518498277e-09
+        ],
+        "first_three_rings_linf_orders": [
+          2.6311939563786297,
+          2.729905234272851,
+          2.968816188814698,
+          2.0144464189907
+        ]
+      },
+      "radial_momentum": {
+        "l1": [
+          4.270211943284728e-06,
+          1.1002040047516725e-06,
+          2.789381014942302e-07,
+          6.969679758365e-08,
+          1.737854807754411e-08
+        ],
+        "l1_orders": [
+          1.9565366173295962,
+          1.9797541419474203,
+          2.0007807384392158,
+          2.0037848143135135
+        ],
+        "l2": [
+          5.258259024558129e-06,
+          1.3852023429465605e-06,
+          3.51231602089162e-07,
+          8.756053771569703e-08,
+          2.1774846712675743e-08
+        ],
+        "l2_orders": [
+          1.9244884787698529,
+          1.9796021704221198,
+          2.004069937950459,
+          2.0076182514522216
+        ],
+        "linf": [
+          1.3994327006092155e-05,
+          4.355123797308499e-06,
+          1.2396783772572473e-06,
+          3.4089785831345476e-07,
+          8.798715306693183e-08
+        ],
+        "linf_orders": [
+          1.6840564745898448,
+          1.8127478533035417,
+          1.862554434770139,
+          1.9539747382897446
+        ],
+        "axis_linf": [
+          3.948005049127061e-07,
+          8.216900383240314e-08,
+          1.7743702259548876e-08,
+          1.857448018744573e-09,
+          2.5026625230192313e-10
+        ],
+        "axis_linf_orders": [
+          2.2644576532508545,
+          2.211287214202307,
+          3.25591332012497,
+          2.891786171164972
+        ],
+        "first_three_rings_linf": [
+          1.5631515861624576e-06,
+          2.1339721023409808e-07,
+          2.7105837327147863e-08,
+          3.4843662365926977e-09,
+          4.2889582587779616e-10
+        ],
+        "first_three_rings_linf_orders": [
+          2.8728444691636974,
+          2.976865836714057,
+          2.9596353973774217,
+          3.0221970909702565
+        ]
+      },
+      "axial_momentum": {
+        "l1": [
+          4.624381972061357e-06,
+          1.1979019675965874e-06,
+          2.9843532699581037e-07,
+          7.466538425052382e-08,
+          1.8671234233369334e-08
+        ],
+        "l1_orders": [
+          1.9487507212966657,
+          2.0050196190274368,
+          1.9989068705948478,
+          1.9996222497726064
+        ],
+        "l2": [
+          5.515519159275216e-06,
+          1.4283989308385047e-06,
+          3.3802945220737875e-07,
+          8.419468856755567e-08,
+          2.1050011815295983e-08
+        ],
+        "l2_orders": [
+          1.9490977295902623,
+          2.079178101334644,
+          2.0053478240494464,
+          1.9999081804940315
+        ],
+        "linf": [
+          1.2345033054028676e-05,
+          6.185587941576198e-06,
+          6.657409888366494e-07,
+          1.7202521779280389e-07,
+          4.400139258509128e-08
+        ],
+        "linf_orders": [
+          0.9969480639937367,
+          3.215877829193959,
+          1.9523409256489201,
+          1.9669989813144102
+        ],
+        "axis_linf": [
+          1.0120487940468159e-05,
+          1.6729947305837989e-06,
+          3.8291738341245107e-07,
+          9.473723494579644e-08,
+          2.3676234695013676e-08
+        ],
+        "axis_linf_orders": [
+          2.596774042109537,
+          2.127327840103922,
+          2.015029685785666,
+          2.000491902280156
+        ],
+        "first_three_rings_linf": [
+          1.0209342698686008e-05,
+          1.6973981766810198e-06,
+          3.8376939048845315e-07,
+          9.473723494579644e-08,
+          2.3676234695013676e-08
+        ],
+        "first_three_rings_linf_orders": [
+          2.5884930471706697,
+          2.145013481213995,
+          2.0182361761835446,
+          2.000491902280156
+        ]
+      },
+      "energy": {
+        "l1": [
+          1.8763510156928078e-05,
+          5.191425674550782e-06,
+          1.332027463792015e-06,
+          3.3368867566393235e-07,
+          8.332114732366231e-08
+        ],
+        "l1_orders": [
+          1.8537270507467805,
+          1.9625069591047948,
+          1.9970491962896948,
+          2.001748116462868
+        ],
+        "l2": [
+          2.2817951133921886e-05,
+          6.160187235327945e-06,
+          1.5388649083488357e-06,
+          3.8417170186602444e-07,
+          9.578974559484612e-08
+        ],
+        "l2_orders": [
+          1.8891231486028663,
+          2.001107613472711,
+          2.0020434290564206,
+          2.0038081266903514
+        ],
+        "linf": [
+          5.41820218340483e-05,
+          1.7468450049129558e-05,
+          3.7961052941071216e-06,
+          1.0143830380116015e-06,
+          2.60841626964492e-07
+        ],
+        "linf_orders": [
+          1.6330626239168422,
+          2.2021596910002854,
+          1.9039174827380563,
+          1.959356498187412
+        ],
+        "axis_linf": [
+          3.268921389754098e-05,
+          8.039281927718633e-06,
+          2.1586685337027234e-06,
+          5.103144640195012e-07,
+          1.277106878028178e-07
+        ],
+        "axis_linf_orders": [
+          2.023676133833411,
+          1.8969249122790306,
+          2.0806832944897042,
+          1.9985072673074054
+        ],
+        "first_three_rings_linf": [
+          3.335823270811389e-05,
+          8.127260853196816e-06,
+          2.1586685337027234e-06,
+          5.103144640195012e-07,
+          1.277132350985255e-07
+        ],
+        "first_three_rings_linf_orders": [
+          2.037201753034709,
+          1.9126274671472687,
+          2.0806832944897042,
+          1.998478491843905
+        ]
+      }
+    }
+  },
+  "forward_euler_audits": [
+    {
+      "path": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/evolve_n16/fe.csv",
+      "records": 20,
+      "steps": 5,
+      "all_steps_have_four_brackets": true,
+      "minimum_density": 0.941882540723238,
+      "minimum_internal_energy_density": 2.2546581754028034,
+      "invalid_cells": 0
+    },
+    {
+      "path": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/evolve_n32/fe.csv",
+      "records": 40,
+      "steps": 10,
+      "all_steps_have_four_brackets": true,
+      "minimum_density": 0.9405810964958655,
+      "minimum_internal_energy_density": 2.2524399545600535,
+      "invalid_cells": 0
+    },
+    {
+      "path": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/evolve_n64/fe.csv",
+      "records": 84,
+      "steps": 21,
+      "all_steps_have_four_brackets": true,
+      "minimum_density": 0.9402036728278708,
+      "minimum_internal_energy_density": 2.2509033107146523,
+      "invalid_cells": 0
+    },
+    {
+      "path": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/evolve_n128/fe.csv",
+      "records": 164,
+      "steps": 41,
+      "all_steps_have_four_brackets": true,
+      "minimum_density": 0.9400844587850082,
+      "minimum_internal_energy_density": 2.250414290116701,
+      "invalid_cells": 0
+    },
+    {
+      "path": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/evolve_n256/fe.csv",
+      "records": 324,
+      "steps": 81,
+      "all_steps_have_four_brackets": true,
+      "minimum_density": 0.9400405036516993,
+      "minimum_internal_energy_density": 2.2502015520033822,
+      "invalid_cells": 0
+    }
+  ],
+  "forward_euler_summary": {
+    "records": 632,
+    "invalid_cells": 0,
+    "minimum_density": 0.9400405036516993,
+    "minimum_internal_energy_density": 2.2502015520033822
+  },
+  "default_off_bitwise": true,
+  "fixed_boxarray_mpi_comparison": {
+    "reference": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/fab_np1_n64/plt00021",
+    "candidate": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/fab_np2_n64/plt00021",
+    "fields": {
+      "radial_momentum": {
+        "array_equal": true,
+        "maximum_absolute_difference": 0.0,
+        "relative_to_reference_linf": 0.0
+      },
+      "axial_momentum": {
+        "array_equal": true,
+        "maximum_absolute_difference": 0.0,
+        "relative_to_reference_linf": 0.0
+      },
+      "azimuthal_momentum": {
+        "array_equal": true,
+        "maximum_absolute_difference": 0.0,
+        "relative_to_reference_linf": 0.0
+      },
+      "energy": {
+        "array_equal": true,
+        "maximum_absolute_difference": 0.0,
+        "relative_to_reference_linf": 0.0
+      },
+      "density": {
+        "array_equal": true,
+        "maximum_absolute_difference": 0.0,
+        "relative_to_reference_linf": 0.0
+      }
+    },
+    "all_fields_bitwise_equal": true,
+    "maximum_absolute_difference": 0.0
+  },
+  "boxarray_comparison": {
+    "reference": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/evolve_n64/plt00021",
+    "candidate": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/fab_np1_n64/plt00021",
+    "fields": {
+      "radial_momentum": {
+        "array_equal": false,
+        "maximum_absolute_difference": 1.7634324556148329e-10,
+        "relative_to_reference_linf": 1.933149185363086e-09
+      },
+      "axial_momentum": {
+        "array_equal": false,
+        "maximum_absolute_difference": 3.563893624658476e-11,
+        "relative_to_reference_linf": 9.499160331491083e-11
+      },
+      "azimuthal_momentum": {
+        "array_equal": true,
+        "maximum_absolute_difference": 0.0,
+        "relative_to_reference_linf": 0.0
+      },
+      "energy": {
+        "array_equal": false,
+        "maximum_absolute_difference": 3.9638026194666054e-10,
+        "relative_to_reference_linf": 1.4114893820950264e-10
+      },
+      "density": {
+        "array_equal": false,
+        "maximum_absolute_difference": 1.0763456792517445e-10,
+        "relative_to_reference_linf": 1.0156160635869782e-10
+      }
+    },
+    "all_fields_bitwise_equal": false,
+    "maximum_absolute_difference": 3.9638026194666054e-10
+  },
+  "cpu_gpu_comparison": {
+    "reference": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/fab_np1_n64/plt00021",
+    "candidate": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/gpu_n64/plt00021",
+    "fields": {
+      "radial_momentum": {
+        "array_equal": false,
+        "maximum_absolute_difference": 5.100087019371813e-16,
+        "relative_to_reference_linf": 5.590930934375924e-15
+      },
+      "axial_momentum": {
+        "array_equal": false,
+        "maximum_absolute_difference": 7.216449660063518e-16,
+        "relative_to_reference_linf": 1.9234640414287572e-15
+      },
+      "azimuthal_momentum": {
+        "array_equal": true,
+        "maximum_absolute_difference": 0.0,
+        "relative_to_reference_linf": 0.0
+      },
+      "energy": {
+        "array_equal": false,
+        "maximum_absolute_difference": 3.1086244689504383e-15,
+        "relative_to_reference_linf": 1.1069649152799595e-15
+      },
+      "density": {
+        "array_equal": false,
+        "maximum_absolute_difference": 1.5543122344752192e-15,
+        "relative_to_reference_linf": 1.4666147721800736e-15
+      }
+    },
+    "all_fields_bitwise_equal": false,
+    "maximum_absolute_difference": 3.1086244689504383e-15
+  },
+  "gpu_forward_euler_audit": {
+    "path": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/diagnostics_deconv/gpu_n64/fe.csv",
+    "records": 84,
+    "steps": 21,
+    "all_steps_have_four_brackets": true,
+    "minimum_density": 0.940203672827871,
+    "minimum_internal_energy_density": 2.250903310714652,
+    "invalid_cells": 0
+  },
+  "checks": {
+    "semidiscrete_global_l1_asymptotic_order_at_least_1p8": true,
+    "semidiscrete_axis_radial_momentum_order_at_least_2": true,
+    "pressure_flux_source_balance_is_roundoff_limited": true,
+    "ssprk43_global_l1_asymptotic_order_at_least_1p8": true,
+    "ssprk43_axis_radial_momentum_order_at_least_1p8": true,
+    "all_632_forward_euler_brackets_are_admissible": true,
+    "default_off_path_is_bitwise_unchanged": true,
+    "fixed_boxarray_is_mpi_bitwise_invariant": true,
+    "boxarray_difference_is_below_5e_minus_9": true,
+    "cpu_gpu_difference_is_below_1e_minus_12": true
+  },
+  "passed": true
+}

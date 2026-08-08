@@ -1,0 +1,45 @@
+# Two-dimensional periodic C1.6 fast isentropic vortex: one flow-through.
+
+amrex.fpe_trap_invalid = 1
+
+max_step  = 1000000
+stop_time = 5.759536524042908e-4
+cfl       = 0.30
+
+cns.order_rk            = 3
+cns.stages_rk           = 3
+cns.check_state         = 1
+cns.soft_positivity     = 0
+cns.do_reflux           = 0
+cns.lo_bc               = -1 -1
+cns.hi_bc               = -1 -1
+cns.nstep_screen_output = 100
+cns.verbose             = 0
+
+prob.mach              = 0.5
+prob.beta              = 0.2
+prob.p_inf             = 1.0e5
+prob.T_inf             = 300.0
+prob.vortex_radius     = 0.005
+prob.x_centre          = 0.05
+prob.y_centre          = 0.05
+prob.static_refinement = 0
+
+geometry.is_periodic = 1 1
+geometry.coord_sys   = 0
+geometry.prob_lo     = 0.0 0.0
+geometry.prob_hi     = 0.1 0.1
+
+amr.n_cell          = 40 40
+amr.max_level       = 0
+amr.blocking_factor = 4
+amr.max_grid_size   = 256
+amr.n_error_buf     = 0
+amr.grid_eff        = 0.9
+amr.v               = 0
+
+amr.checkpoint_files_output = 0
+amr.plot_files_output       = 1
+amr.plot_file               = ./plot_uniform/plt
+amr.plot_int                = -1
+amr.derive_plot_vars        = pressure velocity temperature

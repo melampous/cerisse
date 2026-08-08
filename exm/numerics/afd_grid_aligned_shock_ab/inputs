@@ -1,0 +1,44 @@
+# Two-dimensional Cartesian stationary Mach-10 shock with an odd-even seed.
+
+amrex.fpe_trap_invalid = 1
+
+max_step  = 100000
+stop_time = 5.0e-2
+cfl       = 0.25
+
+cns.order_rk            = 3
+cns.stages_rk           = 3
+cns.check_state         = 1
+cns.soft_positivity     = 0
+cns.do_reflux           = 0
+cns.lo_bc               = 1 -1
+cns.hi_bc               = 1 -1
+cns.nstep_screen_output = 100
+cns.verbose             = 0
+
+cns.afd_correction          = 1
+cns.afd_shock_llf           = 1
+cns.afd_smoothness_threshold = 0.08
+
+prob.mach_up              = 10.0
+prob.shock_x              = 0.5
+prob.shock_odd_even_cells = 0.01
+
+geometry.is_periodic = 0 1
+geometry.coord_sys   = 0
+geometry.prob_lo     = 0.0 0.0
+geometry.prob_hi     = 1.0 0.1
+
+amr.n_cell          = 200 20
+amr.max_level       = 0
+amr.blocking_factor = 4
+amr.max_grid_size   = 256
+amr.n_error_buf     = 0
+amr.grid_eff        = 0.9
+amr.v               = 0
+
+amr.checkpoint_files_output = 0
+amr.plot_files_output       = 1
+amr.plot_file               = ./plot/plt
+amr.plot_int                = 100
+amr.derive_plot_vars        = density pressure x_velocity y_velocity

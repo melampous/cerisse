@@ -1,0 +1,3 @@
+m119 (Mj=1.19, NPR=2.40)  t=16.50 ms  stats window from 6.5 ms
+centerline MEAN-p shock-cell maxima at z/D: 0.72, 1.46, 2.24
+first-cell length: 0.72 D ; spacings: 0.74, 0.78 ; mean=0.76 D

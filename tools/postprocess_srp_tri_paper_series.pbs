@@ -1,0 +1,32 @@
+#!/bin/bash
+#PBS -N srp_tri_paper
+#PBS -q cx
+#PBS -l walltime=02:00:00
+#PBS -l select=1:ncpus=1:mem=8gb
+#PBS -j oe
+
+set -euo pipefail
+
+CASE=/rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2
+OUT=${CASE}/post_latest_plt09000/paper_series
+MODE=${MODE:-all}
+WORKER_INDEX=${WORKER_INDEX:-${PBS_ARRAY_INDEX:-0}}
+WORKER_COUNT=${WORKER_COUNT:-1}
+
+export MPLCONFIGDIR=${TMPDIR:-/tmp}/mpl-${PBS_JOBID}
+mkdir -p "${MPLCONFIGDIR}" "${OUT}" "${OUT}/logs"
+
+date -u
+hostname
+module load tools/prod yt/4.3.0-foss-2022a
+python3 "${CASE}/postprocess_srp_tri_paper_series.py" \
+  --mode "${MODE}" \
+  --plot-root "${CASE}/plot" \
+  --reader /rds/general/user/jq319/home/schlieren.py \
+  --output-dir "${OUT}" \
+  --worker-index "${WORKER_INDEX}" \
+  --worker-count "${WORKER_COUNT}" \
+  --paper-dpi 600 \
+  --frame-dpi 400 \
+  2>&1 | tee "${OUT}/logs/${MODE}_${WORKER_INDEX}_${PBS_JOBID}.log"
+date -u

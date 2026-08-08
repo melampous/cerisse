@@ -1,0 +1,677 @@
+配置总档已写成文档(基于四案 inputs/prob.h 原文逐项核对,非记忆):
+
+文档: case_configurations.md
+Windows: \\wsl.localhost\Ubuntu-24.04\home\qiaoj\testcerisse\cerisse\analysis\panda_benchmark\case_configurations.md
+
+核对中确认的一个重要事实:三个 2D 案的 inputs 逐字节完全相同,prob.h 之间只差一行喷压比(m180 另有一处:密度梯度 sensor 加了 nt>0 门控,初次建层只用强制区)。所以三案是严格受控的 NPR 单变量系列。要点速览:
+
+物理(四案共享):calorically perfect air(γ=1.4, R=287.06),Sutherland 黏性/导热;p_amb=99 780 Pa,T0=T_amb=297.15 K,静止环境;声速喷口 D=25.4 mm,出口 T_e=247.6 K、U_e=315.5 m/s;tanh lip 剖面 δ=254 µm 且中心在 R−3δ(u(R)≈0,C_d,eff=0.879),孔内静压均匀 = p_e,总温恒定;法兰 6D adiabatic slip wall(exact mirror ghosts)。
+
+案	NPR	p_e/p_amb	Mj	T_j [K]	U_j [m/s]	ρ_j [kg/m³]	Re_j
+m119	2.3936	1.265	1.19	231.6	363.0	1.5011	0.92×10⁶
+m142	3.2734	1.729	1.42	211.75	414.2	1.6413	1.24×10⁶
+m180	5.7458	3.035	1.80	180.3	484.5	1.9276	1.95×10⁶
+数值(共享):WENO-Z5(characteristic-wise FVS + face-local Lax–Friedrichs)+ 2 阶中心黏性,SSP-RK3,CFL=0.3,do_reflux=1,NSTAT=11 在线统计(dt 加权一、二阶矩)。
+
+2D 网格:RZ 轴对称,12D×32D,基础 192×512(D/16),6 级 → 最细 D/1024;sensor 阈值 0.05/0.03 + 每级空间 caps + 三个强制区(L4 核心 z≤8D/r≤1.5D;L5 剪切层走廊 z≤6D;L6 唇口走廊 z≤1D);31 个压力探针(每步);统计窗 m119 10 ms / m142 9.25 ms / m180 3.5 ms。
+
+3D 网格:Cartesian,轴=x,24D×(±8D)²,基础 192×128²(D/8),5 级 → 最细 D/256;生产用静态 BoxArray(fixed_grids_v5_L5.dat:L1–L5 = 8/8/12/44/26 盒,总 50.9M 胞,SFC 分配,regrid 冻结);对称轴上无 L5——shock-cell 列在 D/128 上。入口一次性宽带非轴对称 seed(ε=3×10⁻⁴ 总方位角 RMS,m=1..5,C² 窗 5.0–5.2 ms);216 探针含 13 个 16 点方位角环(供 m-mode 分解);统计窗 6.5→10.16 ms = 3.66 ms。
+
+文档里还有:入口三区 BC 的完整定义与奇偶镜像规则、探针逐组坐标含义、tagging 的 caps 数值表、编译配置、各案运行史(重启点/硬件/速度)、全部路径索引。有任何一项想再往下钻(比如某个探针环的精确坐标),文档对应小节都能展开。
+
+再次总结一下m142的3d配置
+m142 3D 案配置总结(panda_m142_full3d_v3,生产链 l5_prod_cb_20260715,数据源 inputs_pilot_l5_prod + prob.h 已逐项核对):
+
+物理设定
+
+工况:Panda & Seasholtz 1999,Mj = 1.42;NPR = p0/p_amb = 3.273446 → 出口静压比 p_e/p_amb = 1.729(p_e = 172 550 Pa)
+环境:p_amb = 99 780 Pa,T_amb = T0 = 297.15 K(不加热),静止无 coflow
+喷口:声速收敛喷嘴 M_e = 1,D_e = 25.4 mm;出口 T_e = 247.6 K,U_e = 315.5 m/s
+完全膨胀参考态:T_j = 211.75 K,U_j = 414.2 m/s,ρ_j = 1.6413 kg/m³,Re_j = 1.24×10⁶(Panda 惯例)
+气体:calorically perfect(γ=1.4,R=287.06),Sutherland 黏性/导热
+几何与边界
+
+Cartesian 域,喷流轴 = x:x ∈ [0, 24D],y, z ∈ ±8D(0.6096 × 0.4064² m)
+x-low 按 r=√(y²+z²) 分三区:①孔内 r<R:Dirichlet 入口——tanh lip 速度剖面(δ=254 µm,中心 R−3δ,u(R)≈0,C_d,eff=0.879),静压全孔均匀 = p_e,总温恒定 T = T0 − u²/2c_p;②法兰 R≤r≤6D:adiabatic slip wall(exact mirror ghosts,法向动量奇/其余偶);③r>6D 角区:静止环境 Dirichlet
+其余五面 foextrap(cns.lo_bc = 1 2 2,hi_bc = 2 2 2)
+已记录局限:侧向 ±6D 恰等于法兰半径,对 mean-flow 分支平板等效无限;声学分支需加宽域
+数值方法
+
+WENO-Z5(characteristic-wise flux-vector splitting + face-local Lax–Friedrichs)+ 2 阶中心黏性通量,无源项
+SSP-RK3,CFL = 0.30;cns.do_reflux = 1
+编译:CUDA 12.6,gcc,C++20,-O3 --use_fast_math,maxrregcount=255;现役可执行 sm_80+sm_90 双架构
+网格(生产 = 静态 BoxArray)
+
+基础 192×128²(dx0 = D/8 = 3.175 mm),max_level = 5,ref_ratio 全 2 → 最细 D/256(99.2 µm)
+amr.regrid_file = fixed_grids_v5_L5.dat 冻结层级(regrid_int = 100000,regrid_on_restart = 1 建层),DistributionMapping.strategy = SFC:
+级	盒数	胞数	分辨率	布局
+L0	基础	3.15M	D/8	全域
+L1	8	4.19M	D/16	声学/反馈区
+L2	8	4.19M	D/32	宽核心(x≤8D, r≤1.5D)
+L3	12	7.37M	D/64	安全核心
+L4	44	19.40M	D/128	核心+走廊(至 ~4D)
+L5	26	12.58M	D/256	唇口/剪切层环形套筒
+合计	98	50.9M		advance weight ≈ 0.80B
+blocking_factor = 32³/16³(粗/细),max_grid_size = 64(L0)/512(L1+),n_error_buf = 8 8 8 6 4
+注意:对称轴上无 L5 覆盖——shock-cell 列的近轴分辨率是 L4 = D/128,第 4 峰临 L4→L3 交界(诊断口径须记)
+入口宽带非轴对称 startup seed(一次性)
+u′x = ε U_e g(t) h(r) Σ{m=1..5} c_m cos(mθ+φ_m):ε = 3×10⁻⁴(总方位角 RMS),c_m ∝ {1, 0.7, 0.5, 0.35, 0.25}(归一 ⟨S²⟩=1),存档相位 φ_m;C² 时间窗 g = 64s³(1−s)³,生产实际:t_start = 5.0 ms,duration = 0.2 ms;唇口高斯径向包络(3δ 宽)。一阶净质量/动量为零;重启不自动重放。
+
+探针与统计
+
+216 个压力探针,level 1,每 10 步:轴线 q1–q5、径向阵列 r1/r2、以及 13 站 × 16 点方位角环(s1–s4, o1–o4, s05, s6, n15, n30)供 azimuthal Fourier(m-mode)分解
+在线统计 NSTAT=11(dt 加权):u/v/w 的 MEAN+SQR、uv/uw/vw MEAN、p/T/ρ 的 MEAN+SQR;cns.stats_start_time = 6.5e-3
+输出:plt 25 分量;生产段 check_int = plot_int = 500
+运行史
+
+种子 chk04520(t=5.0 ms)→ seed 窗 5.0–5.2 ms → develop 至 6.5 ms(chk05847,stats off)→ statistics 6.5→10.16 ms(chk09170/plt09170)
+统计窗 3.66 ms;8×H100 CB 裸机,末段 ≈4.67 s/step,dt ≈ 1.1 µs;全部 checkpoint 每 500 步落 /shared
+衍生分支 teno5_run(prob.h 一行改 Teno5,单腿协议 stats_start_time=7.0e-3、stop=10.66 ms)已备好未跑
+完整版(含 BC 奇偶规则、tagging caps 数表、探针坐标、路径索引)在 case_configurations.md 第 4 节。
+
+2d和3d的全部放在一起了吗
+在一起了。case_configurations.md 一份文档覆盖全部四个案,结构:
+
+节	内容
+§1	共同物理设定(四案全同:气体/输运、环境与喷口、入口剖面与法兰 BC、四案 NPR/Mj/T_j/U_j/ρ_j/Re_j 对照表)
+§2	共同数值方法(WENO-Z5+LLF、SSP-RK3、CFL、统计)
+§3	2D 三案(m119/m142/m180):RZ 几何、D/1024 网格、tagging caps+强制区、31 探针、各案运行史表
+§4	3D m142:24D×(±8D)² 几何、静态 BoxArray 五级表(50.9M 胞)、宽带 seed、216 探针、运行史
+§5	全部路径索引(案目录、网格文件、分析产物、到手即算工具)
+Windows 地址:\\wsl.localhost\Ubuntu-24.04\home\qiaoj\testcerisse\cerisse\analysis\panda_benchmark\case_configurations.md
+
+刚才两条聊天里的"3D 单独总结"只是同一文档 §4 的重述,没有另立文件。
+
+我已完整读完 [case_configurations.md](C:/Users/qiaoj/case_configurations.md)。总体判断是：
+这是一份质量较高的 as-built 配置档，足以复现算例并支撑平均激波场研究；但它不是结果档，也不能把当前模型称为 Panda-exact 或定量 screech 模型。
+
+最重要的新发现
+你3D结果中“激波胞距比实验短约7%”，很可能首先来自入口有效直径，而不一定是下游 ILES 耗散。
+当前设置：
+\[
+r_0=R-3\delta=0.5D-0.03D=0.47D,
+\]因此速度剖面的有效直径大约是
+\[
+D_{\mathrm{vel}}\approx2r_0=0.94D.
+\]相应面积比为
+\[
+(0.94)^2=0.8836,
+\]几乎正好等于计算得到的
+\[
+C_{d,\mathrm{eff}}=0.8789.
+\]而激波胞长度近似正比于有效射流直径：
+\[
+L_s\propto D_{\mathrm{eff}}\sqrt{M_j^2-1}.
+\]所以按名义 \(D\) 归一化时，当前边界天然可能产生约6%的胞距缩短——与你观察到的约7%非常接近。
+这还不是最终证明，因为你的第一胞位置很好，偏差主要在下游累积；但在把原因归结为“3D混合过快/WENO耗散”之前，必须先排除 \(C_d\) 和有效动量直径。你之前的 \(C_d\approx0.95/0.99\) 薄层变体正好可以做这个判别。
+文档中需要纠正的硬错误
+第57行不能把四案统一写成 NSTAT=11：
+2D：11；
+3D：应为15，即3个速度均值、3个平方、3个交叉项和 \(p,T,\rho\) 各自均值/平方。
+
+第150行“14个统计分量”也不对。3D plot 的25个分量应当核成：
+
+\[
+5\text{ conserved}+15\text{ statistics}+5\text{ derived}=25.
+\]2D探针不是31支，而是：
+\[
+10+3+10+5+4=32.
+\]3D不是13个方位环：
+实际列出的环是12个；
+\(12\times16=192\) 个环探针；
+加18个单点，实际为210 active；
+此前216是 defined，其中6个 legacy 探针没有激活。
+
+q1–q5不是轴线探针，而是近唇线沿轴向布置；真正的轴线组是 a1–a3 等。
+
+\(Re_j\) 与Panda一致，只能称为“名义完全膨胀 Reynolds 数一致”。实际入口质量和动量通量受 \(C_d=0.8789\) 影响，不能写成实际出口边界层或实际流量与实验一致。
+
+配置的物理定位
+建议正式统一称为：
+Panda-condition, prescribed-exit, simplified flush-baffle model.
+
+不能称 Panda-exact，主要因为：
+没有解析喷管内部；
+出口面直接规定 \(p,T,u\)；
+没有真实实体唇厚；
+\(\delta/D=0.01\) 并非实验测量值；
+\(C_d=0.8789\) 也不是实验值；
+Panda的305 mm金属喷口块不只是一个理想共面平板，而且论文明确说该法兰是稳定大幅 screech 的主要反射体；
+密度实验中的约8 m/s背景流是横向装置流，不是coflow。可以忽略作为首基线，但应在实验差异表中注明“未建模”，不能简单写成装置完全静止。
+对各算例初步结果的判断
+m119 2D
+这是目前对“没有复现 screech”最有说服力的一个。
+RZ能够承载Panda的 \(m=0\) 轴对称模态；
+10 ms统计窗对应约84个8.4 kHz周期；
+因而记录时间已经足够排除一个强而稳定的Panda型音调；
+目前约3.5 kHz近场峰和约2.9 kHz外场峰不一致，不能称为同一个传播音调。
+所以可以写：
+当前规定出口、简化法兰的RZ模型未复现Panda的8.4 kHz轴对称screech。
+
+不能写成“Panda工况本身没有screech”。
+m142 2D
+它适合验证平均激波胞，不能验证Panda声学：
+Panda工况是 \(m=\pm1\) 螺旋模态；
+RZ从方程层面排除了该模态；
+9.25 ms即使有约50个目标周期，没有5.4 kHz tone也不能作为格式或物理失败证据。
+m142 3D
+这是目前最有价值的平均流场结果：
+第一胞、第一次强再压缩和实验密度形状接近；
+三维平均场比2D保持了更长的激波列；
+下游峰位出现累计提前约 \(0.25\!-\!0.30D\)，这一趋势值得作为网格/入口敏感性问题研究。
+但还不能声称：
+“3D本身治好了2D问题”——3D统计窗3.66 ms，2D是9.25 ms，窗口并不相同；
+“胞距短是ILES耗散造成的”——\(C_d\)、入口位移厚度和L4→L3界面尚未排除；
+“实验确定存在Mach disk”——模拟中的轴线 \(M<1\) 能证明模拟有亚声速袋，但实验轴线密度陡跳本身不能唯一证明激波面的拓扑。
+3D统计窗3.66 ms约等于20个5375 Hz周期，足以说：
+当前窗口内没有形成强烈、饱和、稳定的 \(m=\pm1\) screech。
+
+但不足以排除增长率很小、需要更长时间才能锁相的全局模态。
+m180 2D
+目前可以支持：
+强欠膨胀结构已经形成；
+出现 barrel shock、Mach-disk型中心压缩和后续激波列；
+适合作为强激波结构案例。
+但3.5 ms统计窗和当前对照数据还不足以做：
+定量Mach disk位置/直径验证；
+Zapryagaev实验的完整验证；
+screech出现或消失结论。
+3D网格最关键的局限
+当前固定网格设计对成本和重复性很好，但声学/反馈区域的分辨率分布不理想：
+L5 \(D/256\) 只到约 \(0.75D\)；
+激波核心到约 \(4D\) 只有L4；
+第4激波峰靠近L4→L3界面；
+文献和Panda数据把主要声生成/反馈区域放在第3–5激波甚至更下游。
+因此这套网格足够：
+平均第一胞；
+前几个激波胞；
+定性 \(m=1\) 结构；
+近场平均密度。
+但它不能保证下游KH–激波耦合和上游返回波在粗细网格界面不被削弱。
+另外，文档还应明确写出实际网格历史：
+2D前5 ms主要来自较粗L3种子，之后才抬到L6；
+3D前5 ms来自L2种子，最终L5只实际运行约5.16 ms。
+当前写法容易使读者误以为最终分辨率从 \(t=0\) 就启用了。
+边界条件评价
+\(12D/24D\)或横向 \(\pm8D\) 的几何范围已经不小，但 foextrap 不是声学非反射边界。
+从射流到横向边界再返回的传播时间约为
+\[
+t_{\rm round}\approx\frac{16D}{c_\infty}\approx1.18\ {\rm ms}.
+\]在3.66 ms统计窗内，反射理论上可以返回约3次。即使脉冲试验给出较小反射，也只能证明特定频率、入射角和网格下的结果；不能等同于5.4 kHz螺旋模态的复反射系数。
+因此：
+平均激波场：当前边界可接受；
+定量声学、screech幅值和相位：需要NRBC/sponge或至少 \(R(f,\theta,m)\) 测试。
+建议的下一步顺序
+先修正文档中的统计数、探针数和网格履历。
+优先分析已有 \(C_d=0.879/0.951/0.988\) 数据，检查胞距是否随 \(\sqrt{C_d}\) 系统变化；这可能直接解释7%偏差。
+把2D截成与3D相同的3.66 ms窗口，再做2D–3D–实验三方比较；长窗2D作为第二组展示。
+给3D图叠加AMR层级边界，特别标出 \(x=0.75D\)、\(4D\) 和第4激波位置。
+用现有16点环输出 \(m-f\) 图和 \(m=\pm1\) 包络；再做 \(k_x-f\) 图寻找下游KH波和上游返回波。
+输出Fix-C一阶回退的次数和空间分布。
+TENO 2D只有约0.889 ms、3D尚未运行，目前不能据此评价WENO/TENO声学优劣。
+最终判断是：
+你的平均激波场验证已经取得了真实进展，尤其是m142 3D第一胞和实验密度形状；当前最大的可疑误差源不是“网格还不够细”这么简单，而是入口有效动量直径只有约 \(0.94D\)、真实喷口/法兰感受性缺失，以及反馈源区恰好跨越L4→L3界面。
+
+这份文件适合作为论文的方法附录底稿。建议另建一份 VALIDATION_RESULTS.md，专门记录每个结果使用的统计窗口、原始无平移误差、允许平移后的形状误差、频谱稳定性和图文件索引。当前我能直接读取配置档，但WSL里的 panda_benchmark 图和NPZ目录仍被Windows权限拒绝；因此上面对图的评价采用的是你此前报告的数值，而不是重新从原始图中测量。
+
+
+3:57 PM
+评审意见收到,先逐项核实"硬错误"再改文档,同时查他提到的 C_d 变体旧数据是否可用。核实探针计数与 q1/a1 坐标:
+
+Bash Verify probe counts, legacy probes, and q1/a1 positions
+IN
+cd /tmp/claude-1000/-home-qiaoj-testcerisse-cerisse/b1e704a6-bfa2-43bd-8eef-98cfa73815d3/scratchpad/cfg
+echo "== 2D field_name count:"; grep -c field_name m142_gpu_prod_inputs
+echo "== 2D time_probes active count:"; grep "cns.time_probes" m142_gpu_prod_inputs | tr " " "\n" | grep -vE "cns.time_probes|=" | grep -c .
+echo "== 3D field_name count:"; grep -c field_name m142_3d_inputs
+echo "== 3D time_probes active count:"; grep "cns.time_probes" m142_3d_inputs | tr " " "\n" | grep -vE "cns.time_probes|=" | grep -c .
+echo "== 3D defined-but-not-listed (legacy):"
+python3 - <<'EOF'
+import re
+txt = open("m142_3d_inputs").read()
+active = set(re.search(r"cns\.time_probes\s*=\s*(.+)", txt).group(1).split())
+defined = set(re.findall(r"^(\S+)\.field_name", txt, re.M))
+print("active:", len(active), " defined:", len(defined))
+print("defined but NOT active:", sorted(defined - active))
+rings = [p for p in active if re.match(r"(s\d|o\d|n\d)", p) and "_" in p]
+singles = sorted(active - set(rings))
+import collections
+fam = collections.Counter(p.split("_")[0] for p in rings)
+print("ring families(16 each?):", dict(fam), " total ring probes:", len(rings))
+print("singles(%d):" % len(singles), singles)
+EOF
+echo "== q1 and a1 coordinates:"
+grep -A2 "^q1\." m142_3d_inputs | head -3; grep -A2 "^a1\." m142_3d_inputs | head -3
+
+OUT
+== 2D field_name count:
+32
+== 2D time_probes active count:
+32
+== 3D field_name count:
+216
+== 3D time_probes active count:
+224
+== 3D defined-but-not-listed (legacy):
+active: 210  defined: 216
+defined but NOT active: ['P_cl_0p5De', 'P_cl_1De', 'P_cl_2De', 'P_cl_4De', 'P_sh_1De', 'P_sh_2De']
+ring families(16 each?): {'s4': 16, 's2': 16, 's6': 16, 's3': 16, 'n15': 16, 'o3': 16, 'o4': 16, 'o2': 16, 's05': 16, 'n30': 16, 's1': 16, 'o1': 16}  total ring probes: 192
+singles(18): ['a1', 'a2', 'a3', 'm1', 'm2', 'q1', 'q2', 'q3', 'q4', 'q5', 'r1a', 'r1b', 'r1c', 'r1d', 'r2a', 'r2b', 'r2c', 'r2d']
+== q1 and a1 coordinates:
+q1.field_name = pressure
+q1.box_lo = 0.004350 0.010700 -0.002000
+q1.box_hi = 0.008350 0.014700 0.002000
+a1.field_name = pressure
+a1.box_lo = 0.023400 -0.002000 -0.002000
+a1.box_hi = 0.027400 0.002000 0.002000
+Bash Inventory legacy inflow-profile family for the Cd scaling test
+IN
+ssh aws-hpc 'for c in panda_tophat_L6 panda_tanh200_L6 panda_blasius_L6 panda_mj1p42_L6 panda_mj1p42_Tc_L6; do
+D=/shared/cerisse/exm/underexpanded_jet/2d/$c
+echo "== $c:"
+grep -E "delta_jet|r0 =|tanh|tophat|blasius|Cd" $D/prob.h 2>/dev/null | head -4
+P=$(ls -d $D/plt* $D/plot/plt* 2>/dev/null | sort -V | tail -1); echo "  last plt: $P"
+[ -n "$P" ] && sed -n "2p;24p" $P/Header 2>/dev/null | tr "\n" " " && echo
+done' 2>/dev/null
+
+OUT
+== panda_tophat_L6:
+  Real delta_jet = 0.0;           // top-hat (wave-system sensitivity test)
+  if (pparm.delta_jet > Real(0.0)) {
+    fjet = Real(0.5) * (Real(1.0) - std::tanh((r - pparm.r_jet) / pparm.delta_jet));
+  last plt: /shared/cerisse/exm/underexpanded_jet/2d/panda_tophat_L6/plot/plt09876
+9 3.90625e-05 3.90625e-05  
+== panda_tanh200_L6:
+  Real delta_jet = 200.0e-6;      // tanh theta0=100um
+  if (pparm.delta_jet > Real(0.0)) {
+    fjet = Real(0.5) * (Real(1.0) - std::tanh((r - pparm.r_jet) / pparm.delta_jet));
+  last plt: /shared/cerisse/exm/underexpanded_jet/2d/panda_tanh200_L6/plot/plt09734
+9 3.90625e-05 3.90625e-05  
+== panda_blasius_L6:
+  Real delta_jet = 4.257e-4;      // Pohlhausen d99, theta0=50um
+  if (pparm.delta_jet > Real(0.0)) {
+      const amrex::Real eta = (pparm.r_jet - r) / pparm.delta_jet;
+  last plt: /shared/cerisse/exm/underexpanded_jet/2d/panda_blasius_L6/plot/plt09729
+9 3.90625e-05 3.90625e-05  
+== panda_mj1p42_L6:
+  Real delta_jet = 100.0e-6;      // finite lip layer
+  if (pparm.delta_jet > Real(0.0)) {
+    fjet = Real(0.5) * (Real(1.0) - std::tanh((r - pparm.r_jet) / pparm.delta_jet));
+  last plt: /shared/cerisse/exm/underexpanded_jet/2d/panda_mj1p42_L6/plot/plt23131
+9 3.90625e-05 3.90625e-05  
+== panda_mj1p42_Tc_L6:
+  Real delta_jet = 100.0e-6;      // finite lip layer
+  if (pparm.delta_jet > Real(0.0)) {
+    fjet = Real(0.5) * (Real(1.0) - std::tanh((r - pparm.r_jet) / pparm.delta_jet));
+  last plt: /shared/cerisse/exm/underexpanded_jet/2d/panda_mj1p42_Tc_L6/plot/plt09251
+9 3.90625e-05 3.90625e-05
+Bash Check legacy case nozzle diameter and grid
+IN
+ssh aws-hpc 'grep -E "r_jet\s*=|prob_hi|n_cell" /shared/cerisse/exm/underexpanded_jet/2d/panda_tophat_L6/prob.h /shared/cerisse/exm/underexpanded_jet/2d/panda_tophat_L6/inputs 2>/dev/null | head -6'
+
+OUT
+/shared/cerisse/exm/underexpanded_jet/2d/panda_tophat_L6/prob.h:  Real r_jet     = 0.005;         // 5 mm, D_e = 10 mm
+/shared/cerisse/exm/underexpanded_jet/2d/panda_tophat_L6/inputs:geometry.prob_hi     = 0.06 0.24   # r_max=60mm (6 De), z_max=240mm (24 De)
+/shared/cerisse/exm/underexpanded_jet/2d/panda_tophat_L6/inputs:amr.n_cell           = 96   384    # base = 3D L0 (0.625 mm)
+Bash Launch legacy-family snapshot-averaged axis extraction in background
+IN
+SP=/tmp/claude-1000/-home-qiaoj-testcerisse-cerisse/b1e704a6-bfa2-43bd-8eef-98cfa73815d3/scratchpad
+cat > $SP/legacy_cd_axis.py <<'EOF'
+#!/usr/bin/env python3
+# Legacy inflow-profile family (D_e=10mm): snapshot-averaged on-axis density.
+# No online statistics in these runs (9 comps) -> average the last NS plotfiles.
+import numpy as np, re, os
+BASE = "/shared/cerisse/exm/underexpanded_jet/2d"
+CASES = ["panda_tophat_L6", "panda_tanh200_L6", "panda_blasius_L6", "panda_mj1p42_L6"]
+D = 0.010
+NS = 30
+for case in CASES:
+    pdir = os.path.join(BASE, case, "plot")
+    plts = sorted([p for p in os.listdir(pdir) if re.match(r"plt\d+$", p)],
+                  key=lambda s: int(s[3:]))[-NS:]
+    acc = None; times = []
+    for pn in plts:
+        plt = os.path.join(pdir, pn)
+        hdr = open(plt + "/Header").read().splitlines()
+        ncomp = int(hdr[1])
+        comps = hdr[2:2+ncomp]
+        cD = comps.index("Density")
+        t = float(hdr[2+ncomp+1]); times.append(t)
+        nlev = int(hdr[2+ncomp+2]) + 1
+        dx0 = float(hdr[2+ncomp+2+nlev+3].split()[0]) if False else None
+        # robust: parse cell sizes block—line offsets vary; find first line with 2 floats after domain boxes
+        # simpler: dx per level from known base 0.000625
+        dx = [0.000625 / 2**l for l in range(nlev)]
+        NZ = int(0.24 / dx[nlev-1])
+        out = np.full((NZ, 2), np.nan)
+        for l in range(nlev-1, -1, -1):
+            rat = int(round(dx[l] / dx[nlev-1]))
+            txt = open("%s/Level_%d/Cell_H" % (plt, l)).read().splitlines()
+            boxes, fabs = [], []
+            for ln in txt:
+                m = re.match(r"\(\((\-?\d+),(\-?\d+)\) \((\-?\d+),(\-?\d+)\)", ln.strip())
+                if m: boxes.append(tuple(int(x) for x in m.groups()))
+                m = re.search(r"FabOnDisk:\s+(\S+)\s+(\d+)", ln)
+                if m: fabs.append((m.group(1), int(m.group(2))))
+            for (li, lj, hi, hj), (fname, off) in zip(boxes, fabs):
+                if li > 0: continue
+                nx, ny = hi - li + 1, hj - lj + 1
+                with open("%s/Level_%d/%s" % (plt, l, fname), "rb") as f:
+                    f.seek(off); f.readline(); base = f.tell()
+                    for j in range(lj, hj + 1):
+                        f.seek(base + 8 * ((cD * ny + (j - lj)) * nx))
+                        row = np.frombuffer(f.read(8 * min(2, nx)), "<f8")
+                        for jj in range(j * rat, (j + 1) * rat):
+                            if jj >= NZ: break
+                            for c in range(min(2, row.size)):
+                                if np.isnan(out[jj, c]): out[jj, c] = row[c]
+        ax = np.nanmean(out, axis=1)
+        acc = ax if acc is None else acc + ax
+    acc /= len(plts)
+    zz = (np.arange(len(acc)) + 0.5) * dx[nlev-1] / D
+    np.savez_compressed("/tmp/legacy_%s_axis.npz" % case,
+                        zz=zz, rho=acc, t0=min(times), t1=max(times), n=len(plts))
+    print(case, "n=%d t=%.3f-%.3f ms" % (len(plts), min(times)*1e3, max(times)*1e3), flush=True)
+print("ALL DONE")
+EOF
+scp -q $SP/legacy_cd_axis.py aws-hpc:/tmp/ && ssh aws-hpc 'nohup python3 /tmp/legacy_cd_axis.py > /tmp/legacy_cd.log 2>&1 & echo PID=$!'
+
+OUT
+PID=1641972
+Bash Wait for legacy extraction and copy results
+IN
+ssh aws-hpc 'until grep -qE "ALL DONE|Error|Traceback" /tmp/legacy_cd.log 2>/dev/null; do sleep 30; done; cat /tmp/legacy_cd.log' && scp -q "aws-hpc:/tmp/legacy_*_axis.npz" /home/qiaoj/testcerisse/cerisse/analysis/panda_benchmark/ && echo COPIED
+
+OUT
+Command running in background with ID: bgzpncg3w. Output is being written to: /tmp/claude-1000/-home-qiaoj-testcerisse-cerisse/b1e704a6-bfa2-43bd-8eef-98cfa73815d3/tasks/bgzpncg3w.output. You will be notified when it completes. To check interim output, use Read on that file path.
+提取跑着,现在把文档的全部修正落实:
+
+Bash Apply all reviewer corrections to the configuration document
+IN
+cd /home/qiaoj/testcerisse/cerisse/analysis/panda_benchmark && python3 - <<'PYEOF'
+p = "case_configurations.md"
+s = open(p).read()
+
+# 0) header: as-built + model designation
+s = s.replace(
+"""来源:各案目录的 `inputs` 与 `prob.h` 原文件逐项核对(2026-07-17),非记忆复述。
+三个 2D 案的 `inputs` **逐字节完全相同**;`prob.h` 仅差喷压比一行(m180 另有一处 tagging 细节)。""",
+"""来源:各案目录的 `inputs` 与 `prob.h` 原文件逐项核对(2026-07-17),非记忆复述;评审修订 2026-07-17(统计分量数、探针计数、网格履历、模型定位)。
+本档为 **as-built 配置档**(可复现算例、支撑平均激波场研究),不是结果档。
+三个 2D 案的 `inputs` **逐字节完全相同**;`prob.h` 仅差喷压比一行(m180 另有一处 tagging 细节)。
+
+**模型定位(正式名称)**:*Panda-condition, prescribed-exit, simplified flush-baffle model*。
+不称 Panda-exact,原因(与实验的已知差异,均"未建模/非实验值"):
+| 项 | 实验 | 本模型 |
+|---|---|---|
+| 喷管内部 | 收敛喷管内流动 | 未解析,出口面直接规定 p, T, u |
+| 唇口 | 实体唇厚 | 无实体唇,tanh 速度剖面 δ/D=0.01(非实验测量值) |
+| 流量系数 | 未报 | C_d,eff=0.8789 为剖面推论,非实验值 |
+| 法兰 | 305 mm 金属喷口块(Panda 指出是稳定大幅 screech 的主要反射体) | 理想共面平板(slip wall) |
+| 环境流 | ~8 m/s 横向装置流(密度实验) | 静止(首基线可忽略,须注明未建模) |""")
+
+# 1) stats row in §2
+s = s.replace(
+"| 在线统计 | NSTAT = 11,dt 加权:速度分量 MEAN/SQR + 交叉项(2D: xy;3D: xy/xz/yz)+ p/T/ρ 的 MEAN/SQR;重启时自动清零,`cns.stats_start_time` 控制起算时刻 |",
+"| 在线统计 | dt 加权一/二阶矩;**2D:11 个分量**(u,v 的 MEAN+SQR、uv、p/T/ρ 的 MEAN+SQR);**3D:15 个分量**(u,v,w 的 MEAN+SQR、uv/uw/vw、p/T/ρ 的 MEAN+SQR);重启时自动清零,`cns.stats_start_time` 控制起算时刻 |")
+
+# 2) 2D probes 31 -> 32
+s = s.replace("### 3.3 探针(31 个,压力,level 0,每步采样)",
+              "### 3.3 探针(32 个,压力,level 0,每步采样;10+3+10+5+4=32)")
+
+# 3) 2D plt comps line (5+11+4) — already correct, make explicit
+s = s.replace("plt 含 20 分量(5 守恒 + 11 统计 + 4 派生 p/T/u/v)。",
+              "plt 含 20 分量 = 5 守恒 + 11 统计 + 4 派生(p/T/u/v)。")
+
+# 4) 3D probes section rewrite
+s = s.replace(
+"""### 4.4 探针(216 个,压力,level 1,每 10 步)
+q1–q5(轴线)、r1a–d / r2a–d(径向阵列)、a1–a3、m1–m2,以及 **13 个方位角环 × 16 探针**(s1–s4、o1–o4、s05、s6、n15、n30 站)供 azimuthal Fourier(m-mode)分解。输出 `probes3d_prod.log`。""",
+"""### 4.4 探针(定义 216,激活 210;压力,level 1,每 10 步)
+- **12 个方位角环 × 16 探针 = 192**(s1–s4、o1–o4、s05、s6、n15、n30 站),供 azimuthal Fourier(m-mode)分解;
+- **18 个单点**:q1–q5 = **近唇线**(y ≈ R = 12.7 mm)沿 x 的轴向阵列(非轴线);a1–a3 = 轴线组(y≈z≈0);r1a–d / r2a–d = 径向阵列;m1–m2;
+- 6 支 legacy 探针(P_cl_0p5De/1De/2De/4De、P_sh_1De/2De)已定义但未列入 `cns.time_probes`,不采样。
+输出 `probes3d_prod.log`。""")
+
+# 5) 3D plt comps 14 -> 15
+s = s.replace("plt 25 分量(5 守恒 + 14 统计 + 派生)。",
+              "plt 25 分量 = 5 守恒 + 15 统计 + 5 派生(p/T/u/v/w)。")
+
+# 6) Re_j wording
+s = s.replace("(Panda 论文报 0.93×10⁶ / 1.26×10⁶,与 m119/m142 一致。)",
+              "(Panda 论文报 0.93×10⁶ / 1.26×10⁶,与 m119/m142 的**名义完全膨胀 Reynolds 数**一致;实际入口质量/动量通量受 C_d,eff = 0.8789 影响,不等同于实验出口边界层/实际流量。)")
+
+# 7) grid history subsection appended to §3.5 and §4.6
+s = s.replace("- 衍生分支 m142_teno5:",
+"""- **网格履历**:各案发展段自较粗种子起步(如 m180 目录名 L3seed 所示的 L3 种子协议),此后抬升至 max_level=6;**最终 D/1024 分辨率并非从 t=0 启用**。
+- 衍生分支 m142_teno5:""")
+s = s.replace("- 衍生分支 teno5_run:",
+"""- **网格履历**:L5 静态层级自 t = 5.0 ms(chk04520)起建立;此前发展段来自较粗种子。**最终 D/256 层级实际运行 5.0→10.16 ms ≈ 5.16 ms**,并非从 t=0 启用。
+- 衍生分支 teno5_run:""")
+
+# 8) acoustic boundary caveat in 3D notes
+s = s.replace("| 注记 | 侧向 ±6D 恰等于法兰半径:对 mean-flow 分支平板等效无限大(已记录局限;声学分支需加宽) |",
+"""| 注记 | 侧向 ±6D 恰等于法兰半径:对 mean-flow 分支平板等效无限大(已记录局限;声学分支需加宽)。**foextrap 不是声学无反射边界**:射流→侧边界→返回的传播时间 ≈16D/c∞ ≈ 1.18 ms,3.66 ms 统计窗内理论上可往返 ~3 次;平均激波场可接受,定量声学(screech 幅值/相位)需 NRBC/sponge 或 R(f,θ,m) 标定 |""")
+
+open(p, "w").write(s)
+print("all patches applied")
+PYEOF
+grep -c "15 统计\|激活 210\|32 个\|prescribed-exit" case_configurations.md
+
+OUT
+all patches applied
+4
+Edit project_panda_epaps.md
+Added 1 line
+Update Todos
+
+评审三轮改正已落地: 文档硬错误全修+模型定位+网格履历+声学边界注记
+
+C_d 假说初判: legacy 剪切层剖面族轴线提取后台运行中(4案×30帧快照均值)
+
+待办(评审清单): 2D截3.66ms窗三方比; 3D图叠AMR层界; m-f图+kx-f图; 一阶回退计数; VALIDATION_RESULTS.md
+评审意见已全部处置。逐项汇报:
+
+一、文档硬错误——全部核实属实,已修(case_configurations.md 已更新):
+
+项	核实结果	修正
+统计分量	从 plt Header 复核:2D=11,3D=15(u,v,w 的 MEAN+SQR ×6 + 三个交叉项 + p/T/ρ 的 MEAN+SQR ×6)	§2 分维写明;§4.5 改为 25 = 5+15+5
+2D 探针	grep -c field_name = 32(10+3+10+5+4)	31→32
+3D 探针	定义 216 / cns.time_probes 激活 210;12 环×16=192 + 18 单点;6 支 legacy(P_cl_*,P_sh_*)未激活	全部重写
+q1–q5	盒心 y≈12.7 mm = R,确为近唇线轴向阵列;a1–a3 才是轴线(y≈z≈0)	已改
+Re_j 措辞	—	改为"名义完全膨胀 Reynolds 数一致",注明 C_d 影响
+网格履历	3D 核实:L5 层级自 chk04520(t=5.0 ms)建立,实跑 5.16 ms;2D 按粗种子→抬升协议注明	新增两条履历注记
+模型定位	—	文档头新增 Panda-condition, prescribed-exit, simplified flush-baffle model + 与实验差异表(喷管内部/实体唇/δ 与 C_d 非实验值/法兰为 screech 主反射体/8 m/s 横向装置流未建模)
+声学边界	—	注记 foextrap 非无反射边界,侧向往返 ≈1.18 ms,3.66 ms 窗内 ~3 次;定量声学需 NRBC/sponge 或 R(f,θ,m) 标定
+二、C_d 假说重升级——同意,且免费初判已在跑。 0.94² = 0.8836 ≈ C_d,eff = 0.8789 这个对应确实扎眼。评审提到的"已有 C_d≈0.95/0.99 变体"我已定位并核对:是 legacy 入口剖面族 panda_tophat_L6(δ=0)、panda_tanh200_L6(δ=200 µm)、panda_blasius_L6(Pohlhausen δ99=425.7 µm)、panda_mj1p42_L6(δ=100 µm)。四案的多帧快照平均轴线提取正在后台跑(它们无在线统计,只能快照平均),出来后做 Ls/D 对 √C_d 的标度检验。但必须先声明四个混杂:这族是 D_e=10 mm 的另一台喷口、域 6D×24D、无法兰、tanh 中心在 R(不是 R−3δ)、最细 D/256——所以只能做趋势初判;干净的判别实验是在现行 v2 配置上改 δ 或 r0 重跑(2D,单案 ~2 h GPU)。
+
+三、一处需要指出的事实:"2D–3D 窗口不同(9.25 vs 3.66 ms)"这一条已经做过窗口对齐——m142_2d3d_vs_epaps_axis.png 和 30 站径向图用的是 2D 在 plt20500 的累计均值(6.5→10.05 ms = 3.55 ms),与 3D 的 6.5→10.16 ms 同窗同时段。长窗 9.25 ms 的 2D 作为第二组也有。结论(3D 保持激波列更长)在同窗口下成立。
+
+四、其余结果措辞纪律全部采纳并入库:m119-2D 写"当前 prescribed-exit、简化法兰的 RZ 模型未复现 8.4 kHz 轴对称 screech"(不写"工况无 screech");m142-2D 不作声学否证(RZ 从方程排除 m=±1);3D 3.66 ms≈20 个周期只支持"窗内无强饱和螺旋 screech";m180 不做 Mach disk 定量验证;TENO 声学优劣不评。
+
+待办队列(按评审顺序,前两项已完成/在跑):③ AMR 层界叠加到 3D 图(x=0.75D、4D、第 4 峰);④ 16 点环的 m–f 谱图与 m=±1 包络、k_x–f 图找 KH 波与 upstream-propagating wave;⑤ 一阶正性回退计数与空间分布输出;⑥ 另建 VALIDATION_RESULTS.md(每个结果配统计窗/原始误差/允许平移后形状误差/谱稳定性/图索引)。legacy 提取一落地我先报 √C_d 标度的裁决。
+
+Read bgzpncg3w.output
+Bash Compute discharge coefficients and shock-cell spacings for the profile family
+IN
+cd /home/qiaoj/testcerisse/cerisse/analysis/panda_benchmark && python3 - <<'EOF'
+import numpy as np
+from scipy.signal import find_peaks
+
+# --- discharge coefficient per profile (mass-flux ratio, adiabatic T(u), p=p_e uniform)
+gam, Rg = 1.4, 287.06
+T0, pe = 297.15, 99780*3.273446/1.89293
+Te = T0/1.2; ce = np.sqrt(gam*Rg*Te); Ue = ce
+cp = gam*Rg/(gam-1)
+def cd(profile, R, **kw):
+    r = (np.arange(200000)+0.5)*R/200000
+    f = profile(r, R, **kw)
+    u = Ue*f
+    T = T0 - 0.5*u*u/cp
+    rho = pe/(Rg*T)
+    m = np.trapz(rho*u*r, r)
+    m_id = (pe/(Rg*Te))*Ue*R*R/2
+    return m/m_id
+tanhR   = lambda r, R, d: 0.5*(1-np.tanh((r-R)/d))
+tanhR3d = lambda r, R, d: 0.5*(1-np.tanh((r-(R-3*d))/d))
+def pohl(r, R, d99):
+    eta = np.clip((R-r)/d99, 0, 1)
+    return 2*eta - 2*eta**3 + eta**4
+CD = {
+ "tophat":  1.0,
+ "tanh200": cd(tanhR, 0.005, d=200e-6),
+ "blasius": cd(pohl,  0.005, d99=425.7e-6),
+ "mj1p42":  cd(tanhR, 0.005, d=100e-6),
+ "v2_254":  cd(tanhR3d, 0.0127, d=254e-6),
+}
+for k, v in CD.items(): print("Cd %-8s = %.4f  sqrt=%.4f" % (k, v, np.sqrt(v)))
+
+# --- shock-cell peaks from averaged axis profiles
+RJ = 1.6413
+print("\ncase        peaks x/D             spacings")
+res = {}
+for case, key in [("panda_tophat_L6","tophat"), ("panda_tanh200_L6","tanh200"),
+                  ("panda_blasius_L6","blasius"), ("panda_mj1p42_L6","mj1p42")]:
+    d = np.load("legacy_%s_axis.npz" % case)
+    zz, rho = d["zz"], d["rho"]/RJ
+    g = np.arange(0.3, 8.0, 0.02)
+    vi = np.convolve(np.interp(g, zz, rho), np.ones(5)/5, mode="same")
+    pk, _ = find_peaks(vi, prominence=0.04, distance=25)
+    pk = g[pk]
+    sp = np.diff(pk[:5])
+    res[key] = pk
+    print("%-11s %-21s %s" % (key, np.round(pk[:5],2), np.round(sp,3)))
+print("\nfirst-peak position vs sqrt(Cd) (expected Ls1 ∝ D_eff):")
+for key in ("tophat","tanh200","blasius","mj1p42"):
+    if len(res[key]):
+        print("  %-8s sqrtCd=%.4f  x_pk1/D=%.2f  ratio=%.3f" %
+              (key, np.sqrt(CD[key]), res[key][0], res[key][0]/np.sqrt(CD[key])))
+EOF
+
+OUT
+Exit code 1
+Traceback (most recent call last):
+  File "<stdin>", line 25, in <module>
+  File "<stdin>", line 15, in cd
+  File "/home/qiaoj/testcerisse/cerisse/.venv/lib/python3.12/site-packages/numpy/__init__.py", line 792, in __getattr__
+    raise AttributeError(f"module {__name__!r} has no attribute {attr!r}")
+AttributeError: module 'numpy' has no attribute 'trapz'. Did you mean: 'trace'?
+Bash Rerun Cd and spacing analysis with numpy 2 API
+IN
+cd /home/qiaoj/testcerisse/cerisse/analysis/panda_benchmark && python3 - <<'EOF'
+import numpy as np
+from scipy.signal import find_peaks
+gam, Rg = 1.4, 287.06
+T0, pe = 297.15, 99780*3.273446/1.89293
+Te = T0/1.2; ce = np.sqrt(gam*Rg*Te); Ue = ce
+cp = gam*Rg/(gam-1)
+def cd(profile, R, **kw):
+    r = (np.arange(200000)+0.5)*R/200000
+    f = profile(r, R, **kw)
+    u = Ue*f
+    T = T0 - 0.5*u*u/cp
+    rho = pe/(Rg*T)
+    m = np.trapezoid(rho*u*r, r)
+    m_id = (pe/(Rg*Te))*Ue*R*R/2
+    return m/m_id
+tanhR   = lambda r, R, d: 0.5*(1-np.tanh((r-R)/d))
+tanhR3d = lambda r, R, d: 0.5*(1-np.tanh((r-(R-3*d))/d))
+def pohl(r, R, d99):
+    eta = np.clip((R-r)/d99, 0, 1)
+    return 2*eta - 2*eta**3 + eta**4
+CD = {
+ "tophat":  1.0,
+ "tanh200": cd(tanhR, 0.005, d=200e-6),
+ "blasius": cd(pohl,  0.005, d99=425.7e-6),
+ "mj1p42":  cd(tanhR, 0.005, d=100e-6),
+ "v2_254":  cd(tanhR3d, 0.0127, d=254e-6),
+}
+for k, v in CD.items(): print("Cd %-8s = %.4f  sqrt=%.4f" % (k, v, np.sqrt(v)))
+RJ = 1.6413
+print("\ncase        peaks x/D               spacings")
+res = {}
+for case, key in [("panda_tophat_L6","tophat"), ("panda_tanh200_L6","tanh200"),
+                  ("panda_blasius_L6","blasius"), ("panda_mj1p42_L6","mj1p42")]:
+    d = np.load("legacy_%s_axis.npz" % case)
+    zz, rho = d["zz"], d["rho"]/RJ
+    g = np.arange(0.3, 8.0, 0.02)
+    vi = np.convolve(np.interp(g, zz, rho), np.ones(5)/5, mode="same")
+    pk, _ = find_peaks(vi, prominence=0.04, distance=25)
+    pk = g[pk]
+    res[key] = pk
+    print("%-11s %-23s %s" % (key, np.round(pk[:5],2), np.round(np.diff(pk[:5]),3)))
+print("\nfirst-peak position vs sqrt(Cd):")
+for key in ("tophat","tanh200","blasius","mj1p42"):
+    if len(res[key]):
+        print("  %-8s sqrtCd=%.4f  x_pk1/D=%.2f  ratio=%.3f" %
+              (key, np.sqrt(CD[key]), res[key][0], res[key][0]/np.sqrt(CD[key])))
+EOF
+
+OUT
+Cd tophat   = 1.0000  sqrt=1.0000
+Cd tanh200  = 0.9666  sqrt=0.9832
+Cd blasius  = 0.9444  sqrt=0.9718
+Cd mj1p42   = 0.9831  sqrt=0.9915
+Cd v2_254   = 0.8789  sqrt=0.9375
+
+case        peaks x/D               spacings
+tophat      [0.34 1.34 2.56 4.4  5.74] [1.   1.22 1.84 1.34]
+tanh200     [0.34 1.24 2.56 4.08 7.24] [0.9  1.32 1.52 3.16]
+blasius     [0.34 1.14 2.5  3.94 5.2 ] [0.8  1.36 1.44 1.26]
+mj1p42      [0.34 1.18 2.6  4.   6.02] [0.84 1.42 1.4  2.02]
+
+first-peak position vs sqrt(Cd):
+  tophat   sqrtCd=1.0000  x_pk1/D=0.34  ratio=0.340
+  tanh200  sqrtCd=0.9832  x_pk1/D=0.34  ratio=0.346
+  blasius  sqrtCd=0.9718  x_pk1/D=0.34  ratio=0.350
+  mj1p42   sqrtCd=0.9915  x_pk1/D=0.34  ratio=0.343
+一个关键点先核实——legacy 族的 NPR 是否一致:
+
+Bash Verify legacy family NPR consistency
+IN
+ssh aws-hpc 'for c in panda_tophat_L6 panda_tanh200_L6 panda_blasius_L6 panda_mj1p42_L6; do printf "%-18s " $c; grep -m1 "p_jet" /shared/cerisse/exm/underexpanded_jet/2d/$c/prob.h; done'
+
+OUT
+panda_tophat_L6      Real p_jet    = 101325.0 * 3.2735 / 1.89293;   // Mj=1.42 (Panda & Seasholtz 1999)
+panda_tanh200_L6     Real p_jet    = 101325.0 * 3.2735 / 1.89293;   // Mj=1.42 (Panda & Seasholtz 1999)
+panda_blasius_L6     Real p_jet    = 101325.0 * 3.2735 / 1.89293;   // Mj=1.42 (Panda & Seasholtz 1999)
+panda_mj1p42_L6      Real p_jet    = 101325.0 * 3.2735 / 1.89293;   // Mj=1.42 (Panda & Seasholtz 1999)
+Bash Prepare the clean Cd-discriminating 2D variant case
+IN
+ssh aws-hpc 'B=/shared/cerisse_reflux/exm/underexpanded_jet/2d
+T=$B/m142_cd0966
+mkdir -p $T && cp $B/m142_gpu_prod/GNUmakefile $B/m142_gpu_prod/inputs $B/m142_gpu_prod/prob.h $B/m142_teno5/bind8.sh $T/
+# discriminating variant: tanh center moved R-3delta -> R (delta unchanged 254um) => Cd 0.879 -> 0.966
+sed -i "s/const Real r0 = pparm.r_jet - Real(3.0) \* pparm.delta_jet;/const Real r0 = pparm.r_jet;  \/\/ Cd-test variant: tanh centered at R (Cd=0.966 vs 0.879)/" $T/prob.h
+sed -i "s/const Real r0 = p.r_jet - 3.0\*p.delta_jet;/const Real r0 = p.r_jet;  \/\/ Cd-test variant/" $T/prob.h
+grep -n "Cd-test variant" $T/prob.h && echo CASE_PREPARED'
+
+OUT
+85:  const Real r0 = p.r_jet;  // Cd-test variant
+180:    const Real r0 = pparm.r_jet;  // Cd-test variant: tanh centered at R (Cd=0.966 vs 0.879)
+CASE_PREPARED
+√C_d 标度初判完成——legacy 数据不足以裁决,但给出了重要边界信息;干净判别案已备好。
+
+一、各剖面 discharge coefficient(按各案 prob.h 实际剖面数值积分,绝热 T(u) 关系)
+
+案	剖面	C_d	√C_d
+tophat	δ=0	1.000	1.000
+mj1p42	tanh δ=100 µm @R	0.983	0.992
+tanh200	tanh δ=200 µm @R	0.967	0.983
+blasius	Pohlhausen δ99=425.7 µm	0.944	0.972
+现行 v2	tanh δ=254 µm @R−3δ	0.879	0.938
+关键结构事实:legacy 族的 √C_d 只在 0.972–1.000 之间(2.8% 跨度),而现行 v2 因为 tanh 中心移到 R−3δ 才掉到 0.938——Cd 亏损主要来自剖面中心位置,不是 δ 本身。
+
+二、legacy 族的 shock-cell 第一峰位置(30 帧快照平均;同 NPR=3.2735)
+
+案	√C_d	第一胞峰 x/D	与 √C_d 预测的偏离
+tophat	1.000	1.34	基准
+tanh200	0.983	1.24(−7.5%)	预测 −1.7%
+mj1p42	0.992	1.18(−12%)	预测 −0.8%
+blasius	0.972	1.14(−15%)	预测 −2.8%
+裁决:这组数据判不了 √C_d 假说。 观测到的胞长变化(7–15%)比 √C_d 预测(1–3%)大一个量级,且对 C_d 非单调(mj1p42 的 C_d 比 tanh200 高、第一峰反而更短)——说明在这族里动量厚度/剖面形状效应和发展不充分(tophat/tanh200/blasius 平均窗只有 t=0.76–1.8 ms,是 startup 尾段)把 √C_d 信号完全淹没。它确立的是评审的大方向——入口剖面细节对近场 shock-cell 结构是一阶敏感项——但要分离出 C_d 这一个变量,必须做受控实验。
+
+三、干净判别案已备好(停在提交前):m142_cd0966 —— 现行 v2 配置只改一处:tanh 中心从 R−3δ 移回 R(δ=254 µm 不动),C_d 从 0.879 → 0.966(√C_d +4.7%)。协议同 TENO 配对法:从 WENO 检查点重启 + 0.5 ms 缓冲 + 统计窗,约 2–4 小时 GPU。这个实验两头都有信息量:
+
+若假说成立 → 所有胞(含第一胞)伸长 ~4.7%;但现在第一胞是对的——伸长会让第一胞反超实验,那本身就构成对"纯 C_d 解释"的反证;
+若胞距衰减率不变、仅整体缩放 → 支持 C_d 是主因,7% 之谜基本收口。

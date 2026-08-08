@@ -1,0 +1,91 @@
+# Test-1853 Run 165 single-nozzle H100 grid qualification, cold start only.
+# The transverse domain is widened to +/-0.216 m so all L0 cells are isotropic
+# at 2.25 mm and every L0 dimension is divisible by 32.
+max_step  = 100
+stop_time = 1.0
+cfl       = 0.10
+
+# SSPRK(4,3), matching the pure shared-GP candidate.
+cns.order_rk  = 3
+cns.stages_rk = 4
+cns.lo_bc = 1 2 2
+cns.hi_bc = 2 2 2
+cns.nstep_screen_output = 10
+cns.verbose = 0
+cns.record_stats = 0
+cns.do_reflux = 1
+cns.strict_positivity = 1
+# Integration-gate limitation: the current 3-D shared-face positivity limiter
+# aborts when enabled, and stage_positivity is not a substitute for it.
+cns.stage_positivity = 0
+cns.stage_positivity_verbose = 0
+cns.soft_positivity = 0
+cns.ibm_positivity_flux_limiter = 0
+cns.ibm_positivity_flux_limiter_verbose = 0
+
+# Pure shared-GP full-cell path.  No EB, cut-cell, cut-control, volume fraction,
+# open-face fraction, aggregate, or redistribution path is enabled.
+cns.llf_ibm_face_local_crossing = 0
+cns.llf_ibm_wall_matched_crossing = 0
+cns.llf_ibm_conservative_crossing = 0
+cns.llf_ibm_fluid_shell = 0
+cns.llf_ibm_shifted_shell = 0
+cns.afd_ibm_face_local_crossing = 0
+cns.afd_ibm_crossing_wls = 0
+cns.afd_ibm_conservative_crossing = 0
+cns.afd_ibm_patch_conservative_crossing = 0
+cns.afd_ibm_fluid_shell = 0
+cns.afd_ibm_shifted_shell = 0
+
+ib.filename = ../../../geometry/test1853/outputs/ibm_prepared/test1853_run165_single_master_SI/test1853_run165_single_master_SI.stl
+ib.move = 0
+ib.plot_surf = 1
+ib.surf_int = 100
+ib.surf_file = output/run165/surface
+ib.skip_validation = 0
+ib.amr_support_buffer = 1
+ib.amr_support_audit = 1
+ib.amr_support_strict = 1
+ib.timing = 1
+ib.timing_detail = 0
+ib.timing_warn_seconds = 60.0
+
+geometry.is_periodic = 0 0 0
+geometry.coord_sys = 0
+geometry.prob_lo = -0.192 -0.216 -0.216
+geometry.prob_hi =  0.384  0.216  0.216
+
+# 9.437M base cells.  With max_grid_size=128 this forms eight nominal L0
+# boxes of about 128x96x96, one large base box per H100 rank.
+amr.n_cell = 256 192 192
+amr.max_level = 2
+amr.ref_ratio = 2 2
+amr.regrid_int = 16 16
+amr.blocking_factor = 32 32 8
+amr.max_grid_size = 128 128 64
+amr.n_error_buf = 8 4
+amr.grid_eff = 0.75
+DistributionMapping.strategy = SFC
+
+prob.startup_front_x = -0.0525
+prob.expected_run_id = 165
+prob.jet_enabled = 1
+
+amr.plot_files_output = 1
+amr.plot_file = output/run165/plt
+amr.plot_int = 25
+amr.derive_plot_vars = pressure velocity temperature
+amr.v = 1
+amr.run_log = output/run165/runlog
+amr.grid_log = output/run165/gridlog
+amr.checkpoint_files_output = 1
+amr.check_file = output/run165/chk
+amr.check_int = 100
+
+# Enable only for the first short grid/support audit, then disable for timing.
+cns.llf_fallback_mask_diagnostics = 0
+cns.regrid_prolongation_diagnostics = 0
+
+amrex.the_arena_is_managed = 0
+amrex.abort_on_out_of_gpu_memory = 1
+amrex.use_gpu_aware_mpi = 0

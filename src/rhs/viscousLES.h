@@ -20,7 +20,6 @@ template <typename param, typename cls_t>
 class viscousLES_t {
 
   public:
-  
   AMREX_GPU_HOST_DEVICE
   constexpr viscousLES_t() = default;
 
@@ -50,7 +49,9 @@ class viscousLES_t {
 #if (AMREX_USE_GPIBM || CNS_USE_EB )  
   void inline dflux_ibm(const Geometry& geom, const MFIter& mfi,
             const Array4<Real>& prims, std::array<FArrayBox*, AMREX_SPACEDIM> const &flxt,            
-            const Array4<Real>& /*cons*/, const cls_t* cls_d,const Array4<uint8_t>& ibMarkers) {
+            const Array4<Real>& /*cons*/, const cls_t* cls_d,
+            const Array4<uint8_t>& ibMarkers,
+            const bool /*use_wall_consistent_shell*/ = false) {
 #else
   void inline dflux(const Geometry& geom, const MFIter& mfi,
             const Array4<Real>& prims, std::array<FArrayBox*, AMREX_SPACEDIM> const &flxt, 

@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+from dataclasses import dataclass, replace
 import math
 import os
 import shutil
 import subprocess
 import time
-from dataclasses import dataclass
 from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", str(Path("temp/.mplconfig")))
@@ -79,6 +79,18 @@ class BcSpec:
 
 CASES = {
     "normal": CaseSpec("normal", mode=0, ly=0.125, stop_time=0.72, base_n=96),
+    "normal_hf": CaseSpec(
+        "normal_hf", mode=0, ly=0.125, stop_time=0.90, base_n=96,
+        sigma_x=0.030,
+    ),
+    "normal_mf": CaseSpec(
+        "normal_mf", mode=0, ly=0.125, stop_time=0.90, base_n=96,
+        sigma_x=0.060,
+    ),
+    "normal_lf": CaseSpec(
+        "normal_lf", mode=0, ly=0.125, stop_time=0.90, base_n=96,
+        sigma_x=0.120,
+    ),
     "oblique": CaseSpec("oblique", mode=1, ly=1.0, stop_time=1.05, base_n=96),
     "oblique_train": CaseSpec(
         "oblique_train", mode=2, ly=1.0, stop_time=1.05, base_n=96,
@@ -91,6 +103,10 @@ CASES = {
     "acoustic30": CaseSpec(
         "acoustic30", mode=2, ly=1.0, stop_time=1.05, base_n=96,
         sigma_x=0.18, sigma_y=1.0, carrier_y=4, theta_deg=30.0,
+    ),
+    "acoustic_minus30": CaseSpec(
+        "acoustic_minus30", mode=2, ly=1.0, stop_time=1.05, base_n=96,
+        sigma_x=0.18, sigma_y=1.0, carrier_y=-4, theta_deg=-30.0,
     ),
     "acoustic45": CaseSpec(
         "acoustic45", mode=2, ly=1.0, stop_time=1.05, base_n=96,
@@ -107,6 +123,26 @@ CASES = {
     "vortex": CaseSpec(
         "vortex", mode=4, ly=1.0, stop_time=1.05, base_n=96,
         sigma_x=0.16, sigma_y=1.0, carrier_y=4, x0=0.62,
+    ),
+    "entropy_exit": CaseSpec(
+        "entropy_exit", mode=3, ly=1.0, stop_time=2.65, base_n=96,
+        sigma_x=0.16, sigma_y=1.0, carrier_y=4, x0=0.30,
+    ),
+    "vortex_exit": CaseSpec(
+        "vortex_exit", mode=4, ly=1.0, stop_time=2.65, base_n=96,
+        sigma_x=0.16, sigma_y=1.0, carrier_y=4, x0=0.30,
+    ),
+    "vortex_exact_exit": CaseSpec(
+        "vortex_exact_exit", mode=10, ly=1.0, stop_time=2.65, base_n=96,
+        sigma_x=0.16, sigma_y=1.0, carrier_y=4, x0=0.30,
+    ),
+    "vortex_exact_boundary": CaseSpec(
+        "vortex_exact_boundary", mode=10, ly=1.0, stop_time=0.08, base_n=96,
+        sigma_x=0.16, sigma_y=1.0, carrier_y=4, x0=0.90,
+    ),
+    "shear_exit": CaseSpec(
+        "shear_exit", mode=9, ly=0.125, stop_time=2.65, base_n=96,
+        sigma_x=0.12, sigma_y=0.125, carrier_y=1, x0=0.30,
     ),
     "mixed": CaseSpec(
         "mixed", mode=5, ly=1.0, stop_time=1.05, base_n=96,
@@ -128,6 +164,18 @@ CASES = {
 }
 
 BCS = {
+    "pressure_outlet": BcSpec(
+        "pressure_outlet", hi_bc="7 -1", bc_mode=0,
+        extras=(
+            "prob.inlet_model=1",
+            "prob.outlet_model=1",
+            "prob.back_pressure_ratio=1.0",
+        ),
+    ),
+    "farfield": BcSpec(
+        "farfield", hi_bc="7 -1", bc_mode=0,
+        extras=("prob.inlet_model=3", "prob.outlet_model=2"),
+    ),
     "char": BcSpec("char", hi_bc="7 -1", bc_mode=1),
     "persistent_lodi": BcSpec(
         "persistent_lodi", hi_bc="2 -1", bc_mode=0,
@@ -137,6 +185,29 @@ BCS = {
             "cns.nscbc_order=2",
             "cns.nscbc_use_transverse=1",
             "cns.nscbc_transverse_relax=0.25",
+        ),
+    ),
+    "persistent_giles2": BcSpec(
+        "persistent_giles2", hi_bc="2 -1", bc_mode=0,
+        extras=(
+            "cns.nscbc_lo=0 0",
+            "cns.nscbc_hi=2 0",
+            "cns.nscbc_order=2",
+            "cns.nscbc_use_transverse=1",
+            "cns.nscbc_outflow_transverse_model=1",
+            "cns.nscbc_transverse_relax=0.0",
+        ),
+    ),
+    "gc_giles2": BcSpec(
+        "gc_giles2", hi_bc="2 -1", bc_mode=0,
+        extras=(
+            "cns.nscbc_lo=0 0",
+            "cns.nscbc_hi=2 0",
+            "cns.nscbc_order=2",
+            "cns.nscbc_use_transverse=1",
+            "cns.nscbc_outflow_transverse_model=1",
+            "cns.nscbc_ghost_update_model=1",
+            "cns.nscbc_transverse_relax=0.0",
         ),
     ),
     "persistent_lodi_t0": BcSpec(
@@ -258,22 +329,23 @@ def mesh_for(case: CaseSpec, nx: int, lx: float) -> tuple[int, int]:
 
 
 def run_cerisse(case: CaseSpec, bc: BcSpec, nx: int, lx: float,
-                outdir: Path, label: str, timeout: int) -> Path:
+                outdir: Path, label: str, timeout: int, exe: Path,
+                mpi_ranks: int, max_grid_size: int) -> Path:
     nx_domain, ny = mesh_for(case, nx, lx)
     run_dir = outdir / "runs" / f"{case.name}_{bc.name}_n{nx}_{label}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = [
         "timeout", str(timeout),
-        "mpirun", "--oversubscribe", "-np", "1",
-        str(EXE), "inputs",
+        "mpirun", "--oversubscribe", "-np", str(mpi_ranks),
+        str(exe), "inputs",
         f"stop_time={case.stop_time}",
         "max_step=1000000",
         f"amr.n_cell={nx_domain} {ny}",
         f"geometry.prob_hi={lx} {case.ly}",
         "geometry.prob_lo=0.0 0.0",
         "geometry.is_periodic=0 1",
-        "amr.max_grid_size=512",
+        f"amr.max_grid_size={max_grid_size}",
         "amr.blocking_factor=2",
         f"amr.plot_file={run_dir / 'plt'}",
         "amr.plot_int=1000000",
@@ -344,11 +416,16 @@ def initial_perturbations(case: CaseSpec, nx: int) -> tuple[np.ndarray, np.ndarr
         envelope = np.exp(
             -0.5 * ((xi / case.sigma_x) ** 2 + (eta / case.sigma_y) ** 2)
         )
+    elif case.mode == 9:
+        nxw = 1.0
+        nyw = 0.0
+        envelope = np.exp(-0.5 * ((xx - case.x0) / case.sigma_x) ** 2)
     else:
         nxw = math.cos(theta)
         nyw = math.sin(theta)
         ky = 2.0 * math.pi * case.carrier_y / case.ly
-        tan_theta = max(math.tan(theta), 1.0e-12)
+        tan_raw = math.tan(theta)
+        tan_theta = tan_raw if abs(tan_raw) > 1.0e-12 else math.copysign(1.0e-12, tan_raw)
         kx = ky / tan_theta
         phase = kx * (xx - case.x0) + ky * (yy - case.y0)
         envelope = np.exp(-0.5 * ((xx - case.x0) / case.sigma_x) ** 2) * np.cos(phase)
@@ -401,6 +478,23 @@ def initial_perturbations(case: CaseSpec, nx: int) -> tuple[np.ndarray, np.ndarr
         dp = RHO0 * C0 * amp * pulse
         drho = dp / (C0 * C0)
         du = 0.25 * dp / (RHO0 * C0)
+    elif case.mode == 9:
+        dv = amp * envelope
+    elif case.mode == 10:
+        ky = 2.0 * math.pi * case.carrier_y / case.ly
+        tan_raw = math.tan(theta)
+        tan_theta = tan_raw if abs(tan_raw) > 1.0e-12 else math.copysign(1.0e-12, tan_raw)
+        kx = ky / tan_theta
+        wave_number = math.sqrt(kx * kx + ky * ky)
+        dx0 = xx - case.x0
+        gaussian = np.exp(-0.5 * (dx0 / case.sigma_x) ** 2)
+        phase = kx * dx0 + ky * (yy - case.y0)
+        psi_scale = amp / wave_number
+        du = -psi_scale * ky * gaussian * np.sin(phase)
+        dv = psi_scale * gaussian * (
+            dx0 * np.cos(phase) / (case.sigma_x * case.sigma_x)
+            + kx * np.sin(phase)
+        )
     return drho, du, dv, dp
 
 
@@ -437,6 +531,33 @@ def perturbation_energy(fields: dict[str, np.ndarray], case: CaseSpec, nx: int,
     return float(np.sum(edens) * dx * dy)
 
 
+def giles_second_order_carrier_reflection(case: CaseSpec) -> float:
+    """Eq. (160) acoustic-amplitude reflection for the packet carrier.
+
+    Giles uses c=1 and the normal mean Mach number u.  The validation packet
+    has omega/K = c + U cos(theta), hence lambda=c*k_y/omega below.  This is a
+    continuum single-frequency reference, not an exact prediction for the
+    finite-bandwidth short-minus-long L2 metric.
+    """
+    if case.mode not in (0, 1, 2):
+        return 0.0 if case.mode in (3, 4, 9, 10) else float("nan")
+    theta = 0.0 if case.mode == 0 else math.radians(case.theta_deg)
+    normal_mach = MACH
+    lam = math.sin(theta) / (1.0 + normal_mach * math.cos(theta))
+    radicand = 1.0 - (1.0 - normal_mach * normal_mach) * lam * lam
+    if radicand < 0.0:
+        return float("nan")
+    sroot = math.sqrt(radicand)
+    correction = normal_mach * (1.0 - normal_mach) * lam * lam
+    denominator = sroot + 1.0 - correction
+    if denominator == 0.0:
+        return float("nan")
+    return abs(
+        (1.0 + normal_mach) / (1.0 - normal_mach)
+        * (sroot - 1.0 + correction) / denominator
+    )
+
+
 def compare_plots(test_plot: Path, ref_plot: Path, case: CaseSpec, nx: int,
                   metric_xmax: float = 1.0) -> dict[str, float]:
     test = covering_fields(test_plot)
@@ -456,10 +577,45 @@ def compare_plots(test_plot: Path, ref_plot: Path, case: CaseSpec, nx: int,
     err_energy = float(np.sum(err_edens) * dx * dy)
     rho_l2 = float(math.sqrt(np.sum(drho * drho) * dx * dy))
 
+    drho0, du0, dv0, dp0 = initial_perturbations(case, nx)
+    drho0 = drho0[:nx_metric, :ny]
+    du0 = du0[:nx_metric, :ny]
+    dv0 = dv0[:nx_metric, :ny]
+    dp0 = dp0[:nx_metric, :ny]
+
+    # Linearised right-boundary acoustic characteristics.  The short-minus-long
+    # field isolates the boundary-generated disturbance at identical spacing.
+    # A- travels into the domain; A+ is the initially outgoing acoustic content.
+    incoming = 0.5 * (dp - RHO0 * C0 * du)
+    outgoing_initial = 0.5 * (dp0 + RHO0 * C0 * du0)
+    outgoing_norm2 = float(np.sum(outgoing_initial * outgoing_initial) * dx * dy)
+    incoming_characteristic = (
+        math.sqrt(float(np.sum(incoming * incoming) * dx * dy) / outgoing_norm2)
+        if outgoing_norm2 > 0.0 else float("nan")
+    )
+
+    # Entropy and vortical waves have zero pressure perturbation in the exact
+    # linear solution.  This metric measures their non-physical conversion to
+    # sound, normalised by an equivalent acoustic pressure scale.
+    if case.mode == 3:
+        pressure_scale = C0 * C0 * drho0
+    elif case.mode in (4, 9, 10):
+        pressure_scale = RHO0 * C0 * np.sqrt(du0 * du0 + dv0 * dv0)
+    else:
+        pressure_scale = dp0
+    pressure_scale_norm2 = float(np.sum(pressure_scale * pressure_scale) * dx * dy)
+    pressure_conversion = (
+        math.sqrt(float(np.sum(dp * dp) * dx * dy) / pressure_scale_norm2)
+        if pressure_scale_norm2 > 0.0 else float("nan")
+    )
+
     init_e = initial_energy(case, nx, metric_xmax)
     return {
         "metric": math.sqrt(err_energy / init_e),
         "rho_l2": rho_l2,
+        "incoming_characteristic": incoming_characteristic,
+        "pressure_conversion": pressure_conversion,
+        "giles_carrier_reflection": giles_second_order_carrier_reflection(case),
         "test_residual": math.sqrt(perturbation_energy(test, case, nx, metric_xmax) / init_e),
         "ref_residual": math.sqrt(perturbation_energy(ref, case, nx, metric_xmax) / init_e),
         "test_time": test["time"],
@@ -474,6 +630,8 @@ def plot_results(rows: list[dict[str, object]], outdir: Path) -> tuple[Path, Pat
             f,
             fieldnames=[
                 "case", "bc", "nx", "ny", "metric", "rho_l2",
+                "incoming_characteristic", "pressure_conversion",
+                "giles_carrier_reflection",
                 "metric_xmax", "test_residual", "ref_residual", "test_time", "ref_time",
             ],
         )
@@ -521,11 +679,11 @@ def write_report(rows: list[dict[str, object]], csv_path: Path,
     lines = [
         "# Native Cerisse BC validation",
         "",
-        "Solver path: compiled Cerisse `FillPatch + bcnormal + WENO-Z5 + RK3/4`, no IBM, no AMR.",
+        "Solver path: compiled Cerisse physical-BC path with the selected ghost-update model + WENO-Z5 + SSPRK(4,3), no IBM, no AMR.",
         "Metric: short-domain final solution compared against a long-domain reference at identical grid spacing on `x in [0,1]`.",
         "",
-        "| Case | BC | N | 2N | metric(N) | metric(2N) | rate | ref residual(2N) | verdict |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---|",
+        "| Case | BC | N | 2N | metric(N) | metric(2N) | incoming A-(2N) | Giles carrier | p-conversion(2N) | rate | verdict |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for key in sorted(by_key):
         rr = sorted(by_key[key], key=lambda x: int(x["nx"]))
@@ -534,9 +692,18 @@ def write_report(rows: list[dict[str, object]], csv_path: Path,
         m0 = float(rr[0]["metric"])
         m1 = float(rr[1]["metric"])
         rate = math.log(m0 / m1, 2.0) if m0 > 0.0 and m1 > 0.0 else float("nan")
-        ref_resid = float(rr[1]["ref_residual"])
-        if key[0] == "normal" and m1 < 1.0e-5 and rate > 0.5:
-            verdict = "pass"
+        incoming = float(rr[1]["incoming_characteristic"])
+        conversion = float(rr[1]["pressure_conversion"])
+        giles_theory = float(rr[1]["giles_carrier_reflection"])
+        if key[0].startswith("normal") and incoming < 2.0e-5:
+            verdict = "low-reflection"
+        elif (key[0].startswith("entropy") or
+              key[0].startswith("vortex") or
+              key[0].startswith("shear")):
+            verdict = "pass" if conversion < 1.0e-3 else "pressure conversion"
+        elif key[0].startswith("acoustic"):
+            verdict = ("low-reflection" if incoming < 1.0e-2
+                       else "angle-dependent reflection")
         elif key[0].startswith("oblique") and m1 > 1.0e-2 and abs(rate) < 0.2:
             verdict = "residual floor"
         elif rate > 0.5:
@@ -545,15 +712,22 @@ def write_report(rows: list[dict[str, object]], csv_path: Path,
             verdict = "not converged"
         lines.append(
             f"| {key[0]} | {key[1]} | {rr[0]['nx']} | {rr[1]['nx']} | "
-            f"{m0:.3e} | {m1:.3e} | {rate:.2f} | {ref_resid:.3e} | {verdict} |"
+            f"{m0:.3e} | {m1:.3e} | {incoming:.3e} | {giles_theory:.3e} | "
+            f"{conversion:.3e} | "
+            f"{rate:.2f} | {verdict} |"
         )
 
     present_cases = sorted({str(r["case"]) for r in rows})
     lines.extend(["", "Interpretation:", ""])
-    if "normal" in present_cases:
+    if any(c.startswith("normal") for c in present_cases):
         lines.append(
             "- The quasi-1D normal acoustic case checks the compiled solver path for a normally outgoing packet."
         )
+    lines.append(
+        "- `Giles carrier` is the continuum single-frequency amplitude from Eq. (160). "
+        "The measured value is a finite-bandwidth, finite-time L2 metric and should "
+        "approach a non-zero angle-dependent limit rather than converge to zero."
+    )
     if "oblique" in present_cases:
         lines.append(
             "- The oblique blob case is intentionally harder: its finite transverse envelope contains slow/non-radiating content, so the long-domain reference residual is not expected to vanish."
@@ -566,13 +740,17 @@ def write_report(rows: list[dict[str, object]], csv_path: Path,
         lines.append(
             "- The acoustic angle-sweep cases test clean outgoing wave trains at fixed propagation angles."
         )
-    if "entropy" in present_cases:
+    if any(c.startswith("entropy") for c in present_cases):
         lines.append(
             "- The entropy case checks whether a density/contact perturbation is spuriously converted into sound at the boundary."
         )
-    if "vortex" in present_cases:
+    if any(c.startswith("vortex") for c in present_cases):
         lines.append(
             "- The vortex case checks tangential/rotational content, which is not a pure acoustic branch."
+        )
+    if "shear_exit" in present_cases:
+        lines.append(
+            "- The shear_exit case is an exact one-dimensional tangential-velocity characteristic; any pressure signal is non-physical mode conversion."
         )
     if "mixed" in present_cases:
         lines.append(
@@ -618,6 +796,8 @@ def write_report(rows: list[dict[str, object]], csv_path: Path,
 
 
 def main() -> None:
+    global MACH, U0
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--outdir", default=str(ROOT / "temp/bc_native_validation"))
     parser.add_argument("--cases", default="normal,oblique")
@@ -627,11 +807,31 @@ def main() -> None:
     parser.add_argument("--build", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--timeout", type=int, default=240)
+    parser.add_argument("--exe", default=str(EXE))
+    parser.add_argument("--np", type=int, default=1)
+    parser.add_argument("--max-grid-size", type=int, default=512)
+    parser.add_argument("--mach", type=float, default=MACH)
+    parser.add_argument(
+        "--amp-scale", type=float, default=1.0,
+        help="multiply every selected case perturbation amplitude",
+    )
     parser.add_argument(
         "--metric-xmax", type=float, default=1.0,
         help="compare only x in [0,metric_xmax] of the short-domain length",
     )
     args = parser.parse_args()
+
+    exe = Path(args.exe).resolve()
+    if args.np < 1:
+        raise SystemExit("--np must be positive")
+    if args.max_grid_size < 1:
+        raise SystemExit("--max-grid-size must be positive")
+    if not math.isfinite(args.amp_scale) or args.amp_scale <= 0.0:
+        raise SystemExit("--amp-scale must be finite and positive")
+    if not math.isfinite(args.mach) or args.mach <= 0.0 or args.mach >= 1.0:
+        raise SystemExit("--mach must be in the subsonic-outflow interval (0,1)")
+    MACH = args.mach
+    U0 = MACH * C0
 
     outdir = Path(args.outdir).resolve()
     if outdir.exists():
@@ -640,8 +840,10 @@ def main() -> None:
         shutil.rmtree(outdir)
     outdir.mkdir(parents=True)
 
-    if args.build or not EXE.exists():
+    if args.build or not exe.exists():
         build_case()
+    if not exe.exists():
+        raise SystemExit(f"executable does not exist: {exe}")
 
     case_names = [c.strip() for c in args.cases.split(",") if c.strip()]
     bc_names = [b.strip() for b in args.bcs.split(",") if b.strip()]
@@ -663,14 +865,21 @@ def main() -> None:
     rows: list[dict[str, object]] = []
     start = time.time()
     for case_name in case_names:
-        case = CASES[case_name]
+        base_case = CASES[case_name]
+        case = replace(base_case, amp=base_case.amp * args.amp_scale)
         for bc_name in bc_names:
             bc = BCS[bc_name]
             for nx in res:
                 print(f"running {case.name:7s} {bc.name:9s} N={nx} short")
-                test_plot = run_cerisse(case, bc, nx, 1.0, outdir, "short", args.timeout)
+                test_plot = run_cerisse(
+                    case, bc, nx, 1.0, outdir, "short", args.timeout,
+                    exe, args.np, args.max_grid_size,
+                )
                 print(f"running {case.name:7s} {bc.name:9s} N={nx} long")
-                ref_plot = run_cerisse(case, bc, nx, LONG_LX, outdir, "long", args.timeout)
+                ref_plot = run_cerisse(
+                    case, bc, nx, LONG_LX, outdir, "long", args.timeout,
+                    exe, args.np, args.max_grid_size,
+                )
                 metrics = compare_plots(test_plot, ref_plot, case, nx, args.metric_xmax)
                 _, ny = mesh_for(case, nx, 1.0)
                 row = {

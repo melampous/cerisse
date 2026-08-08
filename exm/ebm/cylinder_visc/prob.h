@@ -6,6 +6,7 @@
 #include <AMReX_ParmParse.H>
 #include <Closures.h>
 #include <RHS.h>
+#include <Weno_old.h>
 #include <ebm.h>
 #include <walltypes.h>
 
@@ -94,7 +95,7 @@ typedef rhs_dt<skew_t<num_method_param, ProbClosures>, viscous_t<visc_model_para
 //
 
 
-//typedef rhs_dt<weno_t<ReconScheme::Teno5, ProbClosures>, viscous_t<visc_model_param, ProbClosures>, no_source_t > ProbRHS;
+//typedef rhs_dt<weno_old_t<OldReconScheme::Teno5, ProbClosures>, viscous_t<visc_model_param, ProbClosures>, no_source_t > ProbRHS;
 
 
 

@@ -8,8 +8,6 @@
 template <typename cls_t>
 class rusanov_t {
  public:
-  static constexpr bool rz_pressure_split_capable = false;  // RZ pressure-split is WENO-only
-
   AMREX_GPU_HOST_DEVICE
   rusanov_t() {}
 

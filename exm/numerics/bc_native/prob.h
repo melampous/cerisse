@@ -7,10 +7,12 @@
 #include <AMReX_ParmParse.H>
 
 #include <cmath>
+#include <limits>
 
 #include <Closures.h>
 #include <RHS.h>
 #include <bc_types.h>
+#include <nscbc.h>
 
 using namespace amrex;
 
@@ -19,10 +21,20 @@ namespace PROB {
 struct ProbParm {
   int mode = 0;     // 0 normal, 1 acoustic blob, 2 acoustic train, 3 entropy,
                     // 4 vortex, 5 mixed, 6 weak shock front, 7 wake packet,
-                    // 8 broad low-frequency pressure pulse
+                    // 8 broad low-frequency pressure pulse, 9 tangential shear,
+                    // 10 analytically divergence-free vortical packet
   // 2 is the legacy plane-wave acoustic extrapolation prototype; 3 calls the
   // generic ghost-fill LODI helper; 4 applies RHS-level LODI/NSCBC.
   int bc_mode = 1;  // 0 Dirichlet, 1 characteristic, 2 plane, 3 ghost LODI, 4 RHS LODI
+  // Stage-3 algebra gates.  Zero preserves the historical bc_native setup.
+  // inlet_model:  0=fixed static state, 1=subsonic (pt,Tt,direction),
+  //               2=supersonic prescribed full state, 3=far-field invariants
+  // outlet_model: 0=historical bc_mode selection, 1=subsonic p_back with
+  //               automatic supersonic extrapolation, 2=far-field invariants
+  int inlet_model = 0;
+  int outlet_model = 0;
+  int all_farfield = 0;
+  Real back_pressure_ratio = Real(1.0);
 
   Real gamma = 1.4;
   Real rho0 = 1.0;
@@ -31,6 +43,7 @@ struct ProbParm {
   Real amp = 1.0e-4;  // velocity perturbation amplitude
 
   Real theta_deg = 30.0;
+  Real flow_angle_deg = 0.0;
   Real x0 = 0.30;
   Real y0 = 0.50;
   Real sigma_x = 0.045;
@@ -59,6 +72,7 @@ struct ProbParm {
 
   Real c0 = 0.0;
   Real u0 = 0.0;
+  Real v0 = 0.0;
   Real theta = 0.0;
 
   ProbParm()
@@ -66,9 +80,14 @@ struct ProbParm {
     ParmParse pp("prob");
     pp.query("mode", mode);
     pp.query("bc_mode", bc_mode);
+    pp.query("inlet_model", inlet_model);
+    pp.query("outlet_model", outlet_model);
+    pp.query("all_farfield", all_farfield);
+    pp.query("back_pressure_ratio", back_pressure_ratio);
     pp.query("mach", mach);
     pp.query("amp", amp);
     pp.query("theta_deg", theta_deg);
+    pp.query("flow_angle_deg", flow_angle_deg);
     pp.query("x0", x0);
     pp.query("y0", y0);
     pp.query("sigma_x", sigma_x);
@@ -95,8 +114,26 @@ struct ProbParm {
     pp.query("sponge_y_hi", sponge_y_hi);
 
     c0 = std::sqrt(gamma * p0 / rho0);
-    u0 = mach * c0;
+    const Real flow_angle = flow_angle_deg *
+        Real(3.14159265358979323846264338327950288) / Real(180.0);
+    u0 = mach * c0 * std::cos(flow_angle);
+    v0 = mach * c0 * std::sin(flow_angle);
     theta = theta_deg * Real(3.14159265358979323846264338327950288) / Real(180.0);
+
+    if (inlet_model < 0 || inlet_model > 3) {
+      amrex::Abort("prob.inlet_model must be 0, 1, 2, or 3");
+    }
+    if (outlet_model < 0 || outlet_model > 2) {
+      amrex::Abort("prob.outlet_model must be 0, 1, or 2");
+    }
+    if (all_farfield < 0 || all_farfield > 1 ||
+        !std::isfinite(flow_angle_deg)) {
+      amrex::Abort("prob.all_farfield must be 0 or 1 and flow_angle_deg must be finite");
+    }
+    if (!(back_pressure_ratio > Real(0.0)) ||
+        !std::isfinite(back_pressure_ratio)) {
+      amrex::Abort("prob.back_pressure_ratio must be finite and positive");
+    }
   }
 };
 
@@ -117,7 +154,254 @@ using ProbRHS = rhs_dt<
     sponge_source_t<ProbClosures>>;
 using GlobalBC = manual_bc_t<ProbClosures>;
 
-inline void inputs() {}
+inline void inputs()
+{
+#ifdef AMREX_USE_GPU
+  // The production boundary callback executes on the device.  Cerisse's
+  // pointwise conservative-to-primitive closure is device-only in CUDA
+  // builds, so the host algebra oracle below is exercised by the CPU build;
+  // CUDA coverage comes from the stage-local ghost-fill runtime tests.
+  amrex::Print()
+      << "[Stage3-Characteristic-BC] host algebra self-test: CPU build only\n";
+#else
+  ProbClosures cls;
+  constexpr Real tolerance = Real(2.e-12);
+  const Real gamma = calorifically_perfect_gas_t<indicies_t>::gamma;
+  const Real sound = std::sqrt(gamma);
+
+  auto make_state = [&](const Real rho, const Real u, const Real v,
+                        const Real p, Real* state) {
+    Real Y[NUM_SPECIES] = {Real(1.0)};
+    Real internal_energy = Real(0.0);
+    cls.RYP2E(rho, Y, p, internal_energy);
+    state[ProbClosures::URHO] = rho;
+    state[ProbClosures::UMX] = rho * u;
+    state[ProbClosures::UMY] = rho * v;
+    state[ProbClosures::UMZ] = Real(0.0);
+    state[ProbClosures::UET] =
+        rho * internal_energy + Real(0.5) * rho * (u * u + v * v);
+  };
+  auto relative_error = [](const Real a, const Real b) {
+    return amrex::Math::abs(a - b) /
+           amrex::max(Real(1.0), amrex::max(amrex::Math::abs(a),
+                                            amrex::Math::abs(b)));
+  };
+  auto require = [](const bool condition, const char* message) {
+    if (!condition) amrex::Abort(message);
+  };
+
+  const Real angle = Real(20.0) *
+      Real(3.14159265358979323846264338327950288) / Real(180.0);
+  const Real mach = Real(0.3);
+  const Real speed = mach * sound;
+  const Real u = speed * std::cos(angle);
+  const Real v = speed * std::sin(angle);
+  Real interior[ProbClosures::NCONS] = {Real(0.0)};
+  make_state(Real(1.0), u, v, Real(1.0), interior);
+
+  const Real static_temperature = Real(1.0) / cls.Rspec;
+  const Real total_ratio =
+      Real(1.0) + Real(0.5) * (gamma - Real(1.0)) * mach * mach;
+  const Real total_temperature = static_temperature * total_ratio;
+  const Real total_pressure =
+      std::pow(total_ratio, gamma / (gamma - Real(1.0)));
+  Real reconstructed[ProbClosures::NCONS] = {Real(0.0)};
+  auto status = GlobalBC::bc_characteristic_total_inlet(
+      Real(-1.0), Real(0.0), Real(0.0), &cls,
+      total_pressure, total_temperature, std::cos(angle), std::sin(angle),
+      Real(0.0), interior, reconstructed);
+  require(status == GlobalBC::characteristic_bc_status_t::success,
+          "characteristic total-inlet self-test returned a failure status");
+  for (int n = 0; n < ProbClosures::NCONS; ++n) {
+    require(relative_error(reconstructed[n], interior[n]) < tolerance,
+            "characteristic total-inlet self-test failed exact-state recovery");
+  }
+
+  Real outlet[ProbClosures::NCONS] = {Real(0.0)};
+  const Real back_pressure = Real(0.98);
+  status = GlobalBC::bc_characteristic_pressure_outlet(
+      Real(1.0), Real(0.0), Real(0.0), &cls, back_pressure,
+      interior, outlet);
+  require(status == GlobalBC::characteristic_bc_status_t::success,
+          "characteristic pressure-outlet self-test returned a failure status");
+  auto decode_ideal_gas = [&](const Real* state, Real& rho, Real& u,
+                              Real& v, Real& p, Real& c) {
+    rho = state[ProbClosures::URHO];
+    u = state[ProbClosures::UMX] / rho;
+    v = state[ProbClosures::UMY] / rho;
+    const Real w = state[ProbClosures::UMZ] / rho;
+    const Real kinetic = Real(0.5) * rho * (u * u + v * v + w * w);
+    p = (gamma - Real(1.0)) * (state[ProbClosures::UET] - kinetic);
+    c = std::sqrt(gamma * p / rho);
+  };
+  Real rho_i, u_i, v_i, p_i, c_i;
+  Real rho_o, u_o, v_o, p_o, c_o;
+  decode_ideal_gas(interior, rho_i, u_i, v_i, p_i, c_i);
+  decode_ideal_gas(outlet, rho_o, u_o, v_o, p_o, c_o);
+  const Real jplus_i = u_i + Real(2.0) * c_i / (gamma - Real(1.0));
+  const Real jplus_o = u_o + Real(2.0) * c_o / (gamma - Real(1.0));
+  const Real entropy_i = p_i / std::pow(rho_i, gamma);
+  const Real entropy_o = p_o / std::pow(rho_o, gamma);
+  require(relative_error(p_o, back_pressure) < tolerance,
+          "characteristic pressure-outlet self-test failed p_back");
+  require(relative_error(jplus_i, jplus_o) < tolerance,
+          "characteristic pressure-outlet self-test failed J+ preservation");
+  require(relative_error(entropy_i, entropy_o) < tolerance,
+          "characteristic pressure-outlet self-test failed entropy preservation");
+  require(relative_error(v_i, v_o) < tolerance,
+          "characteristic pressure-outlet self-test failed tangential velocity preservation");
+
+  Real supersonic[ProbClosures::NCONS] = {Real(0.0)};
+  make_state(Real(1.0), Real(2.0) * sound, Real(0.0), Real(1.0), supersonic);
+  Real supersonic_out[ProbClosures::NCONS] = {Real(0.0)};
+  status = GlobalBC::bc_characteristic_pressure_outlet(
+      Real(1.0), Real(0.0), Real(0.0), &cls, Real(0.1),
+      supersonic, supersonic_out);
+  require(status == GlobalBC::characteristic_bc_status_t::success,
+          "characteristic supersonic-outlet self-test returned a failure status");
+  for (int n = 0; n < ProbClosures::NCONS; ++n) {
+    require(supersonic_out[n] == supersonic[n],
+            "characteristic supersonic outlet depends on p_back");
+  }
+
+  Real reverse[ProbClosures::NCONS] = {Real(0.0)};
+  make_state(Real(1.0), -Real(0.1) * sound, Real(0.0), Real(1.0), reverse);
+  status = GlobalBC::bc_characteristic_pressure_outlet(
+      Real(1.0), Real(0.0), Real(0.0), &cls, Real(1.0), reverse, outlet);
+  require(status == GlobalBC::characteristic_bc_status_t::reverse_flow,
+          "characteristic pressure outlet did not fail closed on reverse flow");
+
+  Real farfield[ProbClosures::NCONS] = {Real(0.0)};
+  status = GlobalBC::bc_characteristic_farfield(
+      Real(-1.0), Real(0.0), Real(0.0), &cls,
+      Real(1.0), u, v, Real(0.0), Real(1.0), interior, farfield);
+  require(status == GlobalBC::characteristic_bc_status_t::success,
+          "characteristic far-field inlet self-test returned a failure status");
+  for (int n = 0; n < ProbClosures::NCONS; ++n) {
+    require(relative_error(farfield[n], interior[n]) < tolerance,
+            "characteristic far-field inlet failed uniform-state recovery");
+  }
+  status = GlobalBC::bc_characteristic_farfield(
+      Real(1.0), Real(0.0), Real(0.0), &cls,
+      Real(1.0), u, v, Real(0.0), Real(1.0), interior, farfield);
+  require(status == GlobalBC::characteristic_bc_status_t::success,
+          "characteristic far-field outlet self-test returned a failure status");
+  for (int n = 0; n < ProbClosures::NCONS; ++n) {
+    require(relative_error(farfield[n], interior[n]) < tolerance,
+            "characteristic far-field outlet failed uniform-state recovery");
+  }
+
+  // A roundoff-scale sign on a nominally stagnant normal velocity must not
+  // switch the boundary into a contradictory inflow/outflow regime.
+  for (const Real signed_dust :
+       {-std::numeric_limits<Real>::denorm_min(),
+         std::numeric_limits<Real>::denorm_min()}) {
+    Real stagnant[ProbClosures::NCONS] = {Real(0.0)};
+    make_state(Real(1.0), Real(0.0), signed_dust, Real(1.0), stagnant);
+    status = GlobalBC::bc_characteristic_farfield(
+        Real(0.0), Real(1.0), Real(0.0), &cls,
+        Real(1.0), Real(0.0), Real(0.0), Real(0.0), Real(1.0),
+        stagnant, farfield);
+    require(status == GlobalBC::characteristic_bc_status_t::success,
+            "characteristic far-field rejected a stagnant state with "
+            "roundoff-scale normal velocity");
+    for (int n = 0; n < ProbClosures::NCONS; ++n) {
+      require(relative_error(farfield[n], stagnant[n]) < tolerance,
+              "characteristic far-field failed stagnant-state recovery");
+    }
+  }
+
+  // A weak outgoing pressure wave can reverse the reconstructed boundary
+  // velocity even when the adjacent cell still has a small inward velocity.
+  // The entropy and tangential modes must follow the reconstructed boundary
+  // regime rather than make this regular zero crossing fail closed.
+  Real reversing[ProbClosures::NCONS] = {Real(0.0)};
+  make_state(Real(0.997), Real(-0.19), Real(1.e-5),
+             Real(1.001), reversing);
+  status = GlobalBC::bc_characteristic_farfield(
+      Real(0.0), Real(-1.0), Real(0.0), &cls,
+      Real(1.0), Real(0.0), Real(0.0), Real(0.0), Real(1.0),
+      reversing, farfield);
+  require(status == GlobalBC::characteristic_bc_status_t::success,
+          "characteristic far-field rejected a regular subsonic "
+          "flow-direction crossing");
+  Real rho_cross, u_cross, v_cross, p_cross, c_cross;
+  decode_ideal_gas(farfield, rho_cross, u_cross, v_cross, p_cross, c_cross);
+  require(-v_cross > Real(0.0) && -v_cross < c_cross,
+          "characteristic far-field selected an inconsistent boundary regime");
+
+  // A finite outgoing wave may carry the reconstructed ghost state through
+  // M_n=1 even while the adjacent interior state remains marginally
+  // subsonic.  This is a regular transition to an all-outgoing boundary, not
+  // a failure of the characteristic closure.
+  Real sonic_transition[ProbClosures::NCONS] = {Real(0.0)};
+  make_state(
+      Real(4.7284795935263375), Real(0.8895434519546643),
+      Real(-0.7466090664326998), Real(1.8841832224188872),
+      sonic_transition);
+  status = GlobalBC::bc_characteristic_farfield(
+      Real(0.0), Real(-1.0), Real(0.0), &cls,
+      Real(1.0), Real(0.0), Real(0.0), Real(0.0), Real(1.0),
+      sonic_transition, farfield);
+  require(status == GlobalBC::characteristic_bc_status_t::success,
+          "characteristic far-field rejected a regular sonic-outflow "
+          "transition");
+  Real rho_sonic, u_sonic, v_sonic, p_sonic, c_sonic;
+  decode_ideal_gas(
+      farfield, rho_sonic, u_sonic, v_sonic, p_sonic, c_sonic);
+  require(-v_sonic >= c_sonic,
+          "characteristic far-field sonic-transition oracle did not enter "
+          "the all-outgoing regime");
+
+  // GC-NSCBC recurrence must exactly reproduce a linear profile through all
+  // three ghost layers required by Cerisse.
+  const Real q_boundary = Real(1.25);
+  const Real hqn = Real(0.04);
+  const Real q_in = q_boundary - hqn;
+  Real qg[3] = {Real(0.0), Real(0.0), Real(0.0)};
+  for (int layer = 1; layer <= 3; ++layer) {
+    qg[layer - 1] = nscbc::gc_nscbc_value(
+      layer, q_boundary, q_in, hqn, qg[0], qg[1]);
+    require(relative_error(qg[layer - 1],
+                           q_boundary + Real(layer) * hqn) < tolerance,
+            "GC-NSCBC recurrence failed linear-profile reproduction");
+  }
+
+  // The same three-layer recurrence is exact for a quadratic normal profile
+  // when supplied with the exact boundary value, first interior value, and
+  // boundary-normal derivative.  This is the polynomial consistency needed
+  // by the second-order stage-local boundary closure.
+  const Real quadratic_curvature = Real(0.007);
+  const Real q_in_quadratic =
+    q_boundary - hqn + quadratic_curvature;
+  Real qg_quadratic[3] = {Real(0.0), Real(0.0), Real(0.0)};
+  for (int layer = 1; layer <= 3; ++layer) {
+    qg_quadratic[layer - 1] = nscbc::gc_nscbc_value(
+      layer, q_boundary, q_in_quadratic, hqn,
+      qg_quadratic[0], qg_quadratic[1]);
+    const Real layer_r = Real(layer);
+    const Real exact = q_boundary + layer_r * hqn +
+      layer_r * layer_r * quadratic_curvature;
+    require(relative_error(qg_quadratic[layer - 1], exact) < tolerance,
+            "GC-NSCBC recurrence failed quadratic-profile reproduction");
+  }
+
+  // For a divergence-free convected vorticity mode, Giles Eq. (174) must
+  // recover the interior pressure and normal-velocity derivatives exactly.
+  Real rho_n, un_n, ut_n, p_n;
+  nscbc::giles_second_order_normal_derivatives(
+    Real(1.0), Real(2.0), Real(0.5),
+    Real(0.11), Real(0.3), Real(0.2), Real(0.0), Real(-0.3),
+    Real(0.0), rho_n, un_n, ut_n, p_n);
+  require(relative_error(rho_n, Real(0.11)) < tolerance &&
+          relative_error(un_n, Real(0.3)) < tolerance &&
+          relative_error(ut_n, Real(0.2)) < tolerance &&
+          relative_error(p_n, Real(0.0)) < tolerance,
+          "Giles second-order outflow failed the vorticity-mode oracle");
+
+  amrex::Print() << "[Stage3-Characteristic-BC] algebra self-test PASS\n";
+#endif
+}
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 void set_state(const ProbClosures& cls, const ProbParm& pparm,
@@ -153,12 +437,25 @@ Real clamp_real(const Real x, const Real lo, const Real hi)
 }
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+void require_characteristic_status(
+    const GlobalBC::characteristic_bc_status_t status,
+    Real* state)
+{
+  if (status == GlobalBC::characteristic_bc_status_t::success) return;
+  const Real invalid = std::numeric_limits<Real>::quiet_NaN();
+  for (int n = 0; n < ProbClosures::NCONS; ++n) state[n] = invalid;
+}
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Real gaussian_train(const Real x, const Real y, const Real lx, const Real ly,
                     const ProbParm& pparm)
 {
   const Real ky = Real(2.0) * Real(3.14159265358979323846264338327950288) *
                   Real(pparm.carrier_y) / ly;
-  const Real tan_theta = amrex::max(std::tan(pparm.theta), Real(1.e-12));
+  const Real tan_raw = std::tan(pparm.theta);
+  const Real tan_theta = amrex::Math::abs(tan_raw) > Real(1.e-12)
+      ? tan_raw
+      : ((tan_raw < Real(0.0)) ? -Real(1.e-12) : Real(1.e-12));
   const Real kx = ky / tan_theta;
   const Real rx = (x - pparm.x0) / pparm.sigma_x;
   const Real phase = kx * (x - pparm.x0) + ky * (y - pparm.y0);
@@ -205,6 +502,9 @@ void prob_initdata(int i, int j, int k, Array4<Real> const& state,
     nx = std::cos(pparm.theta);
     ny = std::sin(pparm.theta);
     envelope = gaussian_train(x, y, lx, ly, pparm);
+  } else if (pparm.mode == 9) {
+    const Real rx = (x - pparm.x0) / pparm.sigma_x;
+    envelope = std::exp(-Real(0.5) * rx * rx);
   } else {
     nx = std::cos(pparm.theta);
     ny = std::sin(pparm.theta);
@@ -259,12 +559,39 @@ void prob_initdata(int i, int j, int k, Array4<Real> const& state,
     dp = pparm.rho0 * pparm.c0 * pparm.amp * pulse;
     drho = dp / (pparm.c0 * pparm.c0);
     du = Real(0.25) * dp / (pparm.rho0 * pparm.c0);
+  } else if (pparm.mode == 9) {
+    dv = pparm.amp * envelope;
+  } else if (pparm.mode == 10) {
+    // Construct the velocity from a streamfunction so the initial
+    // perturbation is exactly divergence-free.  The older mode 4 omitted the
+    // derivative of the x-envelope and therefore contained an acoustic
+    // component that invalidated a pure vorticity-to-acoustic conversion test.
+    const Real ky = Real(2.0) *
+        Real(3.14159265358979323846264338327950288) *
+        Real(pparm.carrier_y) / ly;
+    const Real tan_raw = std::tan(pparm.theta);
+    const Real tan_theta = amrex::Math::abs(tan_raw) > Real(1.e-12)
+        ? tan_raw
+        : ((tan_raw < Real(0.0)) ? -Real(1.e-12) : Real(1.e-12));
+    const Real kx = ky / tan_theta;
+    const Real wave_number = std::sqrt(kx * kx + ky * ky);
+    const Real dx0 = x - pparm.x0;
+    const Real gaussian =
+        std::exp(-Real(0.5) * dx0 * dx0 /
+                 (pparm.sigma_x * pparm.sigma_x));
+    const Real phase = kx * dx0 + ky * (y - pparm.y0);
+    const Real psi_scale = pparm.amp / wave_number;
+    du = -psi_scale * ky * gaussian * std::sin(phase);
+    dv = psi_scale * gaussian *
+        (dx0 * std::cos(phase) /
+             (pparm.sigma_x * pparm.sigma_x) +
+         kx * std::sin(phase));
   }
 
   const Real rho = pparm.rho0 + drho;
   const Real p = pparm.p0 + dp;
   const Real u = pparm.u0 + du;
-  const Real v = dv;
+  const Real v = pparm.v0 + dv;
 
   state(i, j, k, ProbClosures::URHO) = rho;
   state(i, j, k, ProbClosures::UMX) = rho * u;
@@ -284,8 +611,76 @@ void bcnormal(const Real /*x*/[AMREX_SPACEDIM], Real /*dratio*/,
               ProbClosures const& closures,
               ProbParm const& pparm)
 {
+  if (pparm.all_farfield != 0) {
+    Real nx = Real(0.0);
+    Real ny = Real(0.0);
+    Real nz = Real(0.0);
+    const Real outward = (sgn == 1) ? Real(-1.0) : Real(1.0);
+    if (idir == 0) nx = outward;
+#if (AMREX_SPACEDIM >= 2)
+    if (idir == 1) ny = outward;
+#endif
+#if (AMREX_SPACEDIM == 3)
+    if (idir == 2) nz = outward;
+#endif
+    const auto status = GlobalBC::bc_characteristic_farfield(
+        nx, ny, nz, &closures, pparm.rho0, pparm.u0, pparm.v0,
+        Real(0.0), pparm.p0, s_int, s_ext);
+    require_characteristic_status(status, s_ext);
+    return;
+  }
+
   if (idir == 0 && sgn == 1) {
-    set_state(closures, pparm, pparm.rho0, pparm.u0, Real(0.0), pparm.p0, s_ext);
+    if (pparm.inlet_model == 1) {
+      const Real static_temperature =
+          pparm.p0 / (pparm.rho0 * closures.Rspec);
+      const Real total_ratio = Real(1.0) +
+          Real(0.5) * (pparm.gamma - Real(1.0)) *
+              pparm.mach * pparm.mach;
+      const Real total_temperature = static_temperature * total_ratio;
+      const Real total_pressure = pparm.p0 *
+          std::pow(total_ratio, pparm.gamma / (pparm.gamma - Real(1.0)));
+      const auto status = GlobalBC::bc_characteristic_total_inlet(
+          Real(-1.0), Real(0.0), Real(0.0), &closures,
+          total_pressure, total_temperature,
+          pparm.u0, pparm.v0, Real(0.0), s_int, s_ext);
+      require_characteristic_status(status, s_ext);
+      return;
+    }
+    if (pparm.inlet_model == 2) {
+      const auto status = GlobalBC::bc_characteristic_supersonic_inlet(
+          Real(-1.0), Real(0.0), Real(0.0), &closures,
+          pparm.rho0, pparm.u0, pparm.v0, Real(0.0), pparm.p0,
+          s_int, s_ext);
+      require_characteristic_status(status, s_ext);
+      return;
+    }
+    if (pparm.inlet_model == 3) {
+      const auto status = GlobalBC::bc_characteristic_farfield(
+          Real(-1.0), Real(0.0), Real(0.0), &closures,
+          pparm.rho0, pparm.u0, pparm.v0, Real(0.0), pparm.p0,
+          s_int, s_ext);
+      require_characteristic_status(status, s_ext);
+      return;
+    }
+    set_state(closures, pparm, pparm.rho0, pparm.u0, pparm.v0, pparm.p0, s_ext);
+    return;
+  }
+
+  if (idir == 0 && sgn == -1 && pparm.outlet_model == 1) {
+    const auto status = GlobalBC::bc_characteristic_pressure_outlet(
+        Real(1.0), Real(0.0), Real(0.0), &closures,
+        pparm.back_pressure_ratio * pparm.p0, s_int, s_ext);
+    require_characteristic_status(status, s_ext);
+    return;
+  }
+
+  if (idir == 0 && sgn == -1 && pparm.outlet_model == 2) {
+    const auto status = GlobalBC::bc_characteristic_farfield(
+        Real(1.0), Real(0.0), Real(0.0), &closures,
+        pparm.rho0, pparm.u0, pparm.v0, Real(0.0), pparm.p0,
+        s_int, s_ext);
+    require_characteristic_status(status, s_ext);
     return;
   }
 
@@ -293,12 +688,12 @@ void bcnormal(const Real /*x*/[AMREX_SPACEDIM], Real /*dratio*/,
       (pparm.bc_mode == 1 || pparm.bc_mode == 2 ||
        pparm.bc_mode == 3 || pparm.bc_mode == 4)) {
     GlobalBC::bc_nscbc_farfield(Real(1.0), Real(0.0), Real(0.0), &closures,
-                                pparm.rho0, pparm.u0, Real(0.0), Real(0.0),
+                                pparm.rho0, pparm.u0, pparm.v0, Real(0.0),
                                 pparm.p0, s_int, s_ext);
     return;
   }
 
-  set_state(closures, pparm, pparm.rho0, pparm.u0, Real(0.0), pparm.p0, s_ext);
+  set_state(closures, pparm, pparm.rho0, pparm.u0, pparm.v0, pparm.p0, s_ext);
 }
 
 AMREX_GPU_DEVICE AMREX_FORCE_INLINE
@@ -325,7 +720,7 @@ bool bcnormal_lodi(const IntVect& iv, Array4<Real> const& state,
     GlobalBC::nscbc_lodi_bc_parm_t bp;
     bp.rho_inf = pparm.rho0;
     bp.u_inf = pparm.u0;
-    bp.v_inf = Real(0.0);
+    bp.v_inf = pparm.v0;
     bp.w_inf = Real(0.0);
     bp.p_inf = pparm.p0;
     bp.pressure_relax = pparm.lodi_relax;
@@ -434,7 +829,7 @@ inline void rhs_nscbc(const Geometry& geom, const amrex::MFIter& mfi,
   GlobalBC::nscbc_lodi_bc_parm_t bp;
   bp.rho_inf = pparm.rho0;
   bp.u_inf = pparm.u0;
-  bp.v_inf = Real(0.0);
+  bp.v_inf = pparm.v0;
   bp.w_inf = Real(0.0);
   bp.p_inf = pparm.p0;
   bp.pressure_relax = pparm.lodi_relax;
@@ -485,9 +880,10 @@ public:
     const Real power = pparm.sponge_power;
     const Real rho_inf = pparm.rho0;
     const Real u_inf = pparm.u0;
+    const Real v_inf = pparm.v0;
     const Real p_inf = pparm.p0;
     const Real e_inf = p_inf / (pparm.gamma - Real(1.0)) +
-      Real(0.5) * rho_inf * u_inf * u_inf;
+      Real(0.5) * rho_inf * (u_inf * u_inf + v_inf * v_inf);
     const int use_x_lo = pparm.sponge_x_lo;
     const int use_x_hi = pparm.sponge_x_hi;
     const int use_y_lo = pparm.sponge_y_lo;
@@ -538,7 +934,7 @@ public:
 
       rhs(i, j, k, cls_t::URHO) += -sigma * (rho - rho_inf);
       rhs(i, j, k, cls_t::UMX) += -sigma * (rho * u - rho_inf * u_inf);
-      rhs(i, j, k, cls_t::UMY) += -sigma * (rho * v);
+      rhs(i, j, k, cls_t::UMY) += -sigma * (rho * v - rho_inf * v_inf);
       rhs(i, j, k, cls_t::UMZ) += -sigma * (rho * w);
       rhs(i, j, k, cls_t::UET) += -sigma * (e - e_inf);
     });

@@ -12,6 +12,7 @@
 
 #include "Closures.h"
 #include "RHS.h"
+#include "Weno_old.h"
 
 
 
@@ -181,7 +182,7 @@ template <typename cls_t > class user_source_t;
 
 // USED
 typedef rhs_dt<skew_t<skewparm_t, ProbClosures>, viscousLES_t<user_source_t<ProbClosures>, ProbClosures>, reactor_sourceLES_t<user_source_t<ProbClosures>,ProbClosures >> ProbRHS;
-//typedef rhs_dt<weno_t<ReconScheme::Teno5, ProbClosures>, viscousLES_t<user_source_t<ProbClosures>, ProbClosures>, reactor_sourceLES_t<user_source_t<ProbClosures>,ProbClosures >> ProbRHS;
+//typedef rhs_dt<weno_old_t<OldReconScheme::Teno5, ProbClosures>, viscousLES_t<user_source_t<ProbClosures>, ProbClosures>, reactor_sourceLES_t<user_source_t<ProbClosures>,ProbClosures >> ProbRHS;
 
 
 // define type of wall and EBM class

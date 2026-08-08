@@ -5,6 +5,10 @@
 #include <CNS.h>
 #include <prob.h>
 
+#ifdef AMREX_USE_GPIBM
+#include <ibm_solver.h>
+#endif
+
 #if CNS_USE_EB
 #include <AMReX_EB2.H>
 #endif
@@ -94,6 +98,17 @@ int main(int argc, char* argv[])
     // Write final checkpoint and plotfile
     if (amr.stepOfLastCheckPoint() < amr.levelSteps(0)) { amr.checkPoint(); }
     if (amr.stepOfLastPlotFile() < amr.levelSteps(0)) { amr.writePlotFile(); }
+#ifdef AMREX_USE_GPIBM
+    const int final_step = amr.levelSteps(0);
+    const bool final_surface_output =
+        CNS::plot_surf && final_step % CNS::surf_int != 0;
+    if (final_surface_output) {
+      for (int lev = 0; lev <= amr.finestLevel(); ++lev) {
+        dynamic_cast<CNS&>(amr.getLevel(lev)).writeSurfFile(
+            true, final_surface_output);
+      }
+    }
+#endif
   }
   // -------------------------------------------------------------------------
 

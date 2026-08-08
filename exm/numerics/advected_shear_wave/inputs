@@ -1,0 +1,46 @@
+# Periodic advection of a small transverse velocity wave.
+#
+# rho0 = p0 = 1, gamma = 1.4, Mx = 0.5, and L = 1 give
+# c0 = sqrt(1.4), ux = 0.5*c0, and one transit time
+# T = L/ux = 1.6903085094570331.
+
+amrex.fpe_trap_invalid = 1
+
+max_step  = 1000000
+stop_time = 1.6903085094570331
+cfl       = 0.05
+
+cns.order_rk            = 3
+cns.stages_rk           = 3
+cns.check_state         = 1
+cns.soft_positivity     = 0
+cns.do_reflux           = 0
+cns.lo_bc               = -1
+cns.hi_bc               = -1
+cns.nstep_screen_output = 1000000
+cns.verbose             = 0
+
+prob.rho0                           = 1.0
+prob.p0                             = 1.0
+prob.mach                           = 0.5
+prob.transverse_amplitude_over_c0   = 1.0e-5
+prob.mode                           = 1
+
+geometry.is_periodic = 1
+geometry.coord_sys   = 0
+geometry.prob_lo     = 0.0
+geometry.prob_hi     = 1.0
+
+amr.n_cell          = 16
+amr.max_level       = 0
+amr.blocking_factor = 1
+amr.max_grid_size   = 256
+amr.n_error_buf     = 0
+amr.grid_eff        = 0.9
+amr.v               = 0
+
+amr.checkpoint_files_output = 0
+amr.plot_files_output       = 1
+amr.plot_file               = ./plot/plt
+amr.plot_int                = -1
+amr.derive_plot_vars        = pressure velocity temperature

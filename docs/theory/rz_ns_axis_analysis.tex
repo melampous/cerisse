@@ -22,6 +22,19 @@ Mathematical Analysis of the Near-Axis Discretization\\ and the Missing Viscous 
 \begin{document}
 \maketitle
 
+\begin{center}
+\fbox{\parbox{0.92\linewidth}{\textbf{Superseded regression status
+(2026-07-19).}  This note records an earlier hypothesis and must not be used
+as the current code assessment.  The cylindrical dilatation and hoop-stress
+source are now present.  Direct RHS regressions show that the default WENO
+pressure-flux plus $p_i/r_i$ pair is the only tested pressure treatment that
+passes smooth cylindrical finite-volume tests; the pressure-split,
+pressure-face and Simpson variants fail near the axis.  Current evidence and
+remaining defects are recorded in
+\code{exm/numerics/rz\_pressure\_operator},
+\code{rz\_viscous\_axis}, and \code{rz\_planar\_shock}.}}
+\end{center}
+
 \begin{abstract}
 \noindent
 We derive the compressible Navier--Stokes equations in cylindrical

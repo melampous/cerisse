@@ -1,0 +1,48 @@
+{
+  "case_dir": "/shared/cerisse_reflux/exm/underexpanded_jet/2d/nprfix_15",
+  "frame_count": 30,
+  "time_start_ms": 2.0501268074558396,
+  "time_end_ms": 3.5,
+  "finest_level": 4,
+  "finest_spacing_over_D": 0.00390625,
+  "disk_roi_finest_fraction_min": 1.0,
+  "disk_roi_finest_fraction_max": 1.0,
+  "density_front": {
+    "mean_x_over_D": 2.382942708333333,
+    "std_x_over_D": 0.05101840988017351,
+    "min_x_over_D": 2.291015625,
+    "max_x_over_D": 2.494140625,
+    "linear_slope_D_per_ms": -0.012138987353327713,
+    "linear_total_drift_D": -0.01759999234822244
+  },
+  "pressure_front": {
+    "mean_x_over_D": 2.3838541666666666,
+    "std_x_over_D": 0.05152385046639738,
+    "min_x_over_D": 2.291015625,
+    "max_x_over_D": 2.494140625,
+    "linear_slope_D_per_ms": -0.011774478178656666,
+    "linear_total_drift_D": -0.01707150026743049
+  },
+  "unbounded_pressure_gradient_detector": {
+    "mean_x_over_D": 2.434375,
+    "std_x_over_D": 0.16735337249606674,
+    "min_x_over_D": 2.291015625,
+    "max_x_over_D": 2.9941406249999996
+  },
+  "instantaneous_shape": {
+    "median_radial_range_D": 0.05078125,
+    "max_radial_range_D": 0.14453124999999956,
+    "median_center_minus_annulus_D": 0.0078125,
+    "max_abs_center_minus_annulus_D": 0.12890624999999956
+  },
+  "instantaneous_axis_shock_thickness": {
+    "median_gradient_fwhm_D": 0.01171875,
+    "max_gradient_fwhm_D": 0.015625,
+    "median_gradient_fwhm_cells": 3.0
+  },
+  "mean_field_consistency": {
+    "density_relative_l2_online_vs_frame_mean": 0.0386557156994358,
+    "mach_ratio_relative_l2_online_vs_frame_ratio": 0.0235398098790041,
+    "mach_definition_relative_l2_frame_mean_vs_ratio_of_means": 0.07541214900562788
+  }
+}

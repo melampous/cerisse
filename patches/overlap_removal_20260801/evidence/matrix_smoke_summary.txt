@@ -1,0 +1,6 @@
+exm/numerics/mms_cartesian [main2d.gnu.mms_euler.ex]: exit=0 nostep advanced_lines=0 nan_abort_lines=0
+exm/numerics/afd_grid_aligned_shock_ab [main2d.gnu.afd_gridshock_wenoz5.ex]: exit=0 nostep advanced_lines=0 nan_abort_lines=0
+exm/viscwall [main2d.gnu.ex]: exit=0 STEP = 20 advanced_lines=40 nan_abort_lines=0
+exm/ebm/cylinder [main2d.gnu.ex]: exit=1 STEP = 2 advanced_lines=20 nan_abort_lines=2
+exm/numerics/bc_native [main2d.gnu.ex]: exit=0 nostep advanced_lines=0 nan_abort_lines=0
+=== SMOKE2 DONE ===

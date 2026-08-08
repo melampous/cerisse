@@ -1,0 +1,2 @@
+CEXE_sources += advance.cpp compute_rhs.cpp compute_rhs_overlap.cpp
+CEXE_sources += species_state.cpp

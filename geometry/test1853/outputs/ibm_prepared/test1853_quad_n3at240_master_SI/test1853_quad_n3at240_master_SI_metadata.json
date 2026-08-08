@@ -1,0 +1,241 @@
+{
+  "status": "PASS",
+  "units": "m",
+  "configuration": "quad_n3at240",
+  "source_model": "test1853_quad_n3at240",
+  "parameter_file_sha256": "d2d388e330ecd7123a227c1f446f474c844d7aa03bc291600b3f2cc89da3fabe",
+  "preparer_sha256": "d3cb6590d4c34fe09bed25694348c544d84a1d50ea1b376b5163cf824a487fbd",
+  "source_input_stl": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/stl/test1853_quad_n3at240.stl",
+  "source_input_units_and_frame": "mm in the NASA TSP body frame",
+  "run": null,
+  "run_conditions": null,
+  "roll_deg": 0.0,
+  "tsp_world_m": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "body_to_world_matrix_mm_input_to_m_world": [
+    [
+      0.001,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.001,
+      -0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.001,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "closed_ibm_stl": {
+    "source": "outputs/stl/test1853_quad_n3at240.stl",
+    "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_quad_n3at240_master_SI/test1853_quad_n3at240_master_SI.stl",
+    "source_sha256": "08fed36ce01022b09f01d1667a620a299af0b747cf814562f6ed8c086b964969",
+    "destination_sha256": "3dd8ed82b694b1fa87b7d6f0013ab5d7fa89da0812a4d61e7589f50b9c54541d",
+    "triangles": 364880,
+    "bounds_m": [
+      [
+        0.0024412688799202442,
+        -0.06350000202655792,
+        -0.06350000202655792
+      ],
+      [
+        0.2681376338005066,
+        0.06350000202655792,
+        0.06350000202655792
+      ]
+    ],
+    "watertight": true,
+    "winding_consistent": true,
+    "is_volume": true
+  },
+  "patches": {
+    "body_wall_excluding_throat_caps.stl": {
+      "source": "outputs/patches/test1853_quad_n3at240/body_wall_excluding_throat_caps.stl",
+      "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_quad_n3at240_master_SI/patches/body_wall_excluding_throat_caps.stl",
+      "source_sha256": "c969163db74b1928a3c8a421544c40ada502cc78f78199301c7e79ea7d6439c6",
+      "destination_sha256": "75bb6990b834634493fc77e35a7b2d5432ba8e81eda806d02d990a41805660b5",
+      "triangles": 362921,
+      "bounds_m": [
+        [
+          0.0024412688799202442,
+          -0.06350000202655792,
+          -0.06350000202655792
+        ],
+        [
+          0.2681376338005066,
+          0.06350000202655792,
+          0.06350000202655792
+        ]
+      ],
+      "watertight": false,
+      "winding_consistent": true,
+      "is_volume": false
+    },
+    "nozzle_1_throat_cap.stl": {
+      "source": "outputs/patches/test1853_quad_n3at240/nozzle_1_throat_cap.stl",
+      "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_quad_n3at240_master_SI/patches/nozzle_1_throat_cap.stl",
+      "source_sha256": "23ecc5b0ae82b120a4c5092e7d0e65f868ba0b9d27f39af3bdd94854c7acae57",
+      "destination_sha256": "270116fcca7f4d2dff171b5187496e6799d57e2051dc369d44b3aef33fc86351",
+      "triangles": 476,
+      "bounds_m": [
+        [
+          0.01441542524844408,
+          -0.0031573274172842503,
+          -0.003163569839671254
+        ],
+        [
+          0.01441542524844408,
+          0.0031573274172842503,
+          0.003163569839671254
+        ]
+      ],
+      "watertight": false,
+      "winding_consistent": true,
+      "is_volume": false
+    },
+    "nozzle_2_throat_cap.stl": {
+      "source": "outputs/patches/test1853_quad_n3at240/nozzle_2_throat_cap.stl",
+      "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_quad_n3at240_master_SI/patches/nozzle_2_throat_cap.stl",
+      "source_sha256": "8bdb74ddb0d16aba31125b21f9bebb9ccd51139671d05b665d59eab1ce48265b",
+      "destination_sha256": "751f17ee5dbdcabb32237d442e8614b62c38403be6b295f91d039000e5094605",
+      "triangles": 484,
+      "bounds_m": [
+        [
+          0.023267710581421852,
+          -0.0031661998946219683,
+          0.028577540069818497
+        ],
+        [
+          0.023267710581421852,
+          0.0031661998946219683,
+          0.03492245823144913
+        ]
+      ],
+      "watertight": false,
+      "winding_consistent": true,
+      "is_volume": false
+    },
+    "nozzle_3_throat_cap.stl": {
+      "source": "outputs/patches/test1853_quad_n3at240/nozzle_3_throat_cap.stl",
+      "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_quad_n3at240_master_SI/patches/nozzle_3_throat_cap.stl",
+      "source_sha256": "2a231cf62deaeb71418d08c1c4cf1270253fcb877f2c7c383e4aff2642ecdb5e",
+      "destination_sha256": "e85e0a2e4b2bb5ffea702b1af3fa1625bc7d9df5c83d6fc0d4aa4995cef717a9",
+      "triangles": 509,
+      "bounds_m": [
+        [
+          0.023192163556814194,
+          -0.030714228749275208,
+          -0.019088344648480415
+        ],
+        [
+          0.023192163556814194,
+          -0.02427838370203972,
+          -0.012655549682676792
+        ]
+      ],
+      "watertight": false,
+      "winding_consistent": true,
+      "is_volume": false
+    },
+    "nozzle_4_throat_cap.stl": {
+      "source": "outputs/patches/test1853_quad_n3at240/nozzle_4_throat_cap.stl",
+      "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_quad_n3at240_master_SI/patches/nozzle_4_throat_cap.stl",
+      "source_sha256": "3c0f623258f18667b186e5a8202b780fbce30ce0db2522b779bf0b32cdd1da09",
+      "destination_sha256": "d4090667bfa0874bb04cb5789a1220ff7205d3b2c76f506b35f6f959af4c5a8b",
+      "triangles": 490,
+      "bounds_m": [
+        [
+          0.023384522646665573,
+          0.02432376891374588,
+          -0.019053809344768524
+        ],
+        [
+          0.023384522646665573,
+          0.030668843537569046,
+          -0.012696189805865288
+        ]
+      ],
+      "watertight": false,
+      "winding_consistent": true,
+      "is_volume": false
+    }
+  },
+  "active_nozzle_throats": [
+    {
+      "number": 1,
+      "throat_center_world_m": [
+        0.014415425035402048,
+        0.0,
+        0.0
+      ],
+      "throat_radius_m": 0.00316357,
+      "throat_plane_normal_solid_to_fluid_world": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "selection_rule": "abs(x-x_throat)<=epsilon AND transverse_radius<=Rt+epsilon; do not use a 3-D sphere alone"
+    },
+    {
+      "number": 2,
+      "throat_center_world_m": [
+        0.023267709418822845,
+        0.0,
+        0.03175
+      ],
+      "throat_radius_m": 0.00317246,
+      "throat_plane_normal_solid_to_fluid_world": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "selection_rule": "abs(x-x_throat)<=epsilon AND transverse_radius<=Rt+epsilon; do not use a 3-D sphere alone"
+    },
+    {
+      "number": 3,
+      "throat_center_world_m": [
+        0.02319216382895526,
+        -0.02749630657015592,
+        -0.015875000000000014
+      ],
+      "throat_radius_m": 0.00321945,
+      "throat_plane_normal_solid_to_fluid_world": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "selection_rule": "abs(x-x_throat)<=epsilon AND transverse_radius<=Rt+epsilon; do not use a 3-D sphere alone"
+    },
+    {
+      "number": 4,
+      "throat_center_world_m": [
+        0.023384524195772024,
+        0.02749630657015593,
+        -0.015874999999999993
+      ],
+      "throat_radius_m": 0.00317881,
+      "throat_plane_normal_solid_to_fluid_world": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "selection_rule": "abs(x-x_throat)<=epsilon AND transverse_radius<=Rt+epsilon; do not use a 3-D sphere alone"
+    }
+  ],
+  "important": "Cerisse static IBM reads raw STL coordinates with identity transform; use this prepared file, not the millimetre master, in an SI-metre domain. For a custom high-resolution STL, pass it explicitly with --input-stl and verify closed_ibm_stl.source_sha256."
+}

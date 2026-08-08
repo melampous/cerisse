@@ -1,0 +1,71 @@
+{
+  "provenance": {
+    "simulation_density_normalization_kg_m3": 1.6413,
+    "weno_statistics_start_ms": 6.5,
+    "teno_statistics_start_ms": 7.2,
+    "three_d_statistics_window_ms": 3.660000000000001,
+    "axis_experiment": "Panda m142den, Mj=1.42, 37 phase bins averaged over phase",
+    "radial_experiment": "Panda figure 5a, Mj=1.44"
+  },
+  "scheme_and_window": {
+    "teno_window_ms": 0.8890735980048008,
+    "weno_matched_block_ms": 0.8485376608077895,
+    "scheme_axis_rms_x0p9_6": 0.031367056651110385,
+    "neighbor_weno_block_axis_rms_x0p9_6": 0.0735612138575979,
+    "median_scheme_radial_rms": 0.008481726366147285,
+    "median_neighbor_block_radial_rms": 0.024139842403868364,
+    "weno_3p553ms_axis_rms_to_final": 0.024119855477480377
+  },
+  "dimensionality": {
+    "two_d_axis_rms_same_mach_x0p6_5": 0.18294756029249112,
+    "three_d_axis_rms_same_mach_x0p6_5": 0.19286897535479136,
+    "radial_regions": [
+      {
+        "region": "first_cell_x_le_1p25",
+        "station_count": 5,
+        "two_d_mean_rms": 0.04693232784811453,
+        "three_d_mean_rms": 0.040604976213179725,
+        "two_d_median_rms": 0.03451044714362068,
+        "three_d_median_rms": 0.034348248424698066
+      },
+      {
+        "region": "closure_transition_1p4_to_2p3",
+        "station_count": 7,
+        "two_d_mean_rms": 0.10729556573404873,
+        "three_d_mean_rms": 0.09572200009575804,
+        "two_d_median_rms": 0.09331603654665871,
+        "three_d_median_rms": 0.09926585055560287
+      },
+      {
+        "region": "cells_2_to_4_x2p45_to_4",
+        "station_count": 10,
+        "two_d_mean_rms": 0.12508353489207552,
+        "three_d_mean_rms": 0.1489754252407872,
+        "two_d_median_rms": 0.1171589349582916,
+        "three_d_median_rms": 0.1463605054462997
+      },
+      {
+        "region": "downstream_x_gt_4",
+        "station_count": 8,
+        "two_d_mean_rms": 0.06681502306130846,
+        "three_d_mean_rms": 0.11231179378380513,
+        "two_d_median_rms": 0.06233673921256272,
+        "three_d_median_rms": 0.10017581093864861
+      }
+    ],
+    "note": "3D data are a four-arm azimuthal sample and a composite AMR profile, not a full circular average at uniform D/256."
+  },
+  "axis_core": {
+    "two_d_max_density_deficit_x_ge_1p25": 0.08221931448222766,
+    "two_d_median_density_deficit_x_ge_3p05": 0.02309688882346074,
+    "three_d_median_density_deficit_x_ge_3p05": 0.0006955768921811378,
+    "two_d_max_temperature_proxy_excess_K_x_ge_1p25": 17.08428336504761,
+    "two_d_max_mean_field_entropy_proxy_x_ge_1p25": 0.09262932220440853,
+    "caveat": "pbar/(R*rhobar) and ln(pbar)-gamma*ln(rhobar) are mean-field proxies, not directly averaged thermodynamic quantities."
+  },
+  "spatial_sampling": {
+    "axis_proxy_rms": 0.2099838215813724,
+    "r0p15_disc_rms": 0.20340813936741903,
+    "interpretation": "This is a spatial sampling sensitivity test only. It does not establish temporal convergence."
+  }
+}

@@ -10,11 +10,11 @@
 //   2. ipow()              : Constexpr integer power
 //   3. Constants           : Dimension indices, thresholds, image-point factors
 //   4. surfImp_t           : SoA storage for surface image-point data
-//   5. surfPhys_t          : SoA storage for reconstructed surface fields
-//   6. is_gp_store_view    : Type trait selecting GP vs surface interp paths
-//   7. GPStoreView/GPStore : Level-wide flattened ghost-point storage (CSR)
-//   8. FaceCSR             : CSR structure for per-FAB face iteration
-//   9. CheckMode           : Interpolation stencil check policy
+//   6. surfPhys_t          : SoA storage for reconstructed surface fields
+//   7. is_gp_store_view    : Type trait selecting GP vs surface interp paths
+//   8. GPStoreView/GPStore : Level-wide flattened ghost-point storage (CSR)
+//   9. FaceCSR             : CSR structure for per-FAB face iteration
+//  10. CheckMode           : Interpolation stencil check policy
 //
 // Per-FAB ghost-point data lived in a now-removed ``gpData_t`` member of
 // ``IBFab``.  All ghost-point geometry/interpolation data is now flattened
@@ -22,6 +22,7 @@
 // ============================================================================
 
 #include <algorithm>
+#include <cstdint>
 #include <limits>
 #include <type_traits>
 #include <utility>
@@ -123,6 +124,8 @@ public:
 // 1. SFINAE helpers for wall-model dispatch
 // ============================================================================
 
+struct ibm_pressure_compatibility_t;
+
 namespace ibm_detail {
 template <class...>
 using void_t = void;
@@ -145,9 +148,9 @@ template <class WM, class... Args>
 using compute_surfIB_expr = decltype(WM::compute_surfIB(std::declval<Args>()...));
 
 /// nvcc workaround: dispatch compute_surfIB outside constexpr-if in __device__ lambda.
-/// Priority: disIM-aware (2nd-order Neumann) > full (xyz,n,t1,t2,q,...) >
-/// reduced (xyz,n,q,...).  Custom wall models that define only the full or
-/// reduced signature keep working unchanged (they simply ignore disIM/n_valid).
+/// Priority: pressure-compatibility + disIM > disIM-aware (2nd-order Neumann)
+/// > full (xyz,n,t1,t2,q,...) > reduced (xyz,n,q,...).  Custom wall models
+/// that define only an older signature keep working unchanged.
 ///
 /// The disIM-aware overload is order-templated; its extrapolation order EO
 /// appears only as EO+1 / EO-1 in the parameter array bounds (non-deduced
@@ -167,9 +170,17 @@ void dispatch_compute_surfIB(
     int n_valid,
     Prims2D& primsNormal,
     int type_solid_bc,
-    const cls_type* cls)
+    const cls_type* cls,
+    const ibm_pressure_compatibility_t& pressure_compat)
 {
     using eo_tag = std::integral_constant<int, eorder>;
+    constexpr bool has_compat = is_detected_v<
+        compute_surfIB_expr,
+        wallmodel_t,
+        eo_tag,
+        const Vec1D&, const Vec1D&, const Vec1D&, const Vec1D&,
+        const DisArr&, int, Prims2D&, const int, const cls_type*,
+        const ibm_pressure_compatibility_t&>;
     constexpr bool has_disim = is_detected_v<
         compute_surfIB_expr,
         wallmodel_t,
@@ -186,14 +197,19 @@ void dispatch_compute_surfIB(
         Prims2D&,
         const int,
         const cls_type*>;
-    if constexpr (has_disim) {
+    if constexpr (has_compat) {
+        wallmodel_t::compute_surfIB(
+            eo_tag{}, xyz, nvec, t1vec, t2vec, disIM, n_valid, primsNormal,
+            type_solid_bc, cls, pressure_compat);
+    } else if constexpr (has_disim) {
+        amrex::ignore_unused(pressure_compat);
         wallmodel_t::compute_surfIB(
             eo_tag{}, xyz, nvec, t1vec, t2vec, disIM, n_valid, primsNormal, type_solid_bc, cls);
     } else if constexpr (has_full) {
-        amrex::ignore_unused(disIM, n_valid);
+        amrex::ignore_unused(disIM, n_valid, pressure_compat);
         wallmodel_t::compute_surfIB(xyz, nvec, t1vec, t2vec, primsNormal, type_solid_bc, cls);
     } else {
-        amrex::ignore_unused(t1vec, t2vec, disIM, n_valid);
+        amrex::ignore_unused(t1vec, t2vec, disIM, n_valid, pressure_compat);
         wallmodel_t::compute_surfIB(xyz, nvec, primsNormal, type_solid_bc, cls);
     }
 }
@@ -238,7 +254,31 @@ enum class ibm_pressure_closure_t : int {
     fluid_extrapolation = 1,
     prescribed_gradient = 2,
     shock_aware_fluid_extrapolation = 3,
-    euler_slip_analytic_curvature = 4
+    euler_slip_analytic_curvature = 4,
+    navier_stokes_noslip_viscous_compatibility = 5
+};
+
+/// Volume ghost-state reconstruction used by the shared-GP path.  The legacy
+/// method first interpolates one or more image points and then extrapolates
+/// through the boundary intercept.  The BI-constrained method fits the visible
+/// fluid support subject to the wall condition and evaluates that same
+/// polynomial directly at the real ghost-cell centre.
+enum class ibm_shared_gp_reconstruction_t : int {
+    image_point = 0,
+    boundary_intercept_constrained = 1
+};
+
+/// Optional normal pressure derivative supplied by a solver-side momentum
+/// compatibility reconstruction.  `valid=0` is a deliberate request for the
+/// wall model to use its documented fallback; dpdn is then ignored.
+struct ibm_pressure_compatibility_t {
+    Real dpdn = Real(0.0);
+    int valid = 0;
+    // Minimum return-to-IP1 fraction requested by the geometry path.  The
+    // 2-D sharp-feature treatment uses this to regularise the non-smooth
+    // corner neighbourhood while leaving the pressure closure unchanged
+    // away from the O(h) feature band.
+    Real feature_pressure_fallback = Real(0.0);
 };
 
 /// Shape operator in the local surface basis used by primsNormal:
@@ -259,6 +299,16 @@ struct ibm_pressure_reconstruction_t {
     Real unlimited_value;
     Real shock_sensor;
     Real fallback_fraction;
+};
+
+struct ibm_surface_force_audit_t {
+    GpuArray<Real, 3> force{{Real(0.0), Real(0.0), Real(0.0)}};
+    GpuArray<Real, 3> pressure_force{{Real(0.0), Real(0.0), Real(0.0)}};
+    GpuArray<Real, 3> viscous_force{{Real(0.0), Real(0.0), Real(0.0)}};
+    GpuArray<Real, 3> normal_closure{{Real(0.0), Real(0.0), Real(0.0)}};
+    Real measure = Real(0.0);
+    Long faces = 0;
+    Long nonfinite_faces = 0;
 };
 
 /// Reconstruct the surface value from image-point values and a prescribed
@@ -433,7 +483,8 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 ibm_pressure_reconstruction_t ibm_shock_aware_pressure_surface(
     const QArr& q, int np, int nrho, int nc,
     const DisArr& disIM, int n_valid,
-    Real sensor_low, Real sensor_high)
+    Real sensor_low, Real sensor_high,
+    Real feature_fallback = Real(0.0))
 {
     const Real p1 = q(2, np);
     const Real unlimited = ibm_fluid_extrap_surface<EO>(
@@ -467,6 +518,15 @@ ibm_pressure_reconstruction_t ibm_shock_aware_pressure_surface(
     const Real xi = amrex::max(
         Real(0.0), amrex::min(Real(1.0), (sensor - sensor_low) / width));
     Real fallback = xi * xi * (Real(3.0) - Real(2.0) * xi);
+    // A sharp corner is a genuine singular point of the inviscid wall
+    // solution: a normal polynomial through IP1/IP2 is not a consistent
+    // smooth extrapolation there.  The geometry path supplies a compact O(h)
+    // fallback floor.  Taking the maximum preserves any stronger shock
+    // fallback and makes the transition exactly recover the unlimited
+    // closure outside the feature band.
+    const Real bounded_feature_fallback = amrex::max(
+        Real(0.0), amrex::min(Real(1.0), feature_fallback));
+    fallback = amrex::max(fallback, bounded_feature_fallback);
     Real value = (Real(1.0) - fallback) * unlimited + fallback * p1;
     if (!(value > Real(0.0)) || !amrex::Math::isfinite(value)) {
         value = p1;
@@ -480,6 +540,17 @@ namespace ibm_detail {
 template <typename WallModel>
 using pressure_closure_expr = decltype(WallModel::pressure_closure);
 
+template <typename WallModel>
+AMREX_GPU_HOST_DEVICE constexpr bool
+uses_navier_stokes_noslip_pressure_compatibility()
+{
+    if constexpr (is_detected_v<pressure_closure_expr, WallModel>) {
+        return WallModel::pressure_closure ==
+               ibm_pressure_closure_t::navier_stokes_noslip_viscous_compatibility;
+    }
+    return false;
+}
+
 /// Surface-only pressure diagnostics with a no-op fallback for custom wall
 /// models.  Built-in walls expose the compile-time policy and thresholds, but
 /// ibm_solver.h does not need to include or know their concrete definitions.
@@ -487,6 +558,7 @@ template <int EO, typename WallModel, typename Cls, typename QArr, typename DisA
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 void dispatch_pressure_closure_diagnostics(
     const QArr& q, const DisArr& disIM, int n_valid,
+    const ibm_pressure_compatibility_t& pressure_compat,
     Real& shock_sensor, Real& fallback_fraction)
 {
     shock_sensor = Real(-1.0);
@@ -500,12 +572,39 @@ void dispatch_pressure_closure_diagnostics(
             const auto result = ibm_shock_aware_pressure_surface<EO>(
                 q, Cls::QPRES, Cls::QRHO, Cls::QC, disIM, n_valid,
                 WallModel::pressure_sensor_low,
-                WallModel::pressure_sensor_high);
+                WallModel::pressure_sensor_high,
+                pressure_compat.feature_pressure_fallback);
             shock_sensor = result.shock_sensor;
             fallback_fraction = result.fallback_fraction;
+        } else if constexpr (
+            WallModel::pressure_closure ==
+            ibm_pressure_closure_t::prescribed_gradient) {
+            // The positive prescribed-gradient helper falls back to IP1 when
+            // its candidate is non-positive or non-finite.  Mirror that exact
+            // branch in the output-only diagnostic instead of leaving the
+            // generic -1 sentinel, which would hide a real order reduction.
+            shock_sensor = Real(-1.0);
+            const Real candidate = ibm_normal_grad_surface<EO>(
+                q, Cls::QPRES, disIM, n_valid, pressure_compat.dpdn);
+            const bool used = pressure_compat.valid != 0 &&
+                              amrex::Math::isfinite(pressure_compat.dpdn) &&
+                              candidate > Real(0.0) &&
+                              amrex::Math::isfinite(candidate);
+            fallback_fraction = used ? Real(0.0) : Real(1.0);
+        } else if constexpr (
+            WallModel::pressure_closure ==
+            ibm_pressure_closure_t::navier_stokes_noslip_viscous_compatibility) {
+            shock_sensor = Real(-1.0);
+            const Real candidate = ibm_normal_grad_surface<EO>(
+                q, Cls::QPRES, disIM, n_valid, pressure_compat.dpdn);
+            const bool used = pressure_compat.valid != 0 &&
+                              amrex::Math::isfinite(pressure_compat.dpdn) &&
+                              candidate > Real(0.0) &&
+                              amrex::Math::isfinite(candidate);
+            fallback_fraction = used ? Real(0.0) : Real(1.0);
         }
     } else {
-        amrex::ignore_unused(q, disIM, n_valid);
+        amrex::ignore_unused(q, disIM, n_valid, pressure_compat);
     }
 }
 
@@ -653,8 +752,21 @@ struct surfImp_t {
   Gpu::ManagedVector<Array1D< int, 0, eorder_tparm_surf - 1>> imp_ninterp;                            // Actual number of interpolation points used for each image point
   Gpu::ManagedVector<Array3D< int, 0, eorder_tparm_surf - 1, 0, N_InterP - 1, 0, IDIM>> imp_ip_ijk;   // Indices of the 8-point interpolation stencil for each image point
   Gpu::ManagedVector<Array2D<Real, 0, eorder_tparm_surf - 1, 0, N_InterP - 1>> imp_ipweights;         // Trilinear interpolation weights for the 8-point stencil of each image point
+  // Optional finite-volume surface-observer data. These weights map full
+  // Cartesian conservative cell averages to point values at each image point.
+  // They are never used by the GP extension or the evolved full-cell RHS.
+  Gpu::ManagedVector<Array1D< int, 0, eorder_tparm_surf - 1>>
+      imp_ninterp_cell_average;
+  Gpu::ManagedVector<Array1D< int, 0, eorder_tparm_surf - 1>>
+      imp_fit_order_cell_average;
+  Gpu::ManagedVector<Array3D< int, 0, eorder_tparm_surf - 1,
+                              0, N_InterP - 1, 0, IDIM>>
+      imp_ip_ijk_cell_average;
+  Gpu::ManagedVector<Array2D<Real, 0, eorder_tparm_surf - 1,
+                              0, N_InterP - 1>>
+      imp_ipweights_cell_average;
 
-  void resize(int n) {
+  void resize(int n, bool allocate_cell_average = false) {
       elemIdx.resize(n);
       imp_xyz.resize(n);
       imp_ijk.resize(n);
@@ -662,6 +774,17 @@ struct surfImp_t {
       imp_ninterp.resize(n);
       imp_ip_ijk.resize(n);
       imp_ipweights.resize(n);
+      if (allocate_cell_average) {
+          imp_ninterp_cell_average.resize(n);
+          imp_fit_order_cell_average.resize(n);
+          imp_ip_ijk_cell_average.resize(n);
+          imp_ipweights_cell_average.resize(n);
+      } else {
+          imp_ninterp_cell_average.clear();
+          imp_fit_order_cell_average.clear();
+          imp_ip_ijk_cell_average.clear();
+          imp_ipweights_cell_average.clear();
+      }
   }
 
   void clear() {
@@ -672,6 +795,14 @@ struct surfImp_t {
       imp_ninterp.clear();   imp_ninterp.shrink_to_fit();
       imp_ip_ijk.clear();    imp_ip_ijk.shrink_to_fit();
       imp_ipweights.clear(); imp_ipweights.shrink_to_fit();
+      imp_ninterp_cell_average.clear();
+      imp_ninterp_cell_average.shrink_to_fit();
+      imp_fit_order_cell_average.clear();
+      imp_fit_order_cell_average.shrink_to_fit();
+      imp_ip_ijk_cell_average.clear();
+      imp_ip_ijk_cell_average.shrink_to_fit();
+      imp_ipweights_cell_average.clear();
+      imp_ipweights_cell_average.shrink_to_fit();
   }
 
   void shrink() {
@@ -685,12 +816,16 @@ struct surfImp_t {
           imp_ninterp.shrink_to_fit();
           imp_ip_ijk.shrink_to_fit();
           imp_ipweights.shrink_to_fit();
+          imp_ninterp_cell_average.shrink_to_fit();
+          imp_fit_order_cell_average.shrink_to_fit();
+          imp_ip_ijk_cell_average.shrink_to_fit();
+          imp_ipweights_cell_average.shrink_to_fit();
       }
   }
 };
 
 // ============================================================================
-// 6. surfPhys_t — Surface physical data (SoA)
+// 7. surfPhys_t — Surface physical data (SoA)
 // ============================================================================
 
 struct surfPhys_t {
@@ -706,10 +841,12 @@ struct surfPhys_t {
   Gpu::ManagedVector<int> rank;         // Owning MPI rank
   Gpu::ManagedVector<int> elemfound;    // Whether this face has been located (int for GPU compatibility)
   Gpu::ManagedVector<int> ip_quality;   // number of fluid interpolation points used for the first image point
+  Gpu::ManagedVector<int> ip_fit_order; // first-IP polynomial fit: 2/1/0, or -1 invalid
   //elemfound: 0 = outside this level, 1 = owned/valid, -1 = reserved by other rank
 
   // Surface fields (per face)
   Gpu::ManagedVector<Real> pressure;    // reconstructed local surface pressure
+  Gpu::ManagedVector<Real> tau_normal;  // reconstructed normal viscous traction
   Gpu::ManagedVector<Real> tau1;        // reconstructed local surface shear stress 1
   Gpu::ManagedVector<Real> tau2;        // reconstructed local surface shear stress 2
   Gpu::ManagedVector<Real> temperature; // reconstructed temperature
@@ -730,6 +867,7 @@ struct surfPhys_t {
     elemfound.resize(n);
     
     pressure.resize(n);
+    tau_normal.resize(n);
     tau1.resize(n);
     tau2.resize(n);
     temperature.resize(n);
@@ -737,6 +875,12 @@ struct surfPhys_t {
     pressure_shock_sensor.resize(n);
     pressure_fallback.resize(n);
     ip_quality.resize(n);
+    ip_fit_order.resize(n);
+
+    // ManagedVector resize/initialization may still be in flight on WSL2 GPUs.
+    // The metadata defaults below are written on the host, so establish a
+    // migration-safe synchronization point before touching managed storage.
+    Gpu::streamSynchronize();
 
     // Initialize new elements with specific defaults if n > old_n
     if (n > old_n) {
@@ -746,6 +890,7 @@ struct surfPhys_t {
             rank[i] = -1;
             elemfound[i] = 0; // false
             ip_quality[i] = -1;
+            ip_fit_order[i] = -1;
             pressure_shock_sensor[i] = Real(-1.0);
             pressure_fallback[i] = Real(-1.0);
         }
@@ -763,6 +908,7 @@ struct surfPhys_t {
       elemfound.clear();   elemfound.shrink_to_fit();
 
       pressure.clear();    pressure.shrink_to_fit();
+      tau_normal.clear();  tau_normal.shrink_to_fit();
       tau1.clear();        tau1.shrink_to_fit();
       tau2.clear();        tau2.shrink_to_fit();
       temperature.clear(); temperature.shrink_to_fit();
@@ -770,6 +916,7 @@ struct surfPhys_t {
       pressure_shock_sensor.clear(); pressure_shock_sensor.shrink_to_fit();
       pressure_fallback.clear();    pressure_fallback.shrink_to_fit();
       ip_quality.clear();  ip_quality.shrink_to_fit();
+      ip_fit_order.clear(); ip_fit_order.shrink_to_fit();
   }
 
   // Explicitly release memory
@@ -782,6 +929,7 @@ struct surfPhys_t {
         elemfound.shrink_to_fit();
         
         pressure.shrink_to_fit();
+        tau_normal.shrink_to_fit();
         tau1.shrink_to_fit();
         tau2.shrink_to_fit();
         temperature.shrink_to_fit();
@@ -789,11 +937,16 @@ struct surfPhys_t {
         pressure_shock_sensor.shrink_to_fit();
         pressure_fallback.shrink_to_fit();
         ip_quality.shrink_to_fit();
+        ip_fit_order.shrink_to_fit();
     }
   }
 
   // Reset metadata for regrid
   void reset() {
+    // Surface arrays are managed storage and can have outstanding device work
+    // from allocation or the preceding level.  Host writes require an explicit
+    // synchronization on devices without concurrent managed access.
+    Gpu::streamSynchronize();
     int n = elemIdx.size();
     for (int i = 0; i < n; ++i) {
         ifab[i] = -1;
@@ -801,6 +954,7 @@ struct surfPhys_t {
         rank[i] = -1;
         elemfound[i] = 0; // false
         ip_quality[i] = -1;
+        ip_fit_order[i] = -1;
         pressure_shock_sensor[i] = Real(-1.0);
         pressure_fallback[i] = Real(-1.0);
     }
@@ -836,9 +990,37 @@ struct is_gpData_t<T, std::void_t<decltype(std::declval<T>().gp_ijk)>> : std::tr
 // 7. GPStoreView / GPStore — Level-wide flattened ghost-point storage (CSR)
 // ============================================================================
 
+// Four tensor-product Gauss points integrate a smooth conservative state over
+// one 2-D annular cell to the accuracy required by the quadratic BI-CWLS
+// extension. Three adjacent radial target cells provide the same centre-state
+// recovery stencil used by the fluid finite-volume data.
+static constexpr int IBM_RZ_BIC_GAUSS_POINTS = 4;
+static constexpr int IBM_RZ_BIC_RADIAL_STENCIL_CELLS = 3;
+static constexpr int IBM_RZ_BIC_ANNULAR_TARGETS =
+    IBM_RZ_BIC_RADIAL_STENCIL_CELLS * IBM_RZ_BIC_GAUSS_POINTS;
+static constexpr int IBM_RZ_BIC_TARGETS = IBM_RZ_BIC_ANNULAR_TARGETS;
+
+template <int N_InterP>
+struct RZBICPointFunctionals {
+  Array2D<Real, 0, IBM_RZ_BIC_TARGETS - 1, 0, N_InterP - 1>
+      dirichlet_weights{};
+  Array2D<Real, 0, IBM_RZ_BIC_TARGETS - 1, 0, N_InterP - 1>
+      neumann_weights{};
+  Array2D<Real, 0, IBM_RZ_BIC_TARGETS - 1, 0, N_InterP - 1>
+      fv_dirichlet_weights{};
+  Array2D<Real, 0, IBM_RZ_BIC_TARGETS - 1, 0, N_InterP - 1>
+      entropy_jet_weights{};
+  Array2D<Real, 0, IBM_RZ_BIC_TARGETS - 1, 0, N_InterP - 1>
+      entropy_jet_linear_weights{};
+  Array1D<Real, 0, IBM_RZ_BIC_TARGETS - 1> dirichlet_boundary_weight{};
+  Array1D<Real, 0, IBM_RZ_BIC_TARGETS - 1> neumann_gradient_weight{};
+  Array1D<Real, 0, IBM_RZ_BIC_TARGETS - 1>
+      fv_dirichlet_boundary_weight{};
+};
+
 /// \brief GPU-capturable POD view into GPStore.  Holds raw pointers only.
 ///        This struct is trivially copyable and can be captured by GPU lambdas.
-template <int eorder_tparm, int iorder_tparm>
+template <int eorder_tparm, int iorder_tparm, int ncons_tparm>
 struct GPStoreView {
   static constexpr int N_InterP = ipow(iorder_tparm + 1, AMREX_SPACEDIM);
 
@@ -859,8 +1041,51 @@ struct GPStoreView {
   const Array1D< int, 0, eorder_tparm - 1>*           imp_ninterp;
   const Array3D< int, 0, eorder_tparm - 1, 0, N_InterP - 1, 0, IDIM>* imp_ip_ijk;
   const Array2D<Real, 0, eorder_tparm - 1, 0, N_InterP - 1>*          imp_ipweights;
-  const int*                    n_valid;
-  const Array1D<Real, 0, 5>*    recon_prim;              // rho,u,v,w,p,T at reconstructed GP
+  // Optional BI-constrained shared-GP metadata.  The support block has the
+  // same 3^D footprint as iorder=2, but its anchor is the reflected real GP;
+  // no image-point value is formed.  The two functionals impose either a
+  // Dirichlet value or a wall-normal derivative at the BI.
+  const Array2D<int, 0, N_InterP - 1, 0, IDIM>* constrained_support_ijk;
+  const Array1D<Real, 0, N_InterP - 1>* constrained_dirichlet_weights;
+  const Array1D<Real, 0, N_InterP - 1>* constrained_neumann_weights;
+  // Finite-volume Dirichlet functional: support and target rows are exact
+  // Cartesian cell averages of the local polynomial basis.
+  const Array1D<Real, 0, N_InterP - 1>*
+      constrained_fv_dirichlet_weights;
+  // Unconstrained one-sided fluid jet evaluated at the real GP centre.
+  const Array1D<Real, 0, N_InterP - 1>* constrained_entropy_jet_weights;
+  // Embedded linear jet on the identical visible support.  Runtime compares
+  // this state with the quadratic jet to detect loss of smoothness without
+  // changing the geometry, support set, or wall constraints.
+  const Array1D<Real, 0, N_InterP - 1>*
+      constrained_entropy_jet_linear_weights;
+  // Unconstrained one-sided value at the boundary intercept.  This is used
+  // only for compatibility data that depend on the current fluid-side trace;
+  // it never replaces the constrained ghost value itself.
+  const Array1D<Real, 0, N_InterP - 1>* constrained_fluid_trace_weights;
+  const Real* constrained_dirichlet_boundary_weight;
+  const Real* constrained_neumann_gradient_weight;
+  const Real* constrained_fv_dirichlet_boundary_weight;
+  const int* constrained_order;
+  const int* constrained_fv_dirichlet_order;
+  const int* constrained_entropy_jet_order;
+  const int* constrained_fluid_trace_order;
+  const int* constrained_support_count;
+  const Real* constrained_condition;
+  const Real* constrained_weight_l1;
+  const Real* constrained_fv_dirichlet_condition;
+  const Real* constrained_fv_dirichlet_weight_l1;
+  const Real* constrained_entropy_jet_condition;
+  const Real* constrained_entropy_jet_weight_l1;
+  const Real* constrained_entropy_jet_linear_condition;
+  const Real* constrained_entropy_jet_linear_weight_l1;
+  const Real* constrained_fluid_trace_condition;
+  const Real* constrained_fluid_trace_weight_l1;
+  // R-Z only: point-evaluation functionals used to integrate a
+  // thermodynamically consistent annular conservative ghost-cell average.
+  const RZBICPointFunctionals<N_InterP>* rz_bic_point_functionals;
+  const Array2D<Real, 0, IBM_RZ_BIC_RADIAL_STENCIL_CELLS - 1,
+                0, ncons_tparm - 1>* rz_bic_annular_stencil;
 
   // Non-const data pointers for initialiseGPs (write pass)
   Array1D< int, 0, IDIM>* gp_ijk_w;
@@ -874,8 +1099,35 @@ struct GPStoreView {
   Array1D< int, 0, eorder_tparm - 1>*           imp_ninterp_w;
   Array3D< int, 0, eorder_tparm - 1, 0, N_InterP - 1, 0, IDIM>* imp_ip_ijk_w;
   Array2D<Real, 0, eorder_tparm - 1, 0, N_InterP - 1>*          imp_ipweights_w;
-  int*                    n_valid_w;
-  Array1D<Real, 0, 5>*    recon_prim_w;
+  Array2D<int, 0, N_InterP - 1, 0, IDIM>* constrained_support_ijk_w;
+  Array1D<Real, 0, N_InterP - 1>* constrained_dirichlet_weights_w;
+  Array1D<Real, 0, N_InterP - 1>* constrained_neumann_weights_w;
+  Array1D<Real, 0, N_InterP - 1>* constrained_fv_dirichlet_weights_w;
+  Array1D<Real, 0, N_InterP - 1>* constrained_entropy_jet_weights_w;
+  Array1D<Real, 0, N_InterP - 1>*
+      constrained_entropy_jet_linear_weights_w;
+  Array1D<Real, 0, N_InterP - 1>* constrained_fluid_trace_weights_w;
+  Real* constrained_dirichlet_boundary_weight_w;
+  Real* constrained_neumann_gradient_weight_w;
+  Real* constrained_fv_dirichlet_boundary_weight_w;
+  int* constrained_order_w;
+  int* constrained_fv_dirichlet_order_w;
+  int* constrained_entropy_jet_order_w;
+  int* constrained_fluid_trace_order_w;
+  int* constrained_support_count_w;
+  Real* constrained_condition_w;
+  Real* constrained_weight_l1_w;
+  Real* constrained_fv_dirichlet_condition_w;
+  Real* constrained_fv_dirichlet_weight_l1_w;
+  Real* constrained_entropy_jet_condition_w;
+  Real* constrained_entropy_jet_weight_l1_w;
+  Real* constrained_entropy_jet_linear_condition_w;
+  Real* constrained_entropy_jet_linear_weight_l1_w;
+  Real* constrained_fluid_trace_condition_w;
+  Real* constrained_fluid_trace_weight_l1_w;
+  RZBICPointFunctionals<N_InterP>* rz_bic_point_functionals_w;
+  Array2D<Real, 0, IBM_RZ_BIC_RADIAL_STENCIL_CELLS - 1,
+          0, ncons_tparm - 1>* rz_bic_annular_stencil_w;
 
   /// Get GP range for a local FAB index
   AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
@@ -890,7 +1142,7 @@ struct GPStoreView {
 
 /// \brief Level-wide flattened ghost-point storage.  Owns memory via ManagedVector.
 ///        CSR layout: fab_offsets[ifab] gives the first GP index for local fab ifab.
-template <int eorder_tparm, int iorder_tparm>
+template <int eorder_tparm, int iorder_tparm, int ncons_tparm>
 struct GPStore {
   static constexpr int N_InterP = ipow(iorder_tparm + 1, AMREX_SPACEDIM);
 
@@ -913,8 +1165,44 @@ struct GPStore {
   Gpu::ManagedVector<Array1D< int, 0, eorder_tparm - 1>>           imp_ninterp;
   Gpu::ManagedVector<Array3D< int, 0, eorder_tparm - 1, 0, N_InterP - 1, 0, IDIM>> imp_ip_ijk;
   Gpu::ManagedVector<Array2D<Real, 0, eorder_tparm - 1, 0, N_InterP - 1>>          imp_ipweights;
-  Gpu::ManagedVector<int>                    n_valid;
-  Gpu::ManagedVector<Array1D<Real, 0, 5>>    recon_prim; // rho,u,v,w,p,T at reconstructed GP
+  Gpu::ManagedVector<Array2D<int, 0, N_InterP - 1, 0, IDIM>>
+      constrained_support_ijk;
+  Gpu::ManagedVector<Array1D<Real, 0, N_InterP - 1>>
+      constrained_dirichlet_weights;
+  Gpu::ManagedVector<Array1D<Real, 0, N_InterP - 1>>
+      constrained_neumann_weights;
+  Gpu::ManagedVector<Array1D<Real, 0, N_InterP - 1>>
+      constrained_fv_dirichlet_weights;
+  Gpu::ManagedVector<Array1D<Real, 0, N_InterP - 1>>
+      constrained_entropy_jet_weights;
+  Gpu::ManagedVector<Array1D<Real, 0, N_InterP - 1>>
+      constrained_entropy_jet_linear_weights;
+  Gpu::ManagedVector<Array1D<Real, 0, N_InterP - 1>>
+      constrained_fluid_trace_weights;
+  Gpu::ManagedVector<Real> constrained_dirichlet_boundary_weight;
+  Gpu::ManagedVector<Real> constrained_neumann_gradient_weight;
+  Gpu::ManagedVector<Real> constrained_fv_dirichlet_boundary_weight;
+  Gpu::ManagedVector<int> constrained_order;
+  Gpu::ManagedVector<int> constrained_fv_dirichlet_order;
+  Gpu::ManagedVector<int> constrained_entropy_jet_order;
+  Gpu::ManagedVector<int> constrained_fluid_trace_order;
+  Gpu::ManagedVector<int> constrained_support_count;
+  Gpu::ManagedVector<Real> constrained_condition;
+  Gpu::ManagedVector<Real> constrained_weight_l1;
+  Gpu::ManagedVector<Real> constrained_fv_dirichlet_condition;
+  Gpu::ManagedVector<Real> constrained_fv_dirichlet_weight_l1;
+  Gpu::ManagedVector<Real> constrained_entropy_jet_condition;
+  Gpu::ManagedVector<Real> constrained_entropy_jet_weight_l1;
+  Gpu::ManagedVector<Real> constrained_entropy_jet_linear_condition;
+  Gpu::ManagedVector<Real> constrained_entropy_jet_linear_weight_l1;
+  Gpu::ManagedVector<Real> constrained_fluid_trace_condition;
+  Gpu::ManagedVector<Real> constrained_fluid_trace_weight_l1;
+  Gpu::ManagedVector<RZBICPointFunctionals<N_InterP>>
+      rz_bic_point_functionals;
+  Gpu::ManagedVector<
+      Array2D<Real, 0, IBM_RZ_BIC_RADIAL_STENCIL_CELLS - 1,
+              0, ncons_tparm - 1>>
+      rz_bic_annular_stencil;
 
   /// Allocate flat arrays from per-fab counts.
   /// \param counts  Vector of GP counts per local FAB (size = nfabs_in).
@@ -949,13 +1237,48 @@ struct GPStore {
     imp_ninterp.resize(total_ngps);
     imp_ip_ijk.resize(total_ngps);
     imp_ipweights.resize(total_ngps);
-    n_valid.resize(total_ngps);
-    recon_prim.resize(total_ngps);
+  }
+
+  /// Allocate metadata used only by the opt-in BI-constrained shared-GP path.
+  /// Keeping this separate avoids a permanent memory cost for legacy cases.
+  void allocate_bi_constrained() {
+    constrained_support_ijk.resize(total_ngps);
+    constrained_dirichlet_weights.resize(total_ngps);
+    constrained_neumann_weights.resize(total_ngps);
+    constrained_fv_dirichlet_weights.resize(total_ngps);
+    constrained_entropy_jet_weights.resize(total_ngps);
+    constrained_entropy_jet_linear_weights.resize(total_ngps);
+    constrained_fluid_trace_weights.resize(total_ngps);
+    constrained_dirichlet_boundary_weight.resize(total_ngps);
+    constrained_neumann_gradient_weight.resize(total_ngps);
+    constrained_fv_dirichlet_boundary_weight.resize(total_ngps);
+    constrained_order.resize(total_ngps);
+    constrained_fv_dirichlet_order.resize(total_ngps);
+    constrained_entropy_jet_order.resize(total_ngps);
+    constrained_fluid_trace_order.resize(total_ngps);
+    constrained_support_count.resize(total_ngps);
+    constrained_condition.resize(total_ngps);
+    constrained_weight_l1.resize(total_ngps);
+    constrained_fv_dirichlet_condition.resize(total_ngps);
+    constrained_fv_dirichlet_weight_l1.resize(total_ngps);
+    constrained_entropy_jet_condition.resize(total_ngps);
+    constrained_entropy_jet_weight_l1.resize(total_ngps);
+    constrained_entropy_jet_linear_condition.resize(total_ngps);
+    constrained_entropy_jet_linear_weight_l1.resize(total_ngps);
+    constrained_fluid_trace_condition.resize(total_ngps);
+    constrained_fluid_trace_weight_l1.resize(total_ngps);
+  }
+
+  /// Allocate the extra target functionals only for the opt-in R-Z annular
+  /// shared-GP path. Cartesian BI-CWLS cases retain their previous footprint.
+  void allocate_rz_bic_point_functionals() {
+    rz_bic_point_functionals.resize(total_ngps);
+    rz_bic_annular_stencil.resize(total_ngps);
   }
 
   /// Return a GPU-capturable read/write view of this store.
-  GPStoreView<eorder_tparm, iorder_tparm> view() const {
-    GPStoreView<eorder_tparm, iorder_tparm> v;
+  GPStoreView<eorder_tparm, iorder_tparm, ncons_tparm> view() const {
+    GPStoreView<eorder_tparm, iorder_tparm, ncons_tparm> v{};
     v.total_ngps   = total_ngps;
     v.nfabs        = nfabs;
     v.fab_offsets   = fab_offsets.data();
@@ -972,8 +1295,50 @@ struct GPStore {
     v.imp_ninterp   = imp_ninterp.data();
     v.imp_ip_ijk    = imp_ip_ijk.data();
     v.imp_ipweights = imp_ipweights.data();
-    v.n_valid       = n_valid.data();
-    v.recon_prim    = recon_prim.data();
+    v.constrained_support_ijk = constrained_support_ijk.data();
+    v.constrained_dirichlet_weights = constrained_dirichlet_weights.data();
+    v.constrained_neumann_weights = constrained_neumann_weights.data();
+    v.constrained_fv_dirichlet_weights =
+        constrained_fv_dirichlet_weights.data();
+    v.constrained_entropy_jet_weights =
+        constrained_entropy_jet_weights.data();
+    v.constrained_entropy_jet_linear_weights =
+        constrained_entropy_jet_linear_weights.data();
+    v.constrained_fluid_trace_weights =
+        constrained_fluid_trace_weights.data();
+    v.constrained_dirichlet_boundary_weight =
+        constrained_dirichlet_boundary_weight.data();
+    v.constrained_neumann_gradient_weight =
+        constrained_neumann_gradient_weight.data();
+    v.constrained_fv_dirichlet_boundary_weight =
+        constrained_fv_dirichlet_boundary_weight.data();
+    v.constrained_order = constrained_order.data();
+    v.constrained_fv_dirichlet_order =
+        constrained_fv_dirichlet_order.data();
+    v.constrained_entropy_jet_order = constrained_entropy_jet_order.data();
+    v.constrained_fluid_trace_order =
+        constrained_fluid_trace_order.data();
+    v.constrained_support_count = constrained_support_count.data();
+    v.constrained_condition = constrained_condition.data();
+    v.constrained_weight_l1 = constrained_weight_l1.data();
+    v.constrained_fv_dirichlet_condition =
+        constrained_fv_dirichlet_condition.data();
+    v.constrained_fv_dirichlet_weight_l1 =
+        constrained_fv_dirichlet_weight_l1.data();
+    v.constrained_entropy_jet_condition =
+        constrained_entropy_jet_condition.data();
+    v.constrained_entropy_jet_weight_l1 =
+        constrained_entropy_jet_weight_l1.data();
+    v.constrained_entropy_jet_linear_condition =
+        constrained_entropy_jet_linear_condition.data();
+    v.constrained_entropy_jet_linear_weight_l1 =
+        constrained_entropy_jet_linear_weight_l1.data();
+    v.constrained_fluid_trace_condition =
+        constrained_fluid_trace_condition.data();
+    v.constrained_fluid_trace_weight_l1 =
+        constrained_fluid_trace_weight_l1.data();
+    v.rz_bic_point_functionals = rz_bic_point_functionals.data();
+    v.rz_bic_annular_stencil = rz_bic_annular_stencil.data();
 
     // const_cast for writable pointers (initialiseGPs write pass)
     v.gp_ijk_w        = const_cast<Array1D< int, 0, IDIM>*>(gp_ijk.data());
@@ -987,8 +1352,65 @@ struct GPStore {
     v.imp_ninterp_w   = const_cast<Array1D< int, 0, eorder_tparm - 1>*>(imp_ninterp.data());
     v.imp_ip_ijk_w    = const_cast<Array3D< int, 0, eorder_tparm - 1, 0, N_InterP - 1, 0, IDIM>*>(imp_ip_ijk.data());
     v.imp_ipweights_w = const_cast<Array2D<Real, 0, eorder_tparm - 1, 0, N_InterP - 1>*>(imp_ipweights.data());
-    v.n_valid_w       = const_cast<int*>(n_valid.data());
-    v.recon_prim_w    = const_cast<Array1D<Real, 0, 5>*>(recon_prim.data());
+    v.constrained_support_ijk_w = const_cast<
+        Array2D<int, 0, N_InterP - 1, 0, IDIM>*>(
+            constrained_support_ijk.data());
+    v.constrained_dirichlet_weights_w = const_cast<
+        Array1D<Real, 0, N_InterP - 1>*>(
+            constrained_dirichlet_weights.data());
+    v.constrained_neumann_weights_w = const_cast<
+        Array1D<Real, 0, N_InterP - 1>*>(
+            constrained_neumann_weights.data());
+    v.constrained_fv_dirichlet_weights_w = const_cast<
+        Array1D<Real, 0, N_InterP - 1>*>(
+            constrained_fv_dirichlet_weights.data());
+    v.constrained_entropy_jet_weights_w = const_cast<
+        Array1D<Real, 0, N_InterP - 1>*>(
+            constrained_entropy_jet_weights.data());
+    v.constrained_entropy_jet_linear_weights_w = const_cast<
+        Array1D<Real, 0, N_InterP - 1>*>(
+            constrained_entropy_jet_linear_weights.data());
+    v.constrained_fluid_trace_weights_w = const_cast<
+        Array1D<Real, 0, N_InterP - 1>*>(
+            constrained_fluid_trace_weights.data());
+    v.constrained_dirichlet_boundary_weight_w =
+        const_cast<Real*>(constrained_dirichlet_boundary_weight.data());
+    v.constrained_neumann_gradient_weight_w =
+        const_cast<Real*>(constrained_neumann_gradient_weight.data());
+    v.constrained_fv_dirichlet_boundary_weight_w = const_cast<Real*>(
+        constrained_fv_dirichlet_boundary_weight.data());
+    v.constrained_order_w = const_cast<int*>(constrained_order.data());
+    v.constrained_fv_dirichlet_order_w =
+        const_cast<int*>(constrained_fv_dirichlet_order.data());
+    v.constrained_entropy_jet_order_w =
+        const_cast<int*>(constrained_entropy_jet_order.data());
+    v.constrained_fluid_trace_order_w =
+        const_cast<int*>(constrained_fluid_trace_order.data());
+    v.constrained_support_count_w =
+        const_cast<int*>(constrained_support_count.data());
+    v.constrained_condition_w = const_cast<Real*>(constrained_condition.data());
+    v.constrained_weight_l1_w = const_cast<Real*>(constrained_weight_l1.data());
+    v.constrained_fv_dirichlet_condition_w =
+        const_cast<Real*>(constrained_fv_dirichlet_condition.data());
+    v.constrained_fv_dirichlet_weight_l1_w =
+        const_cast<Real*>(constrained_fv_dirichlet_weight_l1.data());
+    v.constrained_entropy_jet_condition_w =
+        const_cast<Real*>(constrained_entropy_jet_condition.data());
+    v.constrained_entropy_jet_weight_l1_w =
+        const_cast<Real*>(constrained_entropy_jet_weight_l1.data());
+    v.constrained_entropy_jet_linear_condition_w =
+        const_cast<Real*>(constrained_entropy_jet_linear_condition.data());
+    v.constrained_entropy_jet_linear_weight_l1_w =
+        const_cast<Real*>(constrained_entropy_jet_linear_weight_l1.data());
+    v.constrained_fluid_trace_condition_w =
+        const_cast<Real*>(constrained_fluid_trace_condition.data());
+    v.constrained_fluid_trace_weight_l1_w =
+        const_cast<Real*>(constrained_fluid_trace_weight_l1.data());
+    v.rz_bic_point_functionals_w = const_cast<
+        RZBICPointFunctionals<N_InterP>*>(rz_bic_point_functionals.data());
+    v.rz_bic_annular_stencil_w = const_cast<
+        Array2D<Real, 0, IBM_RZ_BIC_RADIAL_STENCIL_CELLS - 1,
+                0, ncons_tparm - 1>*>(rz_bic_annular_stencil.data());
 
     return v;
   }
@@ -1009,8 +1431,33 @@ struct GPStore {
     imp_ninterp.clear();
     imp_ip_ijk.clear();
     imp_ipweights.clear();
-    n_valid.clear();
-    recon_prim.clear();
+    constrained_support_ijk.clear();
+    constrained_dirichlet_weights.clear();
+    constrained_neumann_weights.clear();
+    constrained_fv_dirichlet_weights.clear();
+    constrained_entropy_jet_weights.clear();
+    constrained_entropy_jet_linear_weights.clear();
+    constrained_fluid_trace_weights.clear();
+    constrained_dirichlet_boundary_weight.clear();
+    constrained_neumann_gradient_weight.clear();
+    constrained_fv_dirichlet_boundary_weight.clear();
+    constrained_order.clear();
+    constrained_fv_dirichlet_order.clear();
+    constrained_entropy_jet_order.clear();
+    constrained_fluid_trace_order.clear();
+    constrained_support_count.clear();
+    constrained_condition.clear();
+    constrained_weight_l1.clear();
+    constrained_fv_dirichlet_condition.clear();
+    constrained_fv_dirichlet_weight_l1.clear();
+    constrained_entropy_jet_condition.clear();
+    constrained_entropy_jet_weight_l1.clear();
+    constrained_entropy_jet_linear_condition.clear();
+    constrained_entropy_jet_linear_weight_l1.clear();
+    constrained_fluid_trace_condition.clear();
+    constrained_fluid_trace_weight_l1.clear();
+    rz_bic_point_functionals.clear();
+    rz_bic_annular_stencil.clear();
   }
 
   void shrink() {
@@ -1029,8 +1476,33 @@ struct GPStore {
       imp_ninterp.shrink_to_fit();
       imp_ip_ijk.shrink_to_fit();
       imp_ipweights.shrink_to_fit();
-      n_valid.shrink_to_fit();
-      recon_prim.shrink_to_fit();
+      constrained_support_ijk.shrink_to_fit();
+      constrained_dirichlet_weights.shrink_to_fit();
+      constrained_neumann_weights.shrink_to_fit();
+      constrained_fv_dirichlet_weights.shrink_to_fit();
+      constrained_entropy_jet_weights.shrink_to_fit();
+      constrained_entropy_jet_linear_weights.shrink_to_fit();
+      constrained_fluid_trace_weights.shrink_to_fit();
+      constrained_dirichlet_boundary_weight.shrink_to_fit();
+      constrained_neumann_gradient_weight.shrink_to_fit();
+      constrained_fv_dirichlet_boundary_weight.shrink_to_fit();
+      constrained_order.shrink_to_fit();
+      constrained_fv_dirichlet_order.shrink_to_fit();
+      constrained_entropy_jet_order.shrink_to_fit();
+      constrained_fluid_trace_order.shrink_to_fit();
+      constrained_support_count.shrink_to_fit();
+      constrained_condition.shrink_to_fit();
+      constrained_weight_l1.shrink_to_fit();
+      constrained_fv_dirichlet_condition.shrink_to_fit();
+      constrained_fv_dirichlet_weight_l1.shrink_to_fit();
+      constrained_entropy_jet_condition.shrink_to_fit();
+      constrained_entropy_jet_weight_l1.shrink_to_fit();
+      constrained_entropy_jet_linear_condition.shrink_to_fit();
+      constrained_entropy_jet_linear_weight_l1.shrink_to_fit();
+      constrained_fluid_trace_condition.shrink_to_fit();
+      constrained_fluid_trace_weight_l1.shrink_to_fit();
+      rz_bic_point_functionals.shrink_to_fit();
+      rz_bic_annular_stencil.shrink_to_fit();
     }
   }
 };

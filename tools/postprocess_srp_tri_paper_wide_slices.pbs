@@ -1,0 +1,39 @@
+#!/bin/bash
+#PBS -N srp_tri_wide
+#PBS -q cx
+#PBS -l walltime=02:00:00
+#PBS -l select=1:ncpus=1:mem=12gb
+#PBS -j oe
+
+set -euo pipefail
+
+CASE=/rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2
+OUT=${CASE}/post_latest_plt09000/paper_series_wide_slices
+MODE=${MODE:-all}
+WORKER_INDEX=${WORKER_INDEX:-${PBS_ARRAY_INDEX:-0}}
+WORKER_COUNT=${WORKER_COUNT:-1}
+
+export MPLCONFIGDIR=${TMPDIR:-/tmp}/mpl-wide-${PBS_JOBID}
+mkdir -p "${MPLCONFIGDIR}" "${OUT}" "${OUT}/logs"
+
+date -u
+hostname
+module load tools/prod yt/4.3.0-foss-2022a
+# Leave an L0-resolved safety margin around yt's recursive AMR interpolation.
+# These bounds select L2 cells 11..756, keeping every intermediate data-source
+# region strictly inside the non-periodic domain instead of touching it by one
+# floating-point ulp.
+python3 "${CASE}/postprocess_srp_tri_paper_series.py" \
+  --mode "${MODE}" \
+  --plot-root "${CASE}/plot" \
+  --reader /rds/general/user/jq319/home/schlieren.py \
+  --output-dir "${OUT}" \
+  --worker-index "${WORKER_INDEX}" \
+  --worker-count "${WORKER_COUNT}" \
+  --axial-crop 0.009 0.631 \
+  --transverse-crop -0.036 0.586 \
+  --fixed-gref 72.18947715759369 \
+  --paper-dpi 600 \
+  --frame-dpi 400 \
+  2>&1 | tee "${OUT}/logs/${MODE}_${WORKER_INDEX}_${PBS_JOBID}.log"
+date -u

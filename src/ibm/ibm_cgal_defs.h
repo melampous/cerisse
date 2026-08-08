@@ -440,14 +440,29 @@ struct SurfElem {
     int geomIdx;         // Standard int (4 bytes) to avoid padding issues
     Real centroid[AMREX_SPACEDIM];
     Real measure;        // Area in 3D, Length in 2D
+#if (AMREX_SPACEDIM == 2)
+    Real sharp_distance_source;
+    Real sharp_distance_target;
+#endif
 
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-    SurfElem() : geomIdx(-1), measure(0.0) {
+    SurfElem() : geomIdx(-1), measure(0.0)
+#if (AMREX_SPACEDIM == 2)
+               , sharp_distance_source(Real(-1.0))
+               , sharp_distance_target(Real(-1.0))
+#endif
+    {
         for (int i = 0; i < AMREX_SPACEDIM; ++i) centroid[i] = 0.0;
     }
 
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-    SurfElem(const Real* c, Real s, int g_idx) : geomIdx(g_idx), measure(s) {
+    SurfElem(const Real* c, Real s, int g_idx)
+        : geomIdx(g_idx), measure(s)
+#if (AMREX_SPACEDIM == 2)
+        , sharp_distance_source(Real(-1.0))
+        , sharp_distance_target(Real(-1.0))
+#endif
+    {
         for (int i = 0; i < AMREX_SPACEDIM; ++i) centroid[i] = c[i];
     }
 };

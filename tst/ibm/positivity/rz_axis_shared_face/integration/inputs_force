@@ -1,0 +1,51 @@
+# Test-only forced-activation companion to inputs.
+# A physical, grid-aligned axial double rarefaction is combined with the same
+# fixed off-axis pure-GP circle. On the 64x64 grid this deterministically
+# exercises LOCAL_SHARED_FACE in SSPRK43 bracket 3 at CFL=0.20.
+max_step = 1
+stop_time = 1.0
+cfl = 0.20
+
+cns.order_rk = 3
+cns.stages_rk = 4
+cns.lo_bc = 3 2
+cns.hi_bc = 2 2
+cns.nstep_screen_output = 1
+cns.verbose = 0
+cns.strict_positivity = 1
+cns.soft_positivity = 0
+
+cns.ibm_positivity_flux_limiter = 1
+cns.ibm_positivity_flux_limiter_verbose = 1
+cns.ibm_positivity_retry = 0
+
+cns.rz_euler_cell_average_deconvolution = 1
+cns.rz_gp_annular_bic = 1
+cns.rz_gp_support_centre_recovery = 1
+cns.rz_gp_axis_regular_entropy_jet = 1
+cns.do_reflux = 0
+
+prob.initial_mode = 1
+prob.interface_z = 0.25
+prob.forced_velocity = 1600.0
+
+ib.filename = off_axis_circle.dat
+ib.move = 0
+ib.plot_surf = 0
+
+geometry.is_periodic = 0 0
+geometry.coord_sys = 1
+geometry.prob_lo = 0.0 0.0
+geometry.prob_hi = 1.0 1.0
+
+amr.n_cell = 64 64
+amr.max_level = 0
+amr.max_grid_size = 64
+amr.blocking_factor = 8
+amr.grid_eff = 0.8
+
+amr.plot_files_output = 0
+amr.checkpoint_files_output = 0
+amr.v = 0
+
+amrex.the_arena_is_managed = 0

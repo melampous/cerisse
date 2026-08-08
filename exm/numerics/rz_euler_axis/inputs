@@ -1,0 +1,40 @@
+# The accepted state after one step is the t=0 spatial RHS.
+max_step = 1
+time_step = 1.0e-5
+
+cns.order_rk = 0
+cns.stages_rk = 1
+cns.lo_bc = 3 1
+cns.hi_bc = 1 1
+cns.nstep_screen_output = 1
+cns.verbose = 0
+
+geometry.is_periodic = 0 0
+geometry.coord_sys = 1
+geometry.prob_lo = 0.0 0.0
+geometry.prob_hi = 1.0 1.0
+amr.n_cell = 16 16
+amr.max_level = 0
+amr.max_grid_size = 256
+amr.blocking_factor = 8
+
+# 0: u_r=a*r; 1: u_r=a*r+b*r^3.
+prob.mode = 0
+prob.cell_average = 1
+prob.a = 0.20
+prob.b = 0.10
+
+cns.do_reflux = 0
+cns.rz_pressure_split = 0
+# Keep the legacy operator as the regression default. Override this with 1 to
+# exercise the annular-average radial-velocity correction.
+cns.rz_euler_annular_average = 0
+cns.rz_euler_point_flux = 0
+
+amr.plot_files_output = 1
+amr.plot_file = output/plt
+amr.plot_int = 1
+amr.checkpoint_files_output = 0
+amr.v = 0
+
+amrex.the_arena_is_managed = 0

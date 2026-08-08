@@ -1,0 +1,1 @@
+cns.rz_euler_cell_average_deconvolution=1 

@@ -1,0 +1,41 @@
+#!/bin/bash
+#PBS -N srp_sch3dw
+#PBS -q cx
+#PBS -l walltime=02:00:00
+#PBS -l select=1:ncpus=4:mem=64gb
+#PBS -j oe
+#PBS -o /rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2/post_latest_plt09000/schlieren3d/wide.log
+
+set -euo pipefail
+
+source /etc/profile.d/modules.sh
+source /etc/profile.d/z00_lmod.sh
+module purge
+module load tools/prod yt/4.3.0-foss-2022a VTK/9.2.2-foss-2022a
+
+CASE=/rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2
+OUT=${CASE}/post_latest_plt09000/schlieren3d
+CACHE=${OUT}/plt09000_density_gradient_volume_wide.npz
+export OMP_NUM_THREADS=4
+mkdir -p "${OUT}"
+
+date -u
+hostname
+xvfb-run -a -s "-screen 0 3200x2000x24" \
+  python3 "${CASE}/render_srp_tri_schlieren3d.py" \
+    --plotfile "${CASE}/plot/plt09000" \
+    --stl "${CASE}/trinozzle.stl" \
+    --output-dir "${OUT}" \
+    --cache "${CACHE}" \
+    --output-name srp_tri_L2_plt09000_schlieren3d_camera_wide \
+    --roi-lo 0.006666666666666667 0.08 0.08 \
+    --roi-hi 0.50 0.47 0.47 \
+    --image-size 3200 2000 \
+    --opacity-scale 4.0 \
+    --opacity-unit-distance 0.0030 \
+    --camera-position -0.22 0.86 0.62 \
+    --camera-focal 0.28 0.275 0.275 \
+    --camera-view-angle 29.0 \
+    --rebuild-cache \
+    2>&1 | tee "${OUT}/wide_run.log"
+date -u

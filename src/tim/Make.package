@@ -1,1 +1,2 @@
 CEXE_sources += advance.cpp compute_rhs.cpp
+CEXE_sources += species_state.cpp

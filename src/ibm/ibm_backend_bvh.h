@@ -41,9 +41,10 @@
 /// Lightweight, trivially-copyable device view for 3D inside/outside tests.
 ///
 /// Uses a 1-ray fast path with lazy fallback to additional directions only
-/// when the primary ray hits a degenerate configuration (near-parallel face,
-/// vertex/edge grazing).  Most points resolve with a single BVH traversal;
-/// pathological cases fall back to 2-ray then 3-ray majority voting.
+/// when an otherwise valid intersection grazes a triangle edge or vertex.
+/// A triangle parallel to the ray is not by itself a degenerate crossing and
+/// is simply skipped.  Most points therefore resolve with one traversal;
+/// edge/vertex cases retry with independent, non-symmetric directions.
 struct InsideTesterView {
     const Point*           verts_     = nullptr;
     const GpuArray<int,3>* faces_     = nullptr;
@@ -57,44 +58,41 @@ struct InsideTesterView {
             return BoundedSide::Outside;
         }
 
-        // Three pre-set ray directions (linearly independent, irrational oblique
-        // third direction minimises alignment with mesh edges/faces).
-        const Vec dirs[3] = {
+        // Axis directions retain the inexpensive common path.  The final two
+        // directions deliberately have unequal, non-rational-looking
+        // components to avoid systematic alignment with symmetric STL edges.
+        const Vec dirs[5] = {
             {Real(1.0), Real(0.0), Real(0.0)},
             {Real(0.0), Real(1.0), Real(0.0)},
-            {Real(0.30151134457776363), Real(0.30151134457776363), Real(0.90453403373329089)}
+            {Real(0.0), Real(0.0), Real(1.0)},
+            {Real(0.7863336509949341), Real(0.4879215610874228),
+             Real(0.3779644730092272)},
+            {Real(-0.4138158647237830), Real(0.8562949841293264),
+             Real(0.3090169943749474)}
         };
 
-        // Fast path: single ray.  If no degenerate hit is detected the
-        // result is authoritative and we return immediately (1 traversal).
-        bool  degenerate = false;
-        int   crossings  = ray_cast_count(p, dirs[0], degenerate);
-        if (!degenerate) {
-            return (crossings % 2 == 1) ? BoundedSide::Inside
-                                        : BoundedSide::Outside;
+        int crossings = 0;
+        for (const auto& direction : dirs) {
+            bool degenerate = false;
+            crossings = ray_cast_count(p, direction, degenerate);
+            if (!degenerate) {
+                return (crossings % 2 == 1) ? BoundedSide::Inside
+                                            : BoundedSide::Outside;
+            }
         }
 
-        // Fallback: the first ray hit a degenerate face.  Cast a second ray
-        // in an independent direction.  If it is clean we trust it.
-        bool  degen2 = false;
-        int   cross2 = ray_cast_count(p, dirs[1], degen2);
-        if (!degen2) {
-            return (cross2 % 2 == 1) ? BoundedSide::Inside
-                                     : BoundedSide::Outside;
-        }
-
-        // Both axis-aligned rays were degenerate — use the oblique third
-        // direction and take its answer (best-effort).
-        bool  degen3 = false;
-        int   cross3 = ray_cast_count(p, dirs[2], degen3);
-        return (cross3 % 2 == 1) ? BoundedSide::Inside
-                                 : BoundedSide::Outside;
+        // A point for which five independent rays all graze mesh features is
+        // exceptionally close to the surface.  Preserve deterministic legacy
+        // behaviour by using the final parity as a best-effort classification.
+        return (crossings % 2 == 1) ? BoundedSide::Inside
+                                    : BoundedSide::Outside;
     }
 
 private:
     /// Ray-cast with degeneracy detection.
-    /// Sets `degenerate = true` if any triangle is near-parallel to the ray
-    /// (|det| < degen_eps) so the caller can retry with a different direction.
+    /// Sets `degenerate = true` only when a proper forward intersection lies
+    /// on a triangle edge or vertex.  Parallel triangles do not cross the ray
+    /// and must not invalidate an otherwise unambiguous parity count.
     AMREX_GPU_HOST_DEVICE
     int ray_cast_count (const Point& p, const Vec& dir, bool& degenerate) const {
         degenerate = false;
@@ -103,7 +101,7 @@ private:
         }
         int crossings = 0;
         const Real eps = IBM_EPS::RAYCAST;
-        const Real degen_eps = IBM_EPS::RAYCAST * Real(100.0);   // near-parallel threshold
+        const Real edge_eps = IBM_EPS::RAYCAST * Real(100.0);
         constexpr int MAX_STACK = 128;
         int stack[MAX_STACK];
         int top = 0;
@@ -125,11 +123,8 @@ private:
                          dir[0]*e2[1]-dir[1]*e2[0]};
                 Real a_val = e1[0]*h[0] + e1[1]*h[1] + e1[2]*h[2];
 
-                // Near-parallel: flag degenerate so caller can try another dir
-                if (a_val > -degen_eps && a_val < degen_eps) {
-                    degenerate = true;
-                    continue;
-                }
+                // A parallel triangle contributes no transverse crossing.
+                if (a_val > -eps && a_val < eps) continue;
 
                 Real inv_a = Real(1.0) / a_val;
                 Vec s = {p[0]-v0[0], p[1]-v0[1], p[2]-v0[2]};
@@ -141,7 +136,14 @@ private:
                 Real v_val = inv_a * (dir[0]*q[0] + dir[1]*q[1] + dir[2]*q[2]);
                 if (v_val < -eps || u + v_val > Real(1.0)+eps) continue;
                 Real t = inv_a * (e2[0]*q[0] + e2[1]*q[1] + e2[2]*q[2]);
-                if (t > eps) crossings++;
+                if (t > eps) {
+                    const Real w = Real(1.0) - u - v_val;
+                    if (u <= edge_eps || v_val <= edge_eps || w <= edge_eps) {
+                        degenerate = true;
+                    } else {
+                        ++crossings;
+                    }
+                }
             } else {
                 if (top < MAX_STACK) stack[top++] = nd.left;
                 if (top < MAX_STACK) stack[top++] = nd.right;

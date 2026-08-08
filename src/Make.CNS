@@ -9,6 +9,14 @@ endif
 
 include $(AMREX_HOME)/Tools/GNUMake/Make.defs
 
+# Embed the solver revision in every executable. An executable name alone is
+# not a sufficient provenance record; `--dirty` distinguishes working-tree
+# builds from their committed revision.
+CERISSE_GIT_VERSION := $(shell cd $(AMR_SOLVER) && git describe --abbrev=12 --dirty --always --tags 2>/dev/null)
+ifneq ($(strip $(CERISSE_GIT_VERSION)),)
+  DEFINES += -DCERISSE_GIT_VERSION=\"$(CERISSE_GIT_VERSION)\"
+endif
+
 AMREXVERSION ?= 25
 DEFINES += -DAMREXVERSION
 

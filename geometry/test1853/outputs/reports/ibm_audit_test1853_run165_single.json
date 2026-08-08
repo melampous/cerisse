@@ -1,0 +1,46 @@
+{
+  "file": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/stl/test1853_run165_single.stl",
+  "kind": "stl",
+  "sha256": "f01949508523ee76fc034ed43b6fe4e99ee8626f1e69bf8066a38e9def815ca4",
+  "triangles": 353042,
+  "unique_vertices": 176523,
+  "bounds_lo": [
+    2.4412689208984375,
+    -63.5,
+    -63.5
+  ],
+  "bounds_hi": [
+    268.13763427734375,
+    63.5,
+    63.5
+  ],
+  "weld_tolerance": 1e-07,
+  "edge_length": {
+    "min": 0.23056444345344296,
+    "mean": 0.6834149401473113,
+    "max": 2.8636512099252984
+  },
+  "area": 123985.40342170166,
+  "signed_volume": 3199916.464715918,
+  "normal_closure": [
+    5.729816621169448e-11,
+    -4.813927034774679e-13,
+    -1.794120407794253e-13
+  ],
+  "normal_closure_relative": 4.621549609151784e-16,
+  "degenerate_facets": 0,
+  "weld_collapsed_facets": 0,
+  "boundary_edges": 0,
+  "nonmanifold_edges": 0,
+  "inconsistent_edges": 0,
+  "duplicate_facets": 0,
+  "connected_components": 1,
+  "zero_stored_normals": 0,
+  "mismatched_stored_normals": 0,
+  "reversed_stored_normals": 0,
+  "fluid_spacing_ratios": [],
+  "self_intersection_checked": false,
+  "warnings": [],
+  "failures": [],
+  "passed": true
+}

@@ -1,0 +1,55 @@
+max_step = 10000
+stop_time = 2.0e-2
+cfl = 0.10
+
+cns.order_rk = 3
+cns.stages_rk = 3
+cns.lo_bc = 3 -1
+cns.hi_bc = 1 -1
+cns.nstep_screen_output = 1000
+cns.verbose = 0
+
+geometry.is_periodic = 0 1
+geometry.coord_sys = 1
+geometry.prob_lo = 0.0 0.0
+geometry.prob_hi = 1.0 1.0
+amr.n_cell = 16 16
+amr.max_level = 0
+amr.max_grid_size = 256
+amr.blocking_factor = 8
+
+# Smooth, positive, time-dependent primitive manufactured fields. Scalars and
+# axial velocity are even in r; radial velocity is odd in r.
+prob.rho0 = 1.0
+prob.p0 = 1.0
+prob.uz0 = 0.30
+prob.rho_amp = 0.050
+prob.ur_amp = 0.080
+prob.uz_amp = 0.050
+prob.p_amp = 0.080
+prob.rho_r2 = 0.20
+prob.ur_r2 = 0.15
+prob.uz_r2 = 0.10
+prob.p_r2 = 0.25
+prob.omega = 1.0
+prob.uz_phase = 0.35
+prob.p_phase = 0.21
+
+cns.do_reflux = 0
+cns.rz_pressure_split = 0
+
+# These are the two independently verified finite-volume R-Z Euler fixes.
+cns.rz_euler_annular_average = 1
+cns.rz_euler_point_flux = 1
+cns.rz_euler_annular_pressure_consistency = 1
+cns.rz_euler_cell_average_deconvolution = 1
+
+# Keep every shock-only experimental path out of the smooth MMS operator.
+
+amr.plot_files_output = 1
+amr.plot_file = output/plt
+amr.plot_int = 100000
+amr.checkpoint_files_output = 0
+amr.v = 0
+
+amrex.the_arena_is_managed = 0

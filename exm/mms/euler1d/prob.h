@@ -37,7 +37,8 @@ template <typename cls_t > class user_source_t;
 // HLLC-Riemann MUSCL
 //typedef rhs_dt<riemann_t<false, ProbClosures>, no_diffusive_t, user_source_t <ProbClosures> >  ProbRHS;
 // Skew
-typedef rhs_dt<skew_t<methodparm_t, ProbClosures>, no_diffusive_t, user_source_t <ProbClosures> > ProbRHS;
+//typedef rhs_dt<skew_t<methodparm_t, ProbClosures>, no_diffusive_t, user_source_t <ProbClosures> > ProbRHS;
+typedef rhs_dt<weno_t<ReconScheme::WenoZ5, ProbClosures>, no_diffusive_t, user_source_t <ProbClosures> > ProbRHS;
 // Rusanov
 //typedef rhs_dt<rusanov_t<ProbClosures>, no_diffusive_t, user_source_t <ProbClosures> >  ProbRHS;
 // WENO & TENO   WenoZ5/Teno5/Teno6

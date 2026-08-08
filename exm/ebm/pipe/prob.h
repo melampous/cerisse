@@ -6,6 +6,7 @@
 #include <AMReX_ParmParse.H>
 #include <Closures.h>
 #include <RHS.h>
+#include <Weno_old.h>
 
 #include <Constants.h>
 #include <NumParam.h>
@@ -104,7 +105,7 @@ template <typename cls_t > class user_source_t;
 //typedef rhs_dt<skew_t<skewparm_t,ProbClosures>, no_diffusive_t, user_source_t<ProbClosures> > ProbRHS;
 
 typedef rhs_dt<skew_t<skewparm_t,ProbClosures>, viscous_t<methodparm_t, ProbClosures>, user_source_t<ProbClosures> > ProbRHS;
-//typedef rhs_dt<weno_t<ReconScheme::Teno5, ProbClosures>, no_diffusive_t, no_source_t > ProbRHS;
+//typedef rhs_dt<weno_old_t<OldReconScheme::Teno5, ProbClosures>, no_diffusive_t, no_source_t > ProbRHS;
 
 
 // define type of wall and EBM class

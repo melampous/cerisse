@@ -5,6 +5,9 @@ stop_time = 1.8
 # time_step = 0.001 
 cfl = 0.3
 
+cns.order_rk  = 3
+cns.stages_rk = 3
+
 # Geometry 
 geometry.is_periodic = 0 
 geometry.coord_sys   = 0  # 0 => cart, 1 => RZ  2=>spherical
@@ -18,7 +21,7 @@ geometry.prob_hi     = 10.
 # 6 = user defined
 cns.lo_bc = 2 
 cns.hi_bc = 2 
-cns.screen_output = 0 # 0=quiet, 1=verbose
+cns.nstep_screen_output = 200
 cns.verbose = 0       # 0=quiet, 1=verbose
 
 # Refinement and regridding 

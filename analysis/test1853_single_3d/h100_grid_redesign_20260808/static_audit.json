@@ -1,0 +1,219 @@
+{
+  "pass": true,
+  "reports": [
+    {
+      "input": "analysis/test1853_single_3d/h100_grid_redesign_20260808/inputs.chk4000_h100_large_boxes",
+      "pass": true,
+      "n_cell": [
+        256,
+        176,
+        176
+      ],
+      "domain_lo_m": [
+        -0.192,
+        -0.192,
+        -0.192
+      ],
+      "domain_hi_m": [
+        0.384,
+        0.192,
+        0.192
+      ],
+      "dx_by_level_m": [
+        [
+          0.0022500000000000003,
+          0.002181818181818182,
+          0.002181818181818182
+        ],
+        [
+          0.0011250000000000001,
+          0.001090909090909091,
+          0.001090909090909091
+        ],
+        [
+          0.0005625000000000001,
+          0.0005454545454545455,
+          0.0005454545454545455
+        ]
+      ],
+      "blocking_factor": [
+        16,
+        16,
+        8
+      ],
+      "max_grid_size": [
+        128,
+        128,
+        64
+      ],
+      "n_error_buf": [
+        8,
+        4
+      ],
+      "regrid_int": [
+        16,
+        16
+      ],
+      "l0_cells": 7929856,
+      "l0_minimum_box_count": 8,
+      "l0_average_cells_per_box_at_minimum": 991232.0,
+      "l2_worst_case_x_hi_m": -0.0015624999999999997,
+      "l2_body_clearance_m": 0.00400377,
+      "l2_body_clearance_cells": 7.117813333333333,
+      "checks": [
+        {
+          "name": "cartesian_coordinate_system",
+          "passed": true,
+          "detail": "geometry.coord_sys=['0']"
+        },
+        {
+          "name": "base_domain_divisible_by_l0_blocking",
+          "passed": true,
+          "detail": "n_cell=[256, 176, 176], L0 blocking=16"
+        },
+        {
+          "name": "max_grid_multiple_of_blocking",
+          "passed": true,
+          "detail": "max_grid_size=[128, 128, 64], blocking_factor=[16, 16, 8]"
+        },
+        {
+          "name": "sfc_distribution",
+          "passed": true,
+          "detail": "strategy=['SFC']"
+        },
+        {
+          "name": "host_staged_mpi",
+          "passed": true,
+          "detail": "amrex.use_gpu_aware_mpi=['0']"
+        },
+        {
+          "name": "unmanaged_arena",
+          "passed": true,
+          "detail": "amrex.the_arena_is_managed=['0']"
+        },
+        {
+          "name": "pure_gp_prohibited_switches_disabled",
+          "passed": true,
+          "detail": "all disabled"
+        },
+        {
+          "name": "l2_worst_case_stays_ahead_of_body",
+          "passed": true,
+          "detail": "worst L2 x_hi=-0.001562500 m, body x_min=0.002441270 m, clearance=0.004003770 m"
+        },
+        {
+          "name": "l2_clearance_at_least_four_cells",
+          "passed": true,
+          "detail": "clearance=7.118 L2 cells"
+        }
+      ]
+    },
+    {
+      "input": "analysis/test1853_single_3d/h100_grid_redesign_20260808/inputs.fresh_256x192x192_h100",
+      "pass": true,
+      "n_cell": [
+        256,
+        192,
+        192
+      ],
+      "domain_lo_m": [
+        -0.192,
+        -0.216,
+        -0.216
+      ],
+      "domain_hi_m": [
+        0.384,
+        0.216,
+        0.216
+      ],
+      "dx_by_level_m": [
+        [
+          0.0022500000000000003,
+          0.00225,
+          0.00225
+        ],
+        [
+          0.0011250000000000001,
+          0.001125,
+          0.001125
+        ],
+        [
+          0.0005625000000000001,
+          0.0005625,
+          0.0005625
+        ]
+      ],
+      "blocking_factor": [
+        32,
+        32,
+        8
+      ],
+      "max_grid_size": [
+        128,
+        128,
+        64
+      ],
+      "n_error_buf": [
+        8,
+        4
+      ],
+      "regrid_int": [
+        16,
+        16
+      ],
+      "l0_cells": 9437184,
+      "l0_minimum_box_count": 8,
+      "l0_average_cells_per_box_at_minimum": 1179648.0,
+      "l2_worst_case_x_hi_m": -0.0015624999999999997,
+      "l2_body_clearance_m": 0.00400377,
+      "l2_body_clearance_cells": 7.117813333333333,
+      "checks": [
+        {
+          "name": "cartesian_coordinate_system",
+          "passed": true,
+          "detail": "geometry.coord_sys=['0']"
+        },
+        {
+          "name": "base_domain_divisible_by_l0_blocking",
+          "passed": true,
+          "detail": "n_cell=[256, 192, 192], L0 blocking=32"
+        },
+        {
+          "name": "max_grid_multiple_of_blocking",
+          "passed": true,
+          "detail": "max_grid_size=[128, 128, 64], blocking_factor=[32, 32, 8]"
+        },
+        {
+          "name": "sfc_distribution",
+          "passed": true,
+          "detail": "strategy=['SFC']"
+        },
+        {
+          "name": "host_staged_mpi",
+          "passed": true,
+          "detail": "amrex.use_gpu_aware_mpi=['0']"
+        },
+        {
+          "name": "unmanaged_arena",
+          "passed": true,
+          "detail": "amrex.the_arena_is_managed=['0']"
+        },
+        {
+          "name": "pure_gp_prohibited_switches_disabled",
+          "passed": true,
+          "detail": "all disabled"
+        },
+        {
+          "name": "l2_worst_case_stays_ahead_of_body",
+          "passed": true,
+          "detail": "worst L2 x_hi=-0.001562500 m, body x_min=0.002441270 m, clearance=0.004003770 m"
+        },
+        {
+          "name": "l2_clearance_at_least_four_cells",
+          "passed": true,
+          "detail": "clearance=7.118 L2 cells"
+        }
+      ]
+    }
+  ]
+}

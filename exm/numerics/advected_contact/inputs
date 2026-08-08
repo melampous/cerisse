@@ -1,0 +1,49 @@
+# Periodic advection of two contact discontinuities.
+#
+# rho = 2 for 0.25 <= x < 0.75 and rho = 1 elsewhere.
+# p = 1 and ux = 0.5*sqrt(1.4).  The stop time is one exact transit.
+
+amrex.fpe_trap_invalid = 1
+
+max_step  = 1000000
+stop_time = 1.6903085094570331
+cfl       = 0.20
+
+cns.order_rk                 = 3
+cns.stages_rk                = 3
+cns.check_state              = 1
+cns.soft_positivity          = 0
+cns.do_reflux                = 0
+cns.lo_bc                    = -1
+cns.hi_bc                    = -1
+cns.nstep_screen_output      = 1000000
+cns.verbose                  = 0
+cns.afd_correction           = 1
+cns.afd_smoothness_threshold = 0.08
+cns.afd_teno_cutoff          = 1.0e-4
+
+prob.rho_low       = 1.0
+prob.rho_high      = 2.0
+prob.p0            = 1.0
+prob.mach_reference = 0.5
+prob.pulse_lo      = 0.25
+prob.pulse_hi      = 0.75
+
+geometry.is_periodic = 1
+geometry.coord_sys   = 0
+geometry.prob_lo     = 0.0
+geometry.prob_hi     = 1.0
+
+amr.n_cell          = 128
+amr.max_level       = 0
+amr.blocking_factor = 1
+amr.max_grid_size   = 4096
+amr.n_error_buf     = 0
+amr.grid_eff        = 0.9
+amr.v               = 0
+
+amr.checkpoint_files_output = 0
+amr.plot_files_output       = 1
+amr.plot_file               = ./plot/plt
+amr.plot_int                = -1
+amr.derive_plot_vars        = pressure velocity temperature

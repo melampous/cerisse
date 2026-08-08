@@ -1,0 +1,1083 @@
+{
+  "test1853_run165_single": {
+    "status": "PASS",
+    "description": "Run 165 hardware: active center Nozzle 1; peripheral plugs flush",
+    "run_ids": [
+      165
+    ],
+    "mapping": "not_applicable",
+    "quick_mesh": false,
+    "nozzles": [
+      {
+        "number": 1,
+        "theta_deg": null,
+        "axis_radius_mm": 0.0,
+        "axis_y_mm": 0.0,
+        "axis_z_mm": 0.0,
+        "throat_radius_mm": 3.16357,
+        "virtual_exit_radius_mm": 6.36778,
+        "divergent_half_angle_deg": 14.981,
+        "virtual_exit_x_mm": 2.441268805570889,
+        "throat_x_mm": 14.415425035402048,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 11.936715673363473,
+        "placement_status": "ideal_sphere_flush_reconstruction"
+      }
+    ],
+    "occ": {
+      "solid_count": 1,
+      "surface_count": 7,
+      "volume_mm3": 3200265.447429882,
+      "bounds_mm": [
+        [
+          2.441268805570889,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "expected_bounds_mm": [
+        [
+          2.441268805570889,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_error_mm": 0.0,
+      "throat_surface_tags": {
+        "1": 4
+      }
+    },
+    "cad_file_bytes": {
+      "brep": 649509,
+      "step": 26911
+    },
+    "mesh": {
+      "closed_solid": {
+        "path": "outputs/stl/test1853_run165_single.stl",
+        "bytes": 17652184,
+        "triangles": 353042,
+        "area_mm2": 123985.40572827049
+      },
+      "body_wall_open": {
+        "path": "outputs/patches/test1853_run165_single/body_wall_excluding_throat_caps.stl",
+        "bytes": 17628384,
+        "triangles": 352566,
+        "area_mm2": 123954.0468044458
+      },
+      "throat_caps": {
+        "1": {
+          "path": "outputs/patches/test1853_run165_single/nozzle_1_throat_cap.stl",
+          "bytes": 23884,
+          "triangles": 476,
+          "area_mm2": 31.358923824705368,
+          "occ_surface_tag": 4,
+          "cad_area_mm2": 31.44160951105784,
+          "expected_as_built_area_mm2": 31.4418726,
+          "cad_area_relative_error": 8.367470522696328e-06,
+          "mesh_area_relative_error": 0.002638162693103466
+        }
+      },
+      "chord_error": {
+        "sample_count": 1412168,
+        "max_mm": 0.014863964659947037,
+        "rms_mm": 0.002206178665647448,
+        "sample_scheme": "all triangle edge midpoints and centroids projected to source OCC surface"
+      }
+    },
+    "reference_outputs": {
+      "virtual_exit_disks": [
+        "outputs/reference/test1853_run165_single/nozzle_1_virtual_exit_REFERENCE_ONLY.stl"
+      ],
+      "lip_csv": "outputs/reference/test1853_run165_single/physical_lip_reconstruction.csv",
+      "lip_rows": 360,
+      "warning": "virtual-exit disks are reference planes, not peripheral physical openings"
+    },
+    "stl_validation": {
+      "vertices": 176523,
+      "triangles": 353042,
+      "watertight": true,
+      "winding_consistent": true,
+      "is_volume": true,
+      "body_count": 1,
+      "volume_mm3": 3199916.464715917,
+      "bounds_mm": [
+        [
+          2.4412689208984375,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13763427734375,
+          63.5,
+          63.5
+        ]
+      ]
+    },
+    "step_reimport": {
+      "solid_count": 1,
+      "bounds_mm": [
+        [
+          2.441268805571,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_difference_mm": 1.1102230246251565e-13
+    },
+    "brep_reimport": {
+      "solid_count": 1,
+      "bounds_mm": [
+        [
+          2.441268805570889,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_difference_mm": 0.0
+    },
+    "parameter_file_sha256": "d2d388e330ecd7123a227c1f446f474c844d7aa03bc291600b3f2cc89da3fabe",
+    "builder_sha256": "2af592846540aafbb3eb8d8a209b564fe1b7486df42ef92f00497398a27bcc63"
+  },
+  "test1853_run262_263_tri_n3at120": {
+    "status": "PASS",
+    "description": "Run 247/262/263 tri hardware; canonical unresolved mapping N3@120, N4@240",
+    "run_ids": [
+      247,
+      262,
+      263
+    ],
+    "mapping": "N2@0, N3@120, N4@240 (one of two public-data-consistent mappings)",
+    "quick_mesh": false,
+    "nozzles": [
+      {
+        "number": 2,
+        "theta_deg": 0.0,
+        "axis_radius_mm": 31.75,
+        "axis_y_mm": 0.0,
+        "axis_z_mm": 31.75,
+        "throat_radius_mm": 3.17246,
+        "virtual_exit_radius_mm": 6.30555,
+        "divergent_half_angle_deg": 14.977,
+        "virtual_exit_x_mm": 11.556054937951927,
+        "throat_x_mm": 23.267709418822847,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 14.311307170744755,
+        "placement_status": "assumed_axis_cone_intersection_virtual_plane"
+      },
+      {
+        "number": 3,
+        "theta_deg": 120.0,
+        "axis_radius_mm": 31.75,
+        "axis_y_mm": 27.49630657015593,
+        "axis_z_mm": -15.874999999999993,
+        "throat_radius_mm": 3.21945,
+        "virtual_exit_radius_mm": 6.33603,
+        "divergent_half_angle_deg": 14.994,
+        "virtual_exit_x_mm": 11.556054937951927,
+        "throat_x_mm": 23.19216382895526,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 14.351302584136896,
+        "placement_status": "assumed_axis_cone_intersection_virtual_plane"
+      },
+      {
+        "number": 4,
+        "theta_deg": 240.0,
+        "axis_radius_mm": 31.75,
+        "axis_y_mm": -27.49630657015592,
+        "axis_z_mm": -15.875000000000014,
+        "throat_radius_mm": 3.17881,
+        "virtual_exit_radius_mm": 6.34492,
+        "divergent_half_angle_deg": 14.985,
+        "virtual_exit_x_mm": 11.556054937951927,
+        "throat_x_mm": 23.384524195772023,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 14.355154824064822,
+        "placement_status": "assumed_axis_cone_intersection_virtual_plane"
+      }
+    ],
+    "occ": {
+      "solid_count": 1,
+      "surface_count": 11,
+      "volume_mm3": 3198589.43514692,
+      "bounds_mm": [
+        [
+          1.63011542088817,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "expected_bounds_mm": [
+        [
+          1.6301154208881705,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_error_mm": 0.0,
+      "throat_surface_tags": {
+        "2": 8,
+        "3": 10,
+        "4": 9
+      }
+    },
+    "cad_file_bytes": {
+      "brep": 1084631,
+      "step": 168166
+    },
+    "mesh": {
+      "closed_solid": {
+        "path": "outputs/stl/test1853_run262_263_tri_n3at120.stl",
+        "bytes": 18041784,
+        "triangles": 360834,
+        "area_mm2": 124499.89770037586
+      },
+      "body_wall_open": {
+        "path": "outputs/patches/test1853_run262_263_tri_n3at120/body_wall_excluding_throat_caps.stl",
+        "bytes": 17968234,
+        "triangles": 359363,
+        "area_mm2": 124404.22064669633
+      },
+      "throat_caps": {
+        "2": {
+          "path": "outputs/patches/test1853_run262_263_tri_n3at120/nozzle_2_throat_cap.stl",
+          "bytes": 24284,
+          "triangles": 484,
+          "area_mm2": 31.53541591187241,
+          "occ_surface_tag": 8,
+          "cad_area_mm2": 31.61856696398311,
+          "expected_as_built_area_mm2": 31.61864644,
+          "cad_area_relative_error": 2.5135806189621805e-06,
+          "mesh_area_relative_error": 0.002632324197859939
+        },
+        "3": {
+          "path": "outputs/patches/test1853_run262_263_tri_n3at120/nozzle_3_throat_cap.stl",
+          "bytes": 25234,
+          "triangles": 503,
+          "area_mm2": 32.47985285429306,
+          "occ_surface_tag": 10,
+          "cad_area_mm2": 32.56216269863332,
+          "expected_as_built_area_mm2": 32.56187036,
+          "cad_area_relative_error": 8.977943529968378e-06,
+          "mesh_area_relative_error": 0.002518820473153663
+        },
+        "4": {
+          "path": "outputs/patches/test1853_run262_263_tri_n3at120/nozzle_4_throat_cap.stl",
+          "bytes": 24284,
+          "triangles": 484,
+          "area_mm2": 31.66178491337883,
+          "occ_surface_tag": 9,
+          "cad_area_mm2": 31.745269169131394,
+          "expected_as_built_area_mm2": 31.7450978,
+          "cad_area_relative_error": 5.398286452713875e-06,
+          "mesh_area_relative_error": 0.0026244331375526193
+        }
+      },
+      "chord_error": {
+        "sample_count": 1443336,
+        "max_mm": 0.014863964659947037,
+        "rms_mm": 0.0022274144608030767,
+        "sample_scheme": "all triangle edge midpoints and centroids projected to source OCC surface"
+      }
+    },
+    "reference_outputs": {
+      "virtual_exit_disks": [
+        "outputs/reference/test1853_run262_263_tri_n3at120/nozzle_2_virtual_exit_REFERENCE_ONLY.stl",
+        "outputs/reference/test1853_run262_263_tri_n3at120/nozzle_3_virtual_exit_REFERENCE_ONLY.stl",
+        "outputs/reference/test1853_run262_263_tri_n3at120/nozzle_4_virtual_exit_REFERENCE_ONLY.stl"
+      ],
+      "lip_csv": "outputs/reference/test1853_run262_263_tri_n3at120/physical_lip_reconstruction.csv",
+      "lip_rows": 1080,
+      "warning": "virtual-exit disks are reference planes, not peripheral physical openings"
+    },
+    "stl_validation": {
+      "vertices": 180419,
+      "triangles": 360834,
+      "watertight": true,
+      "winding_consistent": true,
+      "is_volume": true,
+      "body_count": 1,
+      "volume_mm3": 3198241.721384439,
+      "bounds_mm": [
+        [
+          1.6301153898239136,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13763427734375,
+          63.5,
+          63.5
+        ]
+      ]
+    },
+    "step_reimport": {
+      "solid_count": 1,
+      "bounds_mm": [
+        [
+          1.630115420888,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_difference_mm": 1.7008616737257398e-13
+    },
+    "brep_reimport": {
+      "solid_count": 1,
+      "bounds_mm": [
+        [
+          1.63011542088817,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_difference_mm": 0.0
+    },
+    "parameter_file_sha256": "d2d388e330ecd7123a227c1f446f474c844d7aa03bc291600b3f2cc89da3fabe",
+    "builder_sha256": "2af592846540aafbb3eb8d8a209b564fe1b7486df42ef92f00497398a27bcc63"
+  },
+  "test1853_run262_263_tri_n3at240": {
+    "status": "PASS",
+    "description": "Run 247/262/263 tri hardware; mirrored unresolved mapping N3@240, N4@120",
+    "run_ids": [
+      247,
+      262,
+      263
+    ],
+    "mapping": "N2@0, N3@240, N4@120 (one of two public-data-consistent mappings)",
+    "quick_mesh": false,
+    "nozzles": [
+      {
+        "number": 2,
+        "theta_deg": 0.0,
+        "axis_radius_mm": 31.75,
+        "axis_y_mm": 0.0,
+        "axis_z_mm": 31.75,
+        "throat_radius_mm": 3.17246,
+        "virtual_exit_radius_mm": 6.30555,
+        "divergent_half_angle_deg": 14.977,
+        "virtual_exit_x_mm": 11.556054937951927,
+        "throat_x_mm": 23.267709418822847,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 14.311307170744755,
+        "placement_status": "assumed_axis_cone_intersection_virtual_plane"
+      },
+      {
+        "number": 3,
+        "theta_deg": 240.0,
+        "axis_radius_mm": 31.75,
+        "axis_y_mm": -27.49630657015592,
+        "axis_z_mm": -15.875000000000014,
+        "throat_radius_mm": 3.21945,
+        "virtual_exit_radius_mm": 6.33603,
+        "divergent_half_angle_deg": 14.994,
+        "virtual_exit_x_mm": 11.556054937951927,
+        "throat_x_mm": 23.19216382895526,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 14.351302584136896,
+        "placement_status": "assumed_axis_cone_intersection_virtual_plane"
+      },
+      {
+        "number": 4,
+        "theta_deg": 120.0,
+        "axis_radius_mm": 31.75,
+        "axis_y_mm": 27.49630657015593,
+        "axis_z_mm": -15.874999999999993,
+        "throat_radius_mm": 3.17881,
+        "virtual_exit_radius_mm": 6.34492,
+        "divergent_half_angle_deg": 14.985,
+        "virtual_exit_x_mm": 11.556054937951927,
+        "throat_x_mm": 23.384524195772023,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 14.355154824064822,
+        "placement_status": "assumed_axis_cone_intersection_virtual_plane"
+      }
+    ],
+    "occ": {
+      "solid_count": 1,
+      "surface_count": 11,
+      "volume_mm3": 3198589.1417612564,
+      "bounds_mm": [
+        [
+          1.63011542088817,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "expected_bounds_mm": [
+        [
+          1.6301154208881705,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_error_mm": 0.0,
+      "throat_surface_tags": {
+        "2": 9,
+        "3": 10,
+        "4": 8
+      }
+    },
+    "cad_file_bytes": {
+      "brep": 1086553,
+      "step": 169633
+    },
+    "mesh": {
+      "closed_solid": {
+        "path": "outputs/stl/test1853_run262_263_tri_n3at240.stl",
+        "bytes": 18043684,
+        "triangles": 360872,
+        "area_mm2": 124499.89814005012
+      },
+      "body_wall_open": {
+        "path": "outputs/patches/test1853_run262_263_tri_n3at240/body_wall_excluding_throat_caps.stl",
+        "bytes": 17969534,
+        "triangles": 359389,
+        "area_mm2": 124404.22108637058
+      },
+      "throat_caps": {
+        "2": {
+          "path": "outputs/patches/test1853_run262_263_tri_n3at240/nozzle_2_throat_cap.stl",
+          "bytes": 24284,
+          "triangles": 484,
+          "area_mm2": 31.53541591187241,
+          "occ_surface_tag": 9,
+          "cad_area_mm2": 31.61856696398311,
+          "expected_as_built_area_mm2": 31.61864644,
+          "cad_area_relative_error": 2.5135806189621805e-06,
+          "mesh_area_relative_error": 0.002632324197859939
+        },
+        "3": {
+          "path": "outputs/patches/test1853_run262_263_tri_n3at240/nozzle_3_throat_cap.stl",
+          "bytes": 25534,
+          "triangles": 509,
+          "area_mm2": 32.47985285429306,
+          "occ_surface_tag": 10,
+          "cad_area_mm2": 32.56216269863332,
+          "expected_as_built_area_mm2": 32.56187036,
+          "cad_area_relative_error": 8.977943529968378e-06,
+          "mesh_area_relative_error": 0.002518820473153663
+        },
+        "4": {
+          "path": "outputs/patches/test1853_run262_263_tri_n3at240/nozzle_4_throat_cap.stl",
+          "bytes": 24584,
+          "triangles": 490,
+          "area_mm2": 31.661784913378824,
+          "occ_surface_tag": 8,
+          "cad_area_mm2": 31.745269169131394,
+          "expected_as_built_area_mm2": 31.7450978,
+          "cad_area_relative_error": 5.398286452713875e-06,
+          "mesh_area_relative_error": 0.0026244331375528435
+        }
+      },
+      "chord_error": {
+        "sample_count": 1443488,
+        "max_mm": 0.014863964659947037,
+        "rms_mm": 0.0022271958249940344,
+        "sample_scheme": "all triangle edge midpoints and centroids projected to source OCC surface"
+      }
+    },
+    "reference_outputs": {
+      "virtual_exit_disks": [
+        "outputs/reference/test1853_run262_263_tri_n3at240/nozzle_2_virtual_exit_REFERENCE_ONLY.stl",
+        "outputs/reference/test1853_run262_263_tri_n3at240/nozzle_3_virtual_exit_REFERENCE_ONLY.stl",
+        "outputs/reference/test1853_run262_263_tri_n3at240/nozzle_4_virtual_exit_REFERENCE_ONLY.stl"
+      ],
+      "lip_csv": "outputs/reference/test1853_run262_263_tri_n3at240/physical_lip_reconstruction.csv",
+      "lip_rows": 1080,
+      "warning": "virtual-exit disks are reference planes, not peripheral physical openings"
+    },
+    "stl_validation": {
+      "vertices": 180438,
+      "triangles": 360872,
+      "watertight": true,
+      "winding_consistent": true,
+      "is_volume": true,
+      "body_count": 1,
+      "volume_mm3": 3198241.71871563,
+      "bounds_mm": [
+        [
+          1.6301153898239136,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13763427734375,
+          63.5,
+          63.5
+        ]
+      ]
+    },
+    "step_reimport": {
+      "solid_count": 1,
+      "bounds_mm": [
+        [
+          1.630115420888,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_difference_mm": 1.7008616737257398e-13
+    },
+    "brep_reimport": {
+      "solid_count": 1,
+      "bounds_mm": [
+        [
+          1.63011542088817,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_difference_mm": 0.0
+    },
+    "parameter_file_sha256": "d2d388e330ecd7123a227c1f446f474c844d7aa03bc291600b3f2cc89da3fabe",
+    "builder_sha256": "2af592846540aafbb3eb8d8a209b564fe1b7486df42ef92f00497398a27bcc63"
+  },
+  "test1853_quad_n3at120": {
+    "status": "PASS",
+    "description": "Official Test 1853 quad hardware; center N1 plus peripheral N2/N3/N4; N3@120",
+    "run_ids": [
+      307,
+      315
+    ],
+    "mapping": "N1@center, N2@0, N3@120, N4@240 (one of two public-data-consistent mappings)",
+    "quick_mesh": false,
+    "nozzles": [
+      {
+        "number": 1,
+        "theta_deg": null,
+        "axis_radius_mm": 0.0,
+        "axis_y_mm": 0.0,
+        "axis_z_mm": 0.0,
+        "throat_radius_mm": 3.16357,
+        "virtual_exit_radius_mm": 6.36778,
+        "divergent_half_angle_deg": 14.981,
+        "virtual_exit_x_mm": 2.441268805570889,
+        "throat_x_mm": 14.415425035402048,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 11.936715673363473,
+        "placement_status": "ideal_sphere_flush_reconstruction"
+      },
+      {
+        "number": 2,
+        "theta_deg": 0.0,
+        "axis_radius_mm": 31.75,
+        "axis_y_mm": 0.0,
+        "axis_z_mm": 31.75,
+        "throat_radius_mm": 3.17246,
+        "virtual_exit_radius_mm": 6.30555,
+        "divergent_half_angle_deg": 14.977,
+        "virtual_exit_x_mm": 11.556054937951927,
+        "throat_x_mm": 23.267709418822847,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 14.311307170744755,
+        "placement_status": "assumed_axis_cone_intersection_virtual_plane"
+      },
+      {
+        "number": 3,
+        "theta_deg": 120.0,
+        "axis_radius_mm": 31.75,
+        "axis_y_mm": 27.49630657015593,
+        "axis_z_mm": -15.874999999999993,
+        "throat_radius_mm": 3.21945,
+        "virtual_exit_radius_mm": 6.33603,
+        "divergent_half_angle_deg": 14.994,
+        "virtual_exit_x_mm": 11.556054937951927,
+        "throat_x_mm": 23.19216382895526,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 14.351302584136896,
+        "placement_status": "assumed_axis_cone_intersection_virtual_plane"
+      },
+      {
+        "number": 4,
+        "theta_deg": 240.0,
+        "axis_radius_mm": 31.75,
+        "axis_y_mm": -27.49630657015592,
+        "axis_z_mm": -15.875000000000014,
+        "throat_radius_mm": 3.17881,
+        "virtual_exit_radius_mm": 6.34492,
+        "divergent_half_angle_deg": 14.985,
+        "virtual_exit_x_mm": 11.556054937951927,
+        "throat_x_mm": 23.384524195772023,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 14.355154824064822,
+        "placement_status": "assumed_axis_cone_intersection_virtual_plane"
+      }
+    ],
+    "occ": {
+      "solid_count": 1,
+      "surface_count": 13,
+      "volume_mm3": 3197650.9239134025,
+      "bounds_mm": [
+        [
+          2.441268805570889,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "expected_bounds_mm": [
+        [
+          2.441268805570889,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_error_mm": 0.0,
+      "throat_surface_tags": {
+        "1": 4,
+        "2": 10,
+        "3": 12,
+        "4": 11
+      }
+    },
+    "cad_file_bytes": {
+      "brep": 1329915,
+      "step": 173528
+    },
+    "mesh": {
+      "closed_solid": {
+        "path": "outputs/stl/test1853_quad_n3at120.stl",
+        "bytes": 18241384,
+        "triangles": 364826,
+        "area_mm2": 124772.9739090197
+      },
+      "body_wall_open": {
+        "path": "outputs/patches/test1853_quad_n3at120/body_wall_excluding_throat_caps.stl",
+        "bytes": 18144034,
+        "triangles": 362879,
+        "area_mm2": 124645.93793151544
+      },
+      "throat_caps": {
+        "1": {
+          "path": "outputs/patches/test1853_quad_n3at120/nozzle_1_throat_cap.stl",
+          "bytes": 23884,
+          "triangles": 476,
+          "area_mm2": 31.358923824705368,
+          "occ_surface_tag": 4,
+          "cad_area_mm2": 31.44160951105784,
+          "expected_as_built_area_mm2": 31.4418726,
+          "cad_area_relative_error": 8.367470522696328e-06,
+          "mesh_area_relative_error": 0.002638162693103466
+        },
+        "2": {
+          "path": "outputs/patches/test1853_quad_n3at120/nozzle_2_throat_cap.stl",
+          "bytes": 24284,
+          "triangles": 484,
+          "area_mm2": 31.53541591187241,
+          "occ_surface_tag": 10,
+          "cad_area_mm2": 31.61856696398311,
+          "expected_as_built_area_mm2": 31.61864644,
+          "cad_area_relative_error": 2.5135806189621805e-06,
+          "mesh_area_relative_error": 0.002632324197859939
+        },
+        "3": {
+          "path": "outputs/patches/test1853_quad_n3at120/nozzle_3_throat_cap.stl",
+          "bytes": 25234,
+          "triangles": 503,
+          "area_mm2": 32.47985285429306,
+          "occ_surface_tag": 12,
+          "cad_area_mm2": 32.56216269863332,
+          "expected_as_built_area_mm2": 32.56187036,
+          "cad_area_relative_error": 8.977943529968378e-06,
+          "mesh_area_relative_error": 0.002518820473153663
+        },
+        "4": {
+          "path": "outputs/patches/test1853_quad_n3at120/nozzle_4_throat_cap.stl",
+          "bytes": 24284,
+          "triangles": 484,
+          "area_mm2": 31.66178491337883,
+          "occ_surface_tag": 11,
+          "cad_area_mm2": 31.745269169131394,
+          "expected_as_built_area_mm2": 31.7450978,
+          "cad_area_relative_error": 5.398286452713875e-06,
+          "mesh_area_relative_error": 0.0026244331375526193
+        }
+      },
+      "chord_error": {
+        "sample_count": 1459304,
+        "max_mm": 0.014863964659947037,
+        "rms_mm": 0.002236928262969548,
+        "sample_scheme": "all triangle edge midpoints and centroids projected to source OCC surface"
+      }
+    },
+    "reference_outputs": {
+      "virtual_exit_disks": [
+        "outputs/reference/test1853_quad_n3at120/nozzle_1_virtual_exit_REFERENCE_ONLY.stl",
+        "outputs/reference/test1853_quad_n3at120/nozzle_2_virtual_exit_REFERENCE_ONLY.stl",
+        "outputs/reference/test1853_quad_n3at120/nozzle_3_virtual_exit_REFERENCE_ONLY.stl",
+        "outputs/reference/test1853_quad_n3at120/nozzle_4_virtual_exit_REFERENCE_ONLY.stl"
+      ],
+      "lip_csv": "outputs/reference/test1853_quad_n3at120/physical_lip_reconstruction.csv",
+      "lip_rows": 1440,
+      "warning": "virtual-exit disks are reference planes, not peripheral physical openings"
+    },
+    "stl_validation": {
+      "vertices": 182415,
+      "triangles": 364826,
+      "watertight": true,
+      "winding_consistent": true,
+      "is_volume": true,
+      "body_count": 1,
+      "volume_mm3": 3197304.082031073,
+      "bounds_mm": [
+        [
+          2.4412689208984375,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13763427734375,
+          63.5,
+          63.5
+        ]
+      ]
+    },
+    "step_reimport": {
+      "solid_count": 1,
+      "bounds_mm": [
+        [
+          2.441268805571,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_difference_mm": 1.1102230246251565e-13
+    },
+    "brep_reimport": {
+      "solid_count": 1,
+      "bounds_mm": [
+        [
+          2.441268805570889,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_difference_mm": 0.0
+    },
+    "parameter_file_sha256": "d2d388e330ecd7123a227c1f446f474c844d7aa03bc291600b3f2cc89da3fabe",
+    "builder_sha256": "2af592846540aafbb3eb8d8a209b564fe1b7486df42ef92f00497398a27bcc63"
+  },
+  "test1853_quad_n3at240": {
+    "status": "PASS",
+    "description": "Official Test 1853 quad hardware; center N1 plus peripheral N2/N3/N4; N3@240",
+    "run_ids": [
+      307,
+      315
+    ],
+    "mapping": "N1@center, N2@0, N3@240, N4@120 (one of two public-data-consistent mappings)",
+    "quick_mesh": false,
+    "nozzles": [
+      {
+        "number": 1,
+        "theta_deg": null,
+        "axis_radius_mm": 0.0,
+        "axis_y_mm": 0.0,
+        "axis_z_mm": 0.0,
+        "throat_radius_mm": 3.16357,
+        "virtual_exit_radius_mm": 6.36778,
+        "divergent_half_angle_deg": 14.981,
+        "virtual_exit_x_mm": 2.441268805570889,
+        "throat_x_mm": 14.415425035402048,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 11.936715673363473,
+        "placement_status": "ideal_sphere_flush_reconstruction"
+      },
+      {
+        "number": 2,
+        "theta_deg": 0.0,
+        "axis_radius_mm": 31.75,
+        "axis_y_mm": 0.0,
+        "axis_z_mm": 31.75,
+        "throat_radius_mm": 3.17246,
+        "virtual_exit_radius_mm": 6.30555,
+        "divergent_half_angle_deg": 14.977,
+        "virtual_exit_x_mm": 11.556054937951927,
+        "throat_x_mm": 23.267709418822847,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 14.311307170744755,
+        "placement_status": "assumed_axis_cone_intersection_virtual_plane"
+      },
+      {
+        "number": 3,
+        "theta_deg": 240.0,
+        "axis_radius_mm": 31.75,
+        "axis_y_mm": -27.49630657015592,
+        "axis_z_mm": -15.875000000000014,
+        "throat_radius_mm": 3.21945,
+        "virtual_exit_radius_mm": 6.33603,
+        "divergent_half_angle_deg": 14.994,
+        "virtual_exit_x_mm": 11.556054937951927,
+        "throat_x_mm": 23.19216382895526,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 14.351302584136896,
+        "placement_status": "assumed_axis_cone_intersection_virtual_plane"
+      },
+      {
+        "number": 4,
+        "theta_deg": 120.0,
+        "axis_radius_mm": 31.75,
+        "axis_y_mm": 27.49630657015593,
+        "axis_z_mm": -15.874999999999993,
+        "throat_radius_mm": 3.17881,
+        "virtual_exit_radius_mm": 6.34492,
+        "divergent_half_angle_deg": 14.985,
+        "virtual_exit_x_mm": 11.556054937951927,
+        "throat_x_mm": 23.384524195772023,
+        "upstream_extension_x_mm": -18.36988457911183,
+        "upstream_extension_radius_mm": 14.355154824064822,
+        "placement_status": "assumed_axis_cone_intersection_virtual_plane"
+      }
+    ],
+    "occ": {
+      "solid_count": 1,
+      "surface_count": 13,
+      "volume_mm3": 3197650.664992214,
+      "bounds_mm": [
+        [
+          2.441268805570889,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "expected_bounds_mm": [
+        [
+          2.441268805570889,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_error_mm": 0.0,
+      "throat_surface_tags": {
+        "1": 4,
+        "2": 11,
+        "3": 12,
+        "4": 10
+      }
+    },
+    "cad_file_bytes": {
+      "brep": 1331837,
+      "step": 175004
+    },
+    "mesh": {
+      "closed_solid": {
+        "path": "outputs/stl/test1853_quad_n3at240.stl",
+        "bytes": 18244084,
+        "triangles": 364880,
+        "area_mm2": 124772.97491724505
+      },
+      "body_wall_open": {
+        "path": "outputs/patches/test1853_quad_n3at240/body_wall_excluding_throat_caps.stl",
+        "bytes": 18146134,
+        "triangles": 362921,
+        "area_mm2": 124645.93893974081
+      },
+      "throat_caps": {
+        "1": {
+          "path": "outputs/patches/test1853_quad_n3at240/nozzle_1_throat_cap.stl",
+          "bytes": 23884,
+          "triangles": 476,
+          "area_mm2": 31.358923824705368,
+          "occ_surface_tag": 4,
+          "cad_area_mm2": 31.44160951105784,
+          "expected_as_built_area_mm2": 31.4418726,
+          "cad_area_relative_error": 8.367470522696328e-06,
+          "mesh_area_relative_error": 0.002638162693103466
+        },
+        "2": {
+          "path": "outputs/patches/test1853_quad_n3at240/nozzle_2_throat_cap.stl",
+          "bytes": 24284,
+          "triangles": 484,
+          "area_mm2": 31.53541591187241,
+          "occ_surface_tag": 11,
+          "cad_area_mm2": 31.61856696398311,
+          "expected_as_built_area_mm2": 31.61864644,
+          "cad_area_relative_error": 2.5135806189621805e-06,
+          "mesh_area_relative_error": 0.002632324197859939
+        },
+        "3": {
+          "path": "outputs/patches/test1853_quad_n3at240/nozzle_3_throat_cap.stl",
+          "bytes": 25534,
+          "triangles": 509,
+          "area_mm2": 32.47985285429306,
+          "occ_surface_tag": 12,
+          "cad_area_mm2": 32.56216269863332,
+          "expected_as_built_area_mm2": 32.56187036,
+          "cad_area_relative_error": 8.977943529968378e-06,
+          "mesh_area_relative_error": 0.002518820473153663
+        },
+        "4": {
+          "path": "outputs/patches/test1853_quad_n3at240/nozzle_4_throat_cap.stl",
+          "bytes": 24584,
+          "triangles": 490,
+          "area_mm2": 31.661784913378824,
+          "occ_surface_tag": 10,
+          "cad_area_mm2": 31.745269169131394,
+          "expected_as_built_area_mm2": 31.7450978,
+          "cad_area_relative_error": 5.398286452713875e-06,
+          "mesh_area_relative_error": 0.0026244331375528435
+        }
+      },
+      "chord_error": {
+        "sample_count": 1459520,
+        "max_mm": 0.014863964659947037,
+        "rms_mm": 0.002236434584073168,
+        "sample_scheme": "all triangle edge midpoints and centroids projected to source OCC surface"
+      }
+    },
+    "reference_outputs": {
+      "virtual_exit_disks": [
+        "outputs/reference/test1853_quad_n3at240/nozzle_1_virtual_exit_REFERENCE_ONLY.stl",
+        "outputs/reference/test1853_quad_n3at240/nozzle_2_virtual_exit_REFERENCE_ONLY.stl",
+        "outputs/reference/test1853_quad_n3at240/nozzle_3_virtual_exit_REFERENCE_ONLY.stl",
+        "outputs/reference/test1853_quad_n3at240/nozzle_4_virtual_exit_REFERENCE_ONLY.stl"
+      ],
+      "lip_csv": "outputs/reference/test1853_quad_n3at240/physical_lip_reconstruction.csv",
+      "lip_rows": 1440,
+      "warning": "virtual-exit disks are reference planes, not peripheral physical openings"
+    },
+    "stl_validation": {
+      "vertices": 182442,
+      "triangles": 364880,
+      "watertight": true,
+      "winding_consistent": true,
+      "is_volume": true,
+      "body_count": 1,
+      "volume_mm3": 3197304.0743217263,
+      "bounds_mm": [
+        [
+          2.4412689208984375,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13763427734375,
+          63.5,
+          63.5
+        ]
+      ]
+    },
+    "step_reimport": {
+      "solid_count": 1,
+      "bounds_mm": [
+        [
+          2.441268805571,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_difference_mm": 1.1102230246251565e-13
+    },
+    "brep_reimport": {
+      "solid_count": 1,
+      "bounds_mm": [
+        [
+          2.441268805570889,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_difference_mm": 0.0
+    },
+    "parameter_file_sha256": "d2d388e330ecd7123a227c1f446f474c844d7aa03bc291600b3f2cc89da3fabe",
+    "builder_sha256": "2af592846540aafbb3eb8d8a209b564fe1b7486df42ef92f00497398a27bcc63"
+  }
+}

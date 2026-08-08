@@ -1,0 +1,19 @@
+#!/bin/bash
+#PBS -N srp_tri_wide_mp4
+#PBS -q cx
+#PBS -l walltime=00:30:00
+#PBS -l select=1:ncpus=1:mem=4gb
+#PBS -j oe
+
+set -euo pipefail
+
+CASE=/rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2
+OUT=${CASE}/post_latest_plt09000/paper_series_wide_slices
+
+date -u
+hostname
+module load tools/prod FFmpeg/7.1.1-GCCcore-14.2.0
+mkdir -p "${OUT}/logs"
+bash "${CASE}/encode_srp_tri_paper_movies.sh" "${OUT}" \
+  2>&1 | tee "${OUT}/logs/encode_movies_${PBS_JOBID}.log"
+date -u

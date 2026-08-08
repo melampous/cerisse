@@ -1,0 +1,70 @@
+{
+  "audit_date": "2026-07-19",
+  "scope": "Current dirty Cerisse worktree; BVH backend; STL reader; read_geom; surface ownership/output; Test 1853 SI tri smoke test",
+  "repository_head": "dc35646d8eb90aaa362a3292a9d702e30c9d5af5",
+  "worktree_notice": "The audited IBM source files contain uncommitted user changes. File hashes below, not repository_head alone, identify the audited source snapshot.",
+  "ibm_source_sha256": {
+    "src/ibm/ibm_backend_bvh.h": "814077212c579c8530c4b165afc2bff9880d48ff2c55e9391a5e0e6aab3446f1",
+    "src/ibm/ibm_bvh.h": "1d908bac431c5a311a17f43690f934d5c551f13f73d85a442f36af8c84a80384",
+    "src/ibm/ibm_bvh_defs.h": "e390f5792a1b0d90c29e63bf5a142f28b826a8155dff0039c2f0be0c8baedef4",
+    "src/ibm/ibm_solver.h": "9c9262ef4483b5774e24499548d16635e940426f6deecc81be2a4b66e0fbefe8",
+    "src/ibm/ibm_solver_io.h": "d5b912c463b435ed2b5f7e7f3f8217b70cc3a801197bcbe8f5a1923fd7391783",
+    "src/ibm/ibm_containers.h": "f5790ce5bf8a51e2542a531123ebdb96857cb79e6ee369fb7fa7919c6eb154e7"
+  },
+  "tested_model": {
+    "path": "outputs/ibm_prepared/test1853_run262_263_tri_n3at120_master_SI/test1853_run262_263_tri_n3at120_master_SI.stl",
+    "sha256": "2a320b2c3348ef89115459dbb8d9be10e96ce685d57cb46da22fbd7bcbd1b7d4",
+    "units": "m",
+    "faces": 360834,
+    "welded_vertices": 180419,
+    "bounds_m": {
+      "min": [0.00163011543918401, -0.06350000202655792, -0.06350000202655792],
+      "max": [0.2681376338005066, 0.06350000202655792, 0.06350000202655792]
+    }
+  },
+  "runtime_smoke_test": {
+    "result": "PASS",
+    "notes": "One CPU rank, one very short step, ib.skip_validation=0, ib.plot_surf=0, plot/checkpoint output disabled. This proves practical reader/BVH compatibility of the tested binary and STL; it is not a physics validation or proof that the executable was built from the dirty source hashes above.",
+    "executable": "IBM/wrk/bench_configc1/main3d.gnu.TPROF.MPI.ex",
+    "executable_sha256": "abe0895f82eb4d7ac205121a956c876b1e1a5578be3f484fc97494c294182061",
+    "read_vertices": 180419,
+    "read_faces": 360834,
+    "bvh2_nodes": 721667,
+    "bvh4_nodes": 186071,
+    "bvh_build_seconds": 0.177329181,
+    "geometry_cache_seconds": 0.023135859,
+    "read_geom_seconds": 0.893544318,
+    "exit_code": 0
+  },
+  "memory_model": {
+    "assumptions": [
+      "3-D LP64 DOUBLE build: Real=8 bytes and int=4 bytes",
+      "Nominal payload only; allocator capacity, UVM bookkeeping, fluid state, GPStore, AMR data, communication buffers, and build-time temporaries are excluded",
+      "Projected meshes use the measured Test 1853 BVH4/facet ratio and approximately V=F/2"
+    ],
+    "tested_tri_core_geometry_bytes_per_rank": 144111560,
+    "tested_tri_core_geometry_MiB_per_rank": 137.43549346923828,
+    "tested_tri_core_geometry_bytes_per_face": 399.3846477881796,
+    "tested_tri_surface_e1_i1_including_core_and_7real_impulse_GB_per_rank": 0.336075248,
+    "tested_tri_surface_e2_i2_including_core_and_7real_impulse_GB_per_rank": 0.686805896,
+    "validation_extra_bytes_per_face": 176,
+    "projected_decimal_GB_per_rank": [
+      {"target_dx_mm": 0.5, "theoretical_min_faces": 4600000, "core_only": 1.83716939, "surface_e1_i1": 4.28436939, "surface_e2_i2": 8.75556939},
+      {"target_dx_mm": 0.333, "theoretical_min_faces": 10370000, "core_only": 4.1416188205, "surface_e1_i1": 9.6584588205, "surface_e2_i2": 19.7380988205},
+      {"target_dx_mm": 0.25, "theoretical_min_faces": 18400000, "core_only": 7.34867756, "surface_e1_i1": 17.13747756, "surface_e2_i2": 35.02227756},
+      {"target_dx_mm": 0.2, "theoretical_min_faces": 28750000, "core_only": 11.4823086875, "surface_e1_i1": 26.7773086875, "surface_e2_i2": 54.7223086875},
+      {"target_dx_mm": 0.125, "theoretical_min_faces": 73610000, "core_only": 29.3987040865, "surface_e1_i1": 68.5592240865, "surface_e2_i2": 140.1081440865}
+    ]
+  },
+  "gather_surf_data": {
+    "production_SurfOut_estimated_bytes": 192,
+    "production_MPI_Gatherv_int_max_faces": 11184810,
+    "validation_SurfOut_estimated_bytes": 368,
+    "validation_MPI_Gatherv_int_max_faces": 5835553,
+    "conclusion": "The 18.4M-, 28.75M-, and 73.61M-face theoretical meshes cannot use the current single-call byte MPI_Gatherv surface-output path."
+  },
+  "compatibility": {
+    "current_approximately_360k_face_models": "Compatible for reader/BVH bring-up when one complete closed SI STL is loaded.",
+    "formal_submillimetre_high_resolution_models": "Not capacity-compatible with the current replicated geometry, replicated per-face surface arrays, and rank-0 gather/output design without the changes prioritised in IBM_HANDOFF_REPORT_CN.md section 17."
+  }
+}

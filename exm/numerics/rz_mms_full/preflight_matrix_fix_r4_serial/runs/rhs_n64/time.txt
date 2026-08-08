@@ -1,0 +1,23 @@
+	Command being timed: "/usr/bin/timeout --signal=TERM --kill-after=10s 600 /usr/bin/taskset --cpu-list 0 /home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/main2d.gnu.ex /home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/inputs amr.n_cell=64 64 cns.order_rk=0 cns.stages_rk=1 max_step=1 stop_time=1.0 amr.plot_int=1 amr.plot_file=output/plt amr.checkpoint_files_output=0 cns.rz_euler_annular_average=1 cns.rz_euler_point_flux=1 cns.rz_euler_annular_pressure_consistency=1 cns.rz_pressure_split=0 cns.rz_wb_axis_ncell=0 cns.rz_wb_pressure_ncell=0 cns.rz_pressure_quad_ncell=0 cns.rz_axis_diss=0 cns.rz_euler_consistent_shock_hybrid=0 cns.rz_euler_consistent_shock_hybrid_v2=0 cns.rz_euler_point_flux_shock_gate=0 cns.rz_grid_aligned_shock_filter=0 cns.rz_grid_aligned_shock_transverse_only=0 cns.rz_grid_aligned_shock_flow_sign=0"
+	User time (seconds): 0.00
+	System time (seconds): 0.01
+	Percent of CPU this job got: 104%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.02
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 31388
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 4051
+	Voluntary context switches: 3
+	Involuntary context switches: 1
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 696
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

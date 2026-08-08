@@ -62,9 +62,17 @@ struct CnsFillExtDir {
                      prob_lo[1] + static_cast<Real>(iv[1] + 0.5) * dx[1],
                      prob_lo[2] + static_cast<Real>(iv[2] + 0.5) * dx[2])};
 
-    Real s_int[PROB::ProbClosures::NCONS] = {0.0};
-    Real s_refl[PROB::ProbClosures::NCONS] = {0.0};
-    Real s_ext[PROB::ProbClosures::NCONS] = {0.0};
+    // Sized for the largest state group this functor can be invoked with:
+    // StateData boundary fills pass numcomp = group size, which is NSTAT (>NCONS)
+    // when Stats_Type ever reaches an ext_dir face. Stats BCs are mapped away
+    // from ext_dir in CNS_setup.cpp, but keep the arrays safe regardless.
+    constexpr int NFILL =
+        (PROB::ProbClosures::NSTAT > PROB::ProbClosures::NCONS)
+            ? PROB::ProbClosures::NSTAT
+            : PROB::ProbClosures::NCONS;
+    Real s_int[NFILL] = {0.0};
+    Real s_refl[NFILL] = {0.0};
+    Real s_ext[NFILL] = {0.0};
 
     for (int idir = 0; idir < AMREX_SPACEDIM; ++idir) {
       if ((bc.lo(idir) == BCType::ext_dir) && (iv[idir] < domlo[idir])) {
@@ -140,7 +148,6 @@ void cns_bcfill(Box const& bx, FArrayBox& data, const int dcomp,
                 const Vector<BCRec>& bcr, const int bcomp, const int scomp) {
   GpuBndryFuncFab<CnsFillExtDir> gpu_bndry_func(CnsFillExtDir{});
   gpu_bndry_func(bx, data, dcomp, numcomp, geom, time, bcr, bcomp, scomp);
-  Gpu::streamSynchronize();
 
   // TODO : pass 0,1,Nghost internal points to bcnormal. The current approach
 }

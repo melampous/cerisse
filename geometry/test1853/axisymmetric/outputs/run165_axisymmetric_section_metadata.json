@@ -1,0 +1,104 @@
+{
+  "status": "PREVIEW_GEOMETRY_QA_PASS",
+  "purpose": "Run-165 single-nozzle, zero-angle-of-attack axisymmetric meridional section",
+  "solver_status": "The polygon is reader-compatible by construction but has not yet been advanced as a dedicated Cerisse RZ case.",
+  "coordinate_convention": {
+    "dat_columns": [
+      "r_m",
+      "x_from_TSP_m"
+    ],
+    "axis": "r=0",
+    "flow": "freestream +x; retropropulsive jet -x",
+    "winding": "CCW",
+    "closure": "implicit last vertex to first vertex"
+  },
+  "scope_limitations": [
+    "Valid only for the Run 165 single center nozzle at zero angle of attack.",
+    "The nominal R25.4 nose and N1 virtual-exit axial placement are public-data reconstruction assumptions, not unpublished as-built CAD.",
+    "The aft cap and r=0 edge are numerical closures; exclude them from aerodynamic wall loads.",
+    "No complete convergent passage, plenum, sting, pressure-port holes, or nonzero-angle physics is added.",
+    "RZ total forces require 2*pi*r weighting in post-processing; the current built-in 2-D surface measure is line length."
+  ],
+  "source_sha256": {
+    "geometry_parameters.yaml": "5cc8eaa9e7d7a7e4f5ad681628c549016eb5f17cdfcbe551cdc84190f2336e3b",
+    "build_audit.json": "b134c6d3a4542f976b4b79892188905258849133c58894a395aca2e852fac8da",
+    "prepared_run165_SI.stl": "f8d8095fa4d093fe421c1c6cc71712a1709839ddfeefd116cb8b91d91dd9df82",
+    "generator": "c288752dac620eb3a8dfaaa4f05a31cfc8ddf1012b2dffaba71e8d05ca52e30a"
+  },
+  "geometry_parameters": {
+    "cone_half_angle_deg": 70.0,
+    "nozzle_divergent_half_angle_deg": 14.981,
+    "nose_radius_mm": 25.4,
+    "sphere_center_x_mm": 27.03011542088817,
+    "nominal_nose_tip_x_mm": 1.6301154208881705,
+    "sphere_cone_x_mm": 3.161922852926097,
+    "sphere_cone_r_mm": 8.687311640471988,
+    "cone_shoulder_x_mm": 22.50381776616031,
+    "cone_shoulder_r_mm": 61.8287311640472,
+    "shoulder_radius_mm": 2.54,
+    "shoulder_center_x_mm": 24.89063702295652,
+    "shoulder_center_r_mm": 60.96,
+    "body_radius_mm": 63.5,
+    "aft_x_mm": 268.13764,
+    "virtual_exit_x_mm": 2.441268805570889,
+    "virtual_exit_r_mm": 6.36778,
+    "throat_x_mm": 14.415425035402048,
+    "throat_r_mm": 3.16357
+  },
+  "profile": {
+    "input_vertices": 304,
+    "signed_area_mm2": 16227.02674952569,
+    "centroid_r_mm": 31.388255490995597,
+    "minimum_r_mm": 0.0,
+    "maximum_r_mm": 63.5,
+    "minimum_x_mm": 2.441268805570889,
+    "maximum_x_mm": 268.13764,
+    "simple_polygon": true,
+    "source_classes": {
+      "axis_closure": "RZ_NUMERICAL_CLOSURE",
+      "throat_jet_patch": "NASA_AS_BUILT_PLUS_DERIVED_X",
+      "nozzle_divergent_wall": "NASA_AS_BUILT_PLUS_PLACEMENT_ASSUMPTION",
+      "sphere_oml": "NOMINAL_PUBLIC_DATA_RECONSTRUCTION",
+      "cone_oml": "NASA_NOMINAL_PLUS_DERIVED_TANGENCY",
+      "shoulder_oml": "NASA_RADIUS_PLUS_DERIVED_TANGENCY",
+      "cylinder_oml": "NASA_DIMENSIONED",
+      "aft_cap": "ARTIFICIAL_IBM_CLOSURE"
+    },
+    "sphere_samples": 150,
+    "shoulder_samples": 150
+  },
+  "volume_cross_check": {
+    "analytic_axisymmetric_mm3": 3200265.4474298833,
+    "audited_OCC_mm3": 3200265.447429882,
+    "analytic_minus_OCC_mm3": 1.3969838619232178e-09,
+    "analytic_OCC_relative_difference": 4.36521246400085e-16,
+    "preview_polyline_mm3": 3200265.4242365733,
+    "polyline_OCC_relative_difference": 7.24730776209396e-09
+  },
+  "audit_coordinate_max_error_mm": 0.0,
+  "stl_section_cross_check": {
+    "source_facets": 353042,
+    "distance_metric_definition": "Maximum Euclidean distance from each unique endpoint of the positive-half y=0 prepared reconstructed SI-STL section to the analytic profile polyline. This is a one-sided section metric, not a global STL-surface/CAD Hausdorff error.",
+    "plane": "y=0",
+    "plane_tolerance_m": 1e-12,
+    "weld_tolerance_m": 1e-10,
+    "raw_segments": 1651,
+    "unique_segments": 1620,
+    "unique_vertices": 1620,
+    "connected_components": 1,
+    "minimum_degree": 2,
+    "maximum_degree": 2,
+    "non_degree_two_vertices": 0,
+    "coplanar_triangles": 0,
+    "positive_half_segments": 794,
+    "unique_positive_half_endpoints": 795,
+    "STL_endpoint_to_analytic_profile_max_mm": 0.00790861410000332,
+    "STL_endpoint_to_analytic_profile_rms_mm": 0.0022782565460016447
+  },
+  "outputs_sha256": {
+    "run165_axisymmetric_section_preview.dat": "ed90c6b238152055fd209d090259399fb2866f65f84352e6eb365b5319c440ef",
+    "run165_axisymmetric_section_profile.csv": "008f1a9260007e67d0b4f4e1cfdfddf4e1b730257af5f48e45b5fa4b781c4197",
+    "run165_axisymmetric_meridional_section.png": "2069f93a040f4eb3c48f2f101f9e4ab75fe3423985680cc3852f63213cf50ded",
+    "run165_axisymmetric_meridional_section.svg": "c8dd32c7df710e7ab3aca98c8fb466763d323ef44f7b5356f2143b6b66a6404e"
+  }
+}

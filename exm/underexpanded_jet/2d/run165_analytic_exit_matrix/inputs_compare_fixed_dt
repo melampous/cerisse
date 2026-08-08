@@ -1,0 +1,52 @@
+# Matched-time A/B: Run165 analytic-exit/no-IBM, uniform L1.
+# A fixed coarse dt keeps HLLC-MUSCL and AFD-HLLC-WENO snapshots synchronous.
+
+max_step = 200
+time_step = 4.0e-7
+
+cns.order_rk = -2
+cns.stages_rk = 2
+cns.lo_bc = 3 1
+cns.hi_bc = 2 1
+cns.nstep_screen_output = 1000
+cns.verbose = 0
+cns.record_stats = 0
+cns.do_reflux = 1
+cns.strict_positivity = 1
+cns.stage_positivity = 1
+cns.stage_positivity_verbose = 0
+cns.soft_positivity = 0
+cns.stage_state_diagnostics = 0
+
+cns.rz_pressure_split = 0
+cns.rz_euler_annular_average = 0
+cns.rz_euler_point_flux = 0
+
+geometry.is_periodic = 0 0
+geometry.coord_sys = 1
+geometry.prob_lo = 0.0 -0.20132769119442912
+geometry.prob_hi = 0.06792298666666667 0.002441268805570889
+
+amr.n_cell = 32 96
+amr.max_level = 3
+amr.ref_ratio = 2 2 2
+amr.regrid_int = 100000000 100000000 100000000
+amr.blocking_factor = 8 8 8 8
+amr.max_grid_size = 64 64 64 64
+amr.n_error_buf = 0
+amr.grid_eff = 1.0
+DistributionMapping.strategy = SFC
+
+prob.target_level = 1
+prob.jet_ramp_time = 1.0e-4
+
+amr.plot_files_output = 0
+amr.plot_per = -1.0
+amr.plot_int = 100000000
+amr.derive_plot_vars = pressure velocity temperature
+amr.v = 1
+
+amr.checkpoint_files_output = 0
+amr.check_int = 100000000
+
+amrex.the_arena_is_managed = 0

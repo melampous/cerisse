@@ -1,0 +1,60 @@
+# ============ Panda 2D axisym - x_fc profile sweep, L5-lip-only ============
+# Derived from m142_2d_L5/inputs. Domain, base grid, BCs, scheme and CFL are
+# byte-identical to the production case so the results stay comparable; only
+# the refinement depth/footprint, the diagnostics and the run length change.
+#
+# Run in two phases (same inputs file, overridden on the command line):
+#   phase 1  ./main2d.gnu.CUDA.ex inputs_L5lip cns.record_stats=0 stop_time=4.0e-4
+#   phase 2  ./main2d.gnu.CUDA.ex inputs_L5lip cns.record_stats=1 \
+#                amr.restart=./plot/chk?????  stop_time=8.0e-4
+# CNS.cpp:1515 zeroes the stats arrays AND time_stat_level on restart, so the
+# phase-2 average is a clean window over [4.0e-4, 8.0e-4] s with no startup
+# transient. main.cpp:96 writes a final plotfile at exit, so no periodic
+# plotfile output is needed.
+# ===========================================================================
+
+max_step  = 999999
+stop_time = 8.0e-4                 # overridden per phase
+
+cfl = 0.3
+cns.order_rk  = 3
+cns.stages_rk = 3
+cns.lo_bc = 3 1                    # r=0 axis ; z-low user BC (nozzle+flange)
+cns.hi_bc = 2 2                    # foextrap on r-max and z-max
+cns.nstep_screen_output = 200
+cns.verbose = 1
+
+geometry.is_periodic = 0 0
+geometry.coord_sys   = 1           # RZ axisymmetric
+geometry.prob_lo     = 0.0    0.0
+geometry.prob_hi     = 0.3048 0.8128     # 12 D_e x 32 D_e  (UNCHANGED)
+amr.n_cell           = 192 512           # base D_e/16      (UNCHANGED)
+
+# ---- refinement: max_level 5, finest 49.6 um, L5 forced at the lip only
+amr.max_level        = 5
+amr.ref_ratio        = 2 2 2 2 2
+amr.regrid_int       = 40                # was 20; L5 is static, sensor is coarse
+amr.blocking_factor  = 32 32 32 16 16 16 # was 32 everywhere -> less padding in
+                                         #   the thin lip band, while keeping
+                                         #   boxes large enough for the GPU
+amr.max_grid_size    = 256 256 256 256 256 256
+amr.n_error_buf      = 4 4 4 4 2         # was 8 8 8 8 8 8; the L5 zone is
+                                         #   forced, so it needs no halo
+amr.grid_eff         = 0.85              # was 0.75; tighter boxes
+amrex.the_arena_is_managed = 0
+
+# ---- output: main.cpp writes one plotfile at exit, so nothing periodic.
+amr.plot_files_output = 1
+amr.plot_file         = ./plot/plt
+amr.plot_int          = -1
+amr.derive_plot_vars  = pressure velocity temperature
+amr.v = 1
+amr.checkpoint_files_output = 1
+amr.check_int  = 2000
+amr.check_file = ./plot/chk
+
+# ---- diagnostics: the 32-probe block of the production case did a reduction
+#      every step and is not used by this study.
+cns.record_probe = 0
+cns.record_stats = 1               # overridden per phase
+cns.do_reflux    = 1

@@ -1,0 +1,4655 @@
+{
+  "analysis": "run165_amr_leaf_fluid_energy_history",
+  "gas_model": {
+    "gamma": 1.4,
+    "molecular_weight_kg_mol": 0.02896,
+    "R_J_kg_K": 287.1016097428605,
+    "cv_J_kg_K": 717.7540243571514,
+    "cp_J_kg_K": 1004.8556341000118
+  },
+  "selection": "AMR leaf cells with sld<0.5 and ghs<0.5",
+  "reference_total_temperature_K": 338.6666666666667,
+  "reference_total_enthalpy_deficit_proxy_note": "Integral rho*cp*max(T0_ref-T0,0)dV; diagnostic only, not a closed-domain conservation residual because Run165 has open boundaries.",
+  "results": [
+    {
+      "label": "step3400",
+      "plotfile": "/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_support_hook_repair_20260808/testC_final_source_chk03370_step3400/output/run165/plt03400",
+      "time_s": 0.000692160798846985,
+      "max_level": 2,
+      "domain_dimensions": [
+        256,
+        176,
+        176
+      ],
+      "global_leaf_fluid": {
+        "leaf_cells": 14682112,
+        "fluid_cells": 12591260,
+        "fluid_volume_m3": 0.08173226677685913,
+        "mass_kg": 0.004518623126305413,
+        "total_energy_J": 1016.9187425981411,
+        "kinetic_energy_J": 540.9661075023664,
+        "internal_energy_J": 475.95263509577455,
+        "nonfinite_cells": 0,
+        "rho_nonpositive_cells": 0,
+        "internal_energy_nonpositive_cells": 0,
+        "minimum_density_kg_m3": 0.0040842434059373,
+        "minimum_internal_energy_density_J_m3": 287.85386530650794,
+        "minimum_temperature_K": 21.937912657577858,
+        "minimum_total_temperature_K": 64.72986748216098,
+        "maximum_mach": 8.62077618143862,
+        "temperature_threshold_counts": {
+          "0.0": 0,
+          "5.0": 0,
+          "10.0": 0,
+          "12.0": 0,
+          "15.0": 0,
+          "20.0": 0,
+          "30.0": 37018,
+          "50.0": 358159,
+          "100.0": 5651280
+        },
+        "temperature_threshold_volumes_m3": {
+          "0.0": 0.0,
+          "5.0": 0.0,
+          "10.0": 0.0,
+          "12.0": 0.0,
+          "15.0": 0.0,
+          "20.0": 0.0,
+          "30.0": 4.4710159090909016e-05,
+          "50.0": 0.00018741877066115684,
+          "100.0": 0.049592924107437875
+        },
+        "total_temperature_threshold_counts": {
+          "0.0": 0,
+          "100.0": 1401766,
+          "150.0": 1461236,
+          "200.0": 1843637,
+          "250.0": 4546544,
+          "300.0": 6098672,
+          "330.0": 6787998
+        },
+        "total_temperature_threshold_volumes_m3": {
+          "0.0": 0.0,
+          "100.0": 0.013313340743801631,
+          "150.0": 0.01362279823140494,
+          "200.0": 0.014190957669421463,
+          "250.0": 0.024731268099173514,
+          "300.0": 0.038706666024793335,
+          "330.0": 0.041935413719008205
+        },
+        "reference_total_enthalpy_deficit_proxy_J": 340.39252682862195,
+        "internal_energy_fraction": 0.4680340868531501,
+        "kinetic_energy_fraction": 0.5319659131468498
+      },
+      "by_level_leaf_fluid": {
+        "0": {
+          "leaf_cells": 7011840,
+          "fluid_cells": 6968832,
+          "fluid_volume_m3": 0.07464137414876022,
+          "mass_kg": 0.003973978129293588,
+          "total_energy_J": 890.6077255676579,
+          "kinetic_energy_J": 488.1371114691813,
+          "internal_energy_J": 402.4706140984768,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.01911521585200493,
+          "minimum_internal_energy_density_J_m3": 1336.451675553928,
+          "minimum_temperature_K": 64.72443010310032,
+          "minimum_total_temperature_K": 64.72986748216108,
+          "maximum_mach": 4.600000101040325,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 0,
+            "50.0": 0,
+            "100.0": 4530784
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 0.0,
+            "50.0": 0.0,
+            "100.0": 0.04852806664462802
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 1220307,
+            "150.0": 1244831,
+            "200.0": 1250826,
+            "250.0": 1989368,
+            "300.0": 3258842,
+            "330.0": 3505321
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.013070395636363613,
+            "150.0": 0.013333065917355351,
+            "200.0": 0.01339727682644626,
+            "250.0": 0.021307610975206573,
+            "300.0": 0.03490462175206606,
+            "330.0": 0.03754459517355365
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 301.3021284423767,
+          "internal_energy_fraction": 0.4519055949598338,
+          "kinetic_energy_fraction": 0.5480944050401665
+        },
+        "1": {
+          "leaf_cells": 7297536,
+          "fluid_cells": 5249692,
+          "fluid_volume_m3": 0.00702851325619835,
+          "mass_kg": 0.0005268586861961894,
+          "total_energy_J": 120.41960563849631,
+          "kinetic_energy_J": 47.67617419936159,
+          "internal_energy_J": 72.74343143913485,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.0040842434059373,
+          "minimum_internal_energy_density_J_m3": 287.85386530650794,
+          "minimum_temperature_K": 21.937912657577858,
+          "minimum_total_temperature_K": 64.72986748216098,
+          "maximum_mach": 8.62077618143862,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 32877,
+            "50.0": 108818,
+            "100.0": 748908
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 4.4017140495867695e-05,
+            "50.0": 0.00014569021487603284,
+            "100.0": 0.001002670214876031
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 181459,
+            "150.0": 216405,
+            "200.0": 592811,
+            "250.0": 2557176,
+            "300.0": 2839794,
+            "330.0": 3279117
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.00024294510743801614,
+            "150.0": 0.00028973231404958637,
+            "200.0": 0.0007936808429752055,
+            "250.0": 0.00342365712396694,
+            "300.0": 0.0038020382479338815,
+            "330.0": 0.004390222760330573
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 39.088739407119704,
+          "internal_energy_fraction": 0.6040829568692748,
+          "kinetic_energy_fraction": 0.3959170431307263
+        },
+        "2": {
+          "leaf_cells": 372736,
+          "fluid_cells": 372736,
+          "fluid_volume_m3": 6.237937190082636e-05,
+          "mass_kg": 1.778631081563526e-05,
+          "total_energy_J": 5.8914113919867654,
+          "kinetic_energy_J": 5.152821833823354,
+          "internal_energy_J": 0.7385895581634122,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.07799536791613888,
+          "minimum_internal_energy_density_J_m3": 1633.6709892274484,
+          "minimum_temperature_K": 28.430940845072666,
+          "minimum_total_temperature_K": 291.3035076825584,
+          "maximum_mach": 7.469912182051718,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 4141,
+            "50.0": 249341,
+            "100.0": 371588
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 6.930185950413211e-07,
+            "50.0": 4.1728555785123894e-05,
+            "100.0": 6.218724793388422e-05
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 0,
+            "150.0": 0,
+            "200.0": 0,
+            "250.0": 0,
+            "300.0": 36,
+            "330.0": 3560
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.0,
+            "150.0": 0.0,
+            "200.0": 0.0,
+            "250.0": 0.0,
+            "300.0": 6.024793388429743e-09,
+            "330.0": 5.957851239669412e-07
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 0.0016589791255121704,
+          "internal_energy_fraction": 0.1253671673935398,
+          "kinetic_energy_fraction": 0.8746328326064603
+        }
+      },
+      "regions_leaf_fluid": {
+        "jet_interaction": {
+          "leaf_cells": 1826324,
+          "fluid_cells": 1826324,
+          "fluid_volume_m3": 0.0027431125289256154,
+          "mass_kg": 0.0001985626356139292,
+          "total_energy_J": 59.650851961712995,
+          "kinetic_energy_J": 33.82784517400363,
+          "internal_energy_J": 25.823006787709364,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.011827415876259083,
+          "minimum_internal_energy_density_J_m3": 582.3644575081216,
+          "minimum_temperature_K": 21.937912657577858,
+          "minimum_total_temperature_K": 104.82646799611113,
+          "maximum_mach": 8.62077618143862,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 37018,
+            "50.0": 358159,
+            "100.0": 794670
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 4.4710159090909016e-05,
+            "50.0": 0.00018741877066115684,
+            "100.0": 0.0013632346859504105
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 0,
+            "150.0": 13683,
+            "200.0": 53395,
+            "250.0": 178919,
+            "300.0": 368456,
+            "330.0": 439765
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.0,
+            "150.0": 1.8319388429752042e-05,
+            "200.0": 7.148752066115693e-05,
+            "250.0": 0.00023954444628099128,
+            "300.0": 0.0004932625537190073,
+            "330.0": 0.0005846057851239665
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 5.635734560803199,
+          "internal_energy_fraction": 0.4329025644811227,
+          "kinetic_energy_fraction": 0.5670974355188773
+        },
+        "near_nozzle": {
+          "leaf_cells": 26740,
+          "fluid_cells": 26740,
+          "fluid_volume_m3": 3.580066115702474e-05,
+          "mass_kg": 1.4820549158467927e-05,
+          "total_energy_J": 4.0575777007644085,
+          "kinetic_energy_J": 2.222695319813306,
+          "internal_energy_J": 1.8348823809511023,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.040767164003799636,
+          "minimum_internal_energy_density_J_m3": 2546.806026395591,
+          "minimum_temperature_K": 80.86476897599337,
+          "minimum_total_temperature_K": 151.21830083151286,
+          "maximum_mach": 3.9054574066908874,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 0,
+            "50.0": 0,
+            "100.0": 1186
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 0.0,
+            "50.0": 0.0,
+            "100.0": 1.5878677685950388e-06
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 0,
+            "150.0": 0,
+            "200.0": 6726,
+            "250.0": 11674,
+            "300.0": 23539,
+            "330.0": 24500
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.0,
+            "150.0": 0.0,
+            "200.0": 9.005057851239655e-06,
+            "250.0": 1.562965289256196e-05,
+            "300.0": 3.151502479338838e-05,
+            "330.0": 3.2801652892561934e-05
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 0.3137589719940747,
+          "internal_energy_fraction": 0.4522112738852612,
+          "kinetic_energy_fraction": 0.5477887261147387
+        },
+        "forebody_nearfield": {
+          "leaf_cells": 1065464,
+          "fluid_cells": 1065464,
+          "fluid_volume_m3": 0.0013407173553718979,
+          "mass_kg": 9.234120510953353e-05,
+          "total_energy_J": 25.034176766542807,
+          "kinetic_energy_J": 11.225989143104101,
+          "internal_energy_J": 13.808187623438691,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.0040842434059373,
+          "minimum_internal_energy_density_J_m3": 287.85386530650794,
+          "minimum_temperature_K": 40.52892006514799,
+          "minimum_total_temperature_K": 151.00978181227936,
+          "maximum_mach": 6.061860245885806,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 0,
+            "50.0": 3412,
+            "100.0": 89230
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 0.0,
+            "50.0": 2.2357004132231374e-06,
+            "100.0": 3.5038190082644576e-05
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 0,
+            "150.0": 0,
+            "200.0": 50530,
+            "250.0": 148695,
+            "300.0": 318690,
+            "330.0": 495236
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.0,
+            "150.0": 0.0,
+            "200.0": 6.765173553718997e-05,
+            "250.0": 0.00019907925619834678,
+            "300.0": 0.00042663369421487547,
+            "330.0": 0.0006588727438016523
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 2.695702292502734,
+          "internal_energy_fraction": 0.5515734650357184,
+          "kinetic_energy_fraction": 0.4484265349642811
+        },
+        "failure_probe_5mm": {
+          "leaf_cells": 237,
+          "fluid_cells": 237,
+          "fluid_volume_m3": 3.1730578512396643e-07,
+          "mass_kg": 3.121989562939645e-07,
+          "total_energy_J": 0.09276648677907924,
+          "kinetic_energy_J": 0.06082061476303014,
+          "internal_energy_J": 0.03194587201604911,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.04173126825576621,
+          "minimum_internal_energy_density_J_m3": 2784.9745375928646,
+          "minimum_temperature_K": 92.97881547651407,
+          "minimum_total_temperature_K": 155.0009572579389,
+          "maximum_mach": 3.388439466520109,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 0,
+            "50.0": 0,
+            "100.0": 7
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 0.0,
+            "50.0": 0.0,
+            "100.0": 9.371900826446265e-09
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 0,
+            "150.0": 0,
+            "200.0": 41,
+            "250.0": 86,
+            "300.0": 120,
+            "330.0": 160
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.0,
+            "150.0": 0.0,
+            "200.0": 5.4892561983470986e-08,
+            "250.0": 1.1514049586776841e-07,
+            "300.0": 1.6066115702479313e-07,
+            "330.0": 2.1421487603305752e-07
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 0.0021457962964280177,
+          "internal_energy_fraction": 0.3443686737013906,
+          "kinetic_energy_fraction": 0.6556313262986094
+        },
+        "failure_probe_10mm": {
+          "leaf_cells": 2047,
+          "fluid_cells": 2047,
+          "fluid_volume_m3": 2.7406115702479294e-06,
+          "mass_kg": 4.1461845674479515e-06,
+          "total_energy_J": 1.237082629326482,
+          "kinetic_energy_J": 0.80183132813379,
+          "internal_energy_J": 0.43525130119269206,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.040767164003799636,
+          "minimum_internal_energy_density_J_m3": 2784.9745375928646,
+          "minimum_temperature_K": 78.21653047536041,
+          "minimum_total_temperature_K": 155.0009572579389,
+          "maximum_mach": 4.1596830695849345,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 0,
+            "50.0": 0,
+            "100.0": 277
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 0.0,
+            "50.0": 0.0,
+            "100.0": 3.708595041322308e-07
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 0,
+            "150.0": 0,
+            "200.0": 444,
+            "250.0": 685,
+            "300.0": 961,
+            "330.0": 1182
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.0,
+            "150.0": 0.0,
+            "200.0": 5.944462809917346e-07,
+            "250.0": 9.171074380165275e-07,
+            "300.0": 1.2866280991735518e-06,
+            "330.0": 1.5825123966942123e-06
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 0.02016604441355166,
+          "internal_energy_fraction": 0.3518368869423545,
+          "kinetic_energy_fraction": 0.6481631130576455
+        }
+      },
+      "failure_probe_m": [
+        0.00290625,
+        0.005181818182,
+        -0.007363636364
+      ],
+      "nearest_failure_probe_leaf_fluid_cell": {
+        "distance_m": 0.0009071401296915768,
+        "level": 1,
+        "grid_id": 156,
+        "local_index": [
+          5,
+          36,
+          16
+        ],
+        "position_m": [
+          0.0031874999999999968,
+          0.004909090909090828,
+          -0.008181818181818252
+        ],
+        "density_kg_m3": 0.08147849536115412,
+        "total_energy_density_J_m3": 12270.416619255297,
+        "kinetic_energy_density_J_m3": 6184.341104542544,
+        "internal_energy_density_J_m3": 6086.075514712753,
+        "temperature_K": 104.06835746871442,
+        "total_temperature_K": 179.60310175274725,
+        "x_velocity_m_s": 200.68747196930443,
+        "y_velocity_m_s": 201.25585330957173,
+        "z_velocity_m_s": -266.5026206839885,
+        "speed_m_s": 389.6190790095219,
+        "mach": 1.9050177816305147,
+        "sld": 0.0,
+        "ghs": 0.0
+      },
+      "lowest_temperature_cells": [
+        {
+          "level": 1,
+          "grid_id": 104,
+          "local_index": [
+            26,
+            7,
+            23
+          ],
+          "position_m": [
+            -0.05418750000000002,
+            0.025636363636363544,
+            -0.02672727272727278
+          ],
+          "density_kg_m3": 0.038624681717023594,
+          "total_energy_density_J_m3": 13263.898392177658,
+          "kinetic_energy_density_J_m3": 12655.713184537466,
+          "internal_energy_density_J_m3": 608.185207640192,
+          "temperature_K": 21.937912657577858,
+          "total_temperature_K": 348.0133146121485,
+          "x_velocity_m_s": -671.4889820065675,
+          "y_velocity_m_s": 313.0122156839445,
+          "z_velocity_m_s": -326.25650869731965,
+          "speed_m_s": 809.51677536105,
+          "mach": 8.62077618143862,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 103,
+          "local_index": [
+            25,
+            23,
+            23
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            -0.02672727272727278,
+            -0.02672727272727278
+          ],
+          "density_kg_m3": 0.036836452496232804,
+          "total_energy_density_J_m3": 12641.638437552116,
+          "kinetic_energy_density_J_m3": 12059.273980043994,
+          "internal_energy_density_J_m3": 582.3644575081216,
+          "temperature_K": 22.02629371596839,
+          "total_temperature_K": 347.8177501303807,
+          "x_velocity_m_s": -672.4434540363128,
+          "y_velocity_m_s": -318.1329643394299,
+          "z_velocity_m_s": -318.3676792070162,
+          "speed_m_s": 809.1642361346313,
+          "mach": 8.59971650444028,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 158,
+          "local_index": [
+            25,
+            22,
+            46
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            -0.02781818181818187,
+            0.024545454545454454
+          ],
+          "density_kg_m3": 0.03763071400698179,
+          "total_energy_density_J_m3": 12960.747851310642,
+          "kinetic_energy_density_J_m3": 12365.460632353712,
+          "internal_energy_density_J_m3": 595.2872189569298,
+          "temperature_K": 22.03984131215831,
+          "total_temperature_K": 349.05220179247544,
+          "x_velocity_m_s": -677.3037116617484,
+          "y_velocity_m_s": -334.1131850712785,
+          "z_velocity_m_s": 294.66673960378716,
+          "speed_m_s": 810.6789905369334,
+          "mach": 8.613166742278331,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 159,
+          "local_index": [
+            26,
+            8,
+            0
+          ],
+          "position_m": [
+            -0.05418750000000002,
+            0.026727272727272634,
+            -0.025636363636363693
+          ],
+          "density_kg_m3": 0.0392955225426523,
+          "total_energy_density_J_m3": 13501.780167532957,
+          "kinetic_energy_density_J_m3": 12879.456502100467,
+          "internal_energy_density_J_m3": 622.3236654324901,
+          "temperature_K": 22.064678913022085,
+          "total_temperature_K": 348.23977313553786,
+          "x_velocity_m_s": -672.2863794296053,
+          "y_velocity_m_s": 327.25787092760527,
+          "z_velocity_m_s": -310.5657292982566,
+          "speed_m_s": 809.6405142192393,
+          "mach": 8.597290357080357,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 103,
+          "local_index": [
+            25,
+            24,
+            22
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            -0.02563636363636369,
+            -0.02781818181818187
+          ],
+          "density_kg_m3": 0.03736616083914404,
+          "total_energy_density_J_m3": 12835.732712812684,
+          "kinetic_energy_density_J_m3": 12243.320477036772,
+          "internal_energy_density_J_m3": 592.4122357759115,
+          "temperature_K": 22.088687185462778,
+          "total_temperature_K": 348.1633597539043,
+          "x_velocity_m_s": -673.375048358374,
+          "y_velocity_m_s": -303.1185090683045,
+          "z_velocity_m_s": -331.66422394342703,
+          "speed_m_s": 809.5158699713243,
+          "mach": 8.591294039807956,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 103,
+          "local_index": [
+            25,
+            26,
+            21
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            -0.02345454545454551,
+            -0.02890909090909096
+          ],
+          "density_kg_m3": 0.03784235393267933,
+          "total_energy_density_J_m3": 13034.02226959818,
+          "kinetic_energy_density_J_m3": 12434.05921605189,
+          "internal_energy_density_J_m3": 599.9630535462893,
+          "temperature_K": 22.08872901735984,
+          "total_temperature_K": 349.07620288375267,
+          "x_velocity_m_s": -676.3152967932991,
+          "y_velocity_m_s": -277.94793886554726,
+          "z_velocity_m_s": -349.9899618465309,
+          "speed_m_s": 810.6481424080058,
+          "mach": 8.60330256373212,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 187,
+          "local_index": [
+            25,
+            0,
+            0
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            -0.025636363636363693,
+            0.026727272727272634
+          ],
+          "density_kg_m3": 0.03789803405718712,
+          "total_energy_density_J_m3": 13049.767082308594,
+          "kinetic_energy_density_J_m3": 12448.08795253967,
+          "internal_energy_density_J_m3": 601.6791297689233,
+          "temperature_K": 22.11936369896732,
+          "total_temperature_K": 348.99480652927394,
+          "x_velocity_m_s": -678.3459517165135,
+          "y_velocity_m_s": -305.0496655682615,
+          "z_velocity_m_s": 322.0508222011694,
+          "speed_m_s": 810.509260128433,
+          "mach": 8.595869917973767,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 158,
+          "local_index": [
+            25,
+            23,
+            47
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            -0.02672727272727278,
+            0.02563636363636354
+          ],
+          "density_kg_m3": 0.03697102200624866,
+          "total_energy_density_J_m3": 12743.916325096792,
+          "kinetic_energy_density_J_m3": 12156.920460685531,
+          "internal_energy_density_J_m3": 586.9958644112612,
+          "temperature_K": 22.120653305535612,
+          "total_temperature_K": 349.35467301988774,
+          "x_velocity_m_s": -677.54342068372,
+          "y_velocity_m_s": -320.56148401466845,
+          "z_velocity_m_s": 309.5499068209184,
+          "speed_m_s": 810.9536958164271,
+          "mach": 8.600332683007503,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 159,
+          "local_index": [
+            26,
+            8,
+            47
+          ],
+          "position_m": [
+            -0.05418750000000002,
+            0.026727272727272634,
+            0.02563636363636354
+          ],
+          "density_kg_m3": 0.03923830160452118,
+          "total_energy_density_J_m3": 13490.039517773363,
+          "kinetic_energy_density_J_m3": 12862.990456037693,
+          "internal_energy_density_J_m3": 627.04906173567,
+          "temperature_K": 22.26464039553836,
+          "total_temperature_K": 348.4977790664184,
+          "x_velocity_m_s": -674.1804847481286,
+          "y_velocity_m_s": 323.91039947167417,
+          "z_velocity_m_s": 310.1566409832414,
+          "speed_m_s": 809.7125507531227,
+          "mach": 8.559358108212592,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 103,
+          "local_index": [
+            27,
+            24,
+            23
+          ],
+          "position_m": [
+            -0.053062500000000026,
+            -0.02563636363636369,
+            -0.02672727272727278
+          ],
+          "density_kg_m3": 0.038443057406879165,
+          "total_energy_density_J_m3": 13189.854811284697,
+          "kinetic_energy_density_J_m3": 12571.880985026246,
+          "internal_energy_density_J_m3": 617.9738262584506,
+          "temperature_K": 22.396312824426442,
+          "total_temperature_K": 347.84211116007816,
+          "x_velocity_m_s": -669.408910913184,
+          "y_velocity_m_s": -313.3519449759371,
+          "z_velocity_m_s": -328.2595873288911,
+          "speed_m_s": 808.7348688559878,
+          "mach": 8.523855409955637,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 187,
+          "local_index": [
+            26,
+            47,
+            0
+          ],
+          "position_m": [
+            -0.05418750000000002,
+            0.02563636363636354,
+            0.026727272727272634
+          ],
+          "density_kg_m3": 0.03961408881181088,
+          "total_energy_density_J_m3": 13614.80383885159,
+          "kinetic_energy_density_J_m3": 12977.71322849563,
+          "internal_energy_density_J_m3": 637.090610355961,
+          "temperature_K": 22.40659669774383,
+          "total_temperature_K": 348.4270376154313,
+          "x_velocity_m_s": -674.5873312945346,
+          "y_velocity_m_s": 309.06868046679847,
+          "z_velocity_m_s": 323.4430969849973,
+          "speed_m_s": 809.4485491838357,
+          "mach": 8.529419383039855,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 187,
+          "local_index": [
+            25,
+            2,
+            1
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            -0.023454545454545513,
+            0.027818181818181725
+          ],
+          "density_kg_m3": 0.03927669655386452,
+          "total_energy_density_J_m3": 13534.740094200055,
+          "kinetic_energy_density_J_m3": 12902.274301039954,
+          "internal_energy_density_J_m3": 632.4657931601014,
+          "temperature_K": 22.435019537392897,
+          "total_temperature_K": 349.3445978340414,
+          "x_velocity_m_s": -681.9581189029611,
+          "y_velocity_m_s": -279.5257209078313,
+          "z_velocity_m_s": 337.33122980030214,
+          "speed_m_s": 810.5515795958282,
+          "mach": 8.535630347354886,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 103,
+          "local_index": [
+            26,
+            25,
+            22
+          ],
+          "position_m": [
+            -0.05418750000000002,
+            -0.0245454545454546,
+            -0.02781818181818187
+          ],
+          "density_kg_m3": 0.03782106515475536,
+          "total_energy_density_J_m3": 13006.425467929977,
+          "kinetic_energy_density_J_m3": 12394.539999554489,
+          "internal_energy_density_J_m3": 611.8854683754889,
+          "temperature_K": 22.5403547749677,
+          "total_temperature_K": 348.6720333578573,
+          "x_velocity_m_s": -673.8467756556125,
+          "y_velocity_m_s": -294.56895079063116,
+          "z_velocity_m_s": -338.5116918714374,
+          "speed_m_s": 809.5866286970293,
+          "mach": 8.505524920566417,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 158,
+          "local_index": [
+            26,
+            23,
+            47
+          ],
+          "position_m": [
+            -0.05418750000000002,
+            -0.02672727272727278,
+            0.02563636363636354
+          ],
+          "density_kg_m3": 0.03974492411863656,
+          "total_energy_density_J_m3": 13646.563477910793,
+          "kinetic_energy_density_J_m3": 13002.325617562536,
+          "internal_energy_density_J_m3": 644.2378603482575,
+          "temperature_K": 22.583379639588436,
+          "total_temperature_K": 348.14686845524886,
+          "x_velocity_m_s": -676.2365491806954,
+          "y_velocity_m_s": -319.53181160071784,
+          "z_velocity_m_s": 308.04571562463474,
+          "speed_m_s": 808.8810864319582,
+          "mach": 8.490013511804355,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 104,
+          "local_index": [
+            25,
+            6,
+            22
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            0.024545454545454454,
+            -0.02781818181818187
+          ],
+          "density_kg_m3": 0.038584024189508105,
+          "total_energy_density_J_m3": 13242.359205696994,
+          "kinetic_energy_density_J_m3": 12616.842983731682,
+          "internal_energy_density_J_m3": 625.5162219653121,
+          "temperature_K": 22.586837099172474,
+          "total_temperature_K": 348.00328876896504,
+          "x_velocity_m_s": -674.1606721158195,
+          "y_velocity_m_s": 293.33832645463286,
+          "z_velocity_m_s": -336.828033547673,
+          "speed_m_s": 808.6984047087335,
+          "mach": 8.487446406308512,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 158,
+          "local_index": [
+            27,
+            23,
+            46
+          ],
+          "position_m": [
+            -0.053062500000000026,
+            -0.02672727272727278,
+            0.024545454545454454
+          ],
+          "density_kg_m3": 0.038838803224222264,
+          "total_energy_density_J_m3": 13338.09713169145,
+          "kinetic_energy_density_J_m3": 12708.202902300556,
+          "internal_energy_density_J_m3": 629.8942293908931,
+          "temperature_K": 22.595718434899076,
+          "total_temperature_K": 348.21838558334724,
+          "x_velocity_m_s": -672.9700665049979,
+          "y_velocity_m_s": -330.33697063097844,
+          "z_velocity_m_s": 303.9676278359073,
+          "speed_m_s": 808.9545990657213,
+          "mach": 8.4884665112546,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 158,
+          "local_index": [
+            27,
+            24,
+            47
+          ],
+          "position_m": [
+            -0.053062500000000026,
+            -0.02563636363636369,
+            0.02563636363636354
+          ],
+          "density_kg_m3": 0.03888324689414992,
+          "total_energy_density_J_m3": 13353.124081049007,
+          "kinetic_energy_density_J_m3": 12721.403807432625,
+          "internal_energy_density_J_m3": 631.7202736163817,
+          "temperature_K": 22.635320889067525,
+          "total_temperature_K": 348.2236609084002,
+          "x_velocity_m_s": -673.5364153313831,
+          "y_velocity_m_s": -315.1460313992719,
+          "z_velocity_m_s": 318.3869216020551,
+          "speed_m_s": 808.9119579604405,
+          "mach": 8.480590559700394,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 103,
+          "local_index": [
+            26,
+            24,
+            23
+          ],
+          "position_m": [
+            -0.05418750000000002,
+            -0.02563636363636369,
+            -0.02672727272727278
+          ],
+          "density_kg_m3": 0.037074669906380434,
+          "total_energy_density_J_m3": 12769.126477767875,
+          "kinetic_energy_density_J_m3": 12166.649519299743,
+          "internal_energy_density_J_m3": 602.4769584681326,
+          "temperature_K": 22.6405781559985,
+          "total_temperature_K": 349.2209151021573,
+          "x_velocity_m_s": -673.7810737858473,
+          "y_velocity_m_s": -310.59095320125834,
+          "z_velocity_m_s": -325.3989974335814,
+          "speed_m_s": 810.1433102440924,
+          "mach": 8.49251381649957,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 187,
+          "local_index": [
+            26,
+            45,
+            1
+          ],
+          "position_m": [
+            -0.05418750000000002,
+            0.02345454545454536,
+            0.027818181818181725
+          ],
+          "density_kg_m3": 0.04023553888001074,
+          "total_energy_density_J_m3": 13850.073931604471,
+          "kinetic_energy_density_J_m3": 13195.4845460576,
+          "internal_energy_density_J_m3": 654.5893855468712,
+          "temperature_K": 22.6664496688363,
+          "total_temperature_K": 349.03766466585927,
+          "x_velocity_m_s": -677.7780614147066,
+          "y_velocity_m_s": 283.95505885296166,
+          "z_velocity_m_s": 340.43844144335816,
+          "speed_m_s": 809.8838857488458,
+          "mach": 8.48494782541571,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 158,
+          "local_index": [
+            25,
+            21,
+            45
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            -0.02890909090909096,
+            0.02345454545454536
+          ],
+          "density_kg_m3": 0.03999838748174167,
+          "total_energy_density_J_m3": 13763.014736325069,
+          "kinetic_energy_density_J_m3": 13112.028262721553,
+          "internal_energy_density_J_m3": 650.9864736035161,
+          "temperature_K": 22.675341961124392,
+          "total_temperature_K": 348.90521080192997,
+          "x_velocity_m_s": -678.8153104196216,
+          "y_velocity_m_s": -343.05495067840417,
+          "z_velocity_m_s": 277.7605418120676,
+          "speed_m_s": 809.7084928743077,
+          "mach": 8.48144676049476,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 158,
+          "local_index": [
+            25,
+            21,
+            2
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            -0.02890909090909096,
+            -0.023454545454545513
+          ],
+          "density_kg_m3": 0.039897906720091726,
+          "total_energy_density_J_m3": 13735.831402275007,
+          "kinetic_energy_density_J_m3": 13086.438919699684,
+          "internal_energy_density_J_m3": 649.3924825753238,
+          "temperature_K": 22.676786437989513,
+          "total_temperature_K": 349.0899765442655,
+          "x_velocity_m_s": -677.4751230706867,
+          "y_velocity_m_s": -346.4695974842639,
+          "z_velocity_m_s": -277.457279387565,
+          "speed_m_s": 809.9359642871152,
+          "mach": 8.483559245564567,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 158,
+          "local_index": [
+            26,
+            23,
+            0
+          ],
+          "position_m": [
+            -0.05418750000000002,
+            -0.02672727272727278,
+            -0.025636363636363693
+          ],
+          "density_kg_m3": 0.0374497813542102,
+          "total_energy_density_J_m3": 12893.39232429626,
+          "kinetic_energy_density_J_m3": 12283.712717796197,
+          "internal_energy_density_J_m3": 609.6796065000617,
+          "temperature_K": 22.681759731456637,
+          "total_temperature_K": 349.1017087211061,
+          "x_velocity_m_s": -673.9723858191807,
+          "y_velocity_m_s": -324.9855975328108,
+          "z_velocity_m_s": -310.08939710867054,
+          "speed_m_s": 809.9443497239644,
+          "mach": 8.482716947427912,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 158,
+          "local_index": [
+            25,
+            20,
+            43
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            -0.03000000000000005,
+            0.02127272727272718
+          ],
+          "density_kg_m3": 0.04134816364355858,
+          "total_energy_density_J_m3": 14260.044751876056,
+          "kinetic_energy_density_J_m3": 13586.304012973507,
+          "internal_energy_density_J_m3": 673.7407389025484,
+          "temperature_K": 22.701834114235243,
+          "total_temperature_K": 349.6970735489378,
+          "x_velocity_m_s": -681.3464227946037,
+          "y_velocity_m_s": -358.8916027308491,
+          "z_velocity_m_s": 253.23879436999007,
+          "speed_m_s": 810.6577683213098,
+          "mach": 8.486434121573923,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 103,
+          "local_index": [
+            25,
+            25,
+            22
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            -0.0245454545454546,
+            -0.02781818181818187
+          ],
+          "density_kg_m3": 0.03697902069326645,
+          "total_energy_density_J_m3": 12739.59956489182,
+          "kinetic_energy_density_J_m3": 12136.69266272087,
+          "internal_energy_density_J_m3": 602.9069021709493,
+          "temperature_K": 22.71533854800414,
+          "total_temperature_K": 349.33421227233663,
+          "x_velocity_m_s": -676.2533491241795,
+          "y_velocity_m_s": -292.5521971854408,
+          "z_velocity_m_s": -336.9039190197899,
+          "speed_m_s": 810.1911076595395,
+          "mach": 8.479027301987392,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 158,
+          "local_index": [
+            25,
+            22,
+            1
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            -0.02781818181818187,
+            -0.024545454545454603
+          ],
+          "density_kg_m3": 0.03759572178486102,
+          "total_energy_density_J_m3": 12954.83505049143,
+          "kinetic_energy_density_J_m3": 12341.861469456879,
+          "internal_energy_density_J_m3": 612.9735810345519,
+          "temperature_K": 22.715782078618318,
+          "total_temperature_K": 349.40783381145,
+          "x_velocity_m_s": -676.4157017296284,
+          "y_velocity_m_s": -336.41300324699824,
+          "z_velocity_m_s": -292.9928110019198,
+          "speed_m_s": 810.281863056836,
+          "mach": 8.479894312382928,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 158,
+          "local_index": [
+            27,
+            23,
+            0
+          ],
+          "position_m": [
+            -0.053062500000000026,
+            -0.02672727272727278,
+            -0.025636363636363693
+          ],
+          "density_kg_m3": 0.0395326072319187,
+          "total_energy_density_J_m3": 13580.547286292634,
+          "kinetic_energy_density_J_m3": 12935.836303600065,
+          "internal_energy_density_J_m3": 644.7109826925698,
+          "temperature_K": 22.72134178854278,
+          "total_temperature_K": 348.35956891121833,
+          "x_velocity_m_s": -671.1033877410114,
+          "y_velocity_m_s": -326.5642652128026,
+          "z_velocity_m_s": -312.1135018766086,
+          "speed_m_s": 808.973926900688,
+          "mach": 8.465170418948695,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 104,
+          "local_index": [
+            25,
+            4,
+            21
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            0.022363636363636273,
+            -0.02890909090909096
+          ],
+          "density_kg_m3": 0.04085641149680466,
+          "total_energy_density_J_m3": 14040.707773532298,
+          "kinetic_energy_density_J_m3": 13373.680887686467,
+          "internal_energy_density_J_m3": 667.0268858458312,
+          "temperature_K": 22.74612828482522,
+          "total_temperature_K": 348.49810916625546,
+          "x_velocity_m_s": -678.2010352197146,
+          "y_velocity_m_s": 266.8809124315801,
+          "z_velocity_m_s": -351.4048392132409,
+          "speed_m_s": 809.1152122015066,
+          "mach": 8.462034521561675,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 159,
+          "local_index": [
+            25,
+            10,
+            3
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            0.028909090909090815,
+            -0.022363636363636422
+          ],
+          "density_kg_m3": 0.04156923449948554,
+          "total_energy_density_J_m3": 14267.584327638151,
+          "kinetic_energy_density_J_m3": 13588.77429896878,
+          "internal_energy_density_J_m3": 678.8100286693716,
+          "temperature_K": 22.751005042098225,
+          "total_temperature_K": 348.0663778842266,
+          "x_velocity_m_s": -678.0643224542415,
+          "y_velocity_m_s": 350.80714044256104,
+          "z_velocity_m_s": -266.37022233857346,
+          "speed_m_s": 808.5727985280715,
+          "mach": 8.455455379244661,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 158,
+          "local_index": [
+            25,
+            21,
+            44
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            -0.02890909090909096,
+            0.022363636363636273
+          ],
+          "density_kg_m3": 0.03919694186468754,
+          "total_energy_density_J_m3": 13507.835626428783,
+          "kinetic_energy_density_J_m3": 12867.41370050948,
+          "internal_energy_density_J_m3": 640.4219259193032,
+          "temperature_K": 22.763465066825574,
+          "total_temperature_K": 349.4531390562291,
+          "x_velocity_m_s": -680.0862502368313,
+          "y_velocity_m_s": -349.35203391336626,
+          "z_velocity_m_s": 268.30536271289225,
+          "speed_m_s": 810.2789143382028,
+          "mach": 8.47097734540752,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 159,
+          "local_index": [
+            28,
+            7,
+            0
+          ],
+          "position_m": [
+            -0.05193750000000002,
+            0.025636363636363544,
+            -0.025636363636363693
+          ],
+          "density_kg_m3": 0.04063892076612716,
+          "total_energy_density_J_m3": 13913.124841084784,
+          "kinetic_energy_density_J_m3": 13248.791178785934,
+          "internal_energy_density_J_m3": 664.33366229885,
+          "temperature_K": 22.775528151634738,
+          "total_temperature_K": 347.2125581647547,
+          "x_velocity_m_s": -667.3872221834496,
+          "y_velocity_m_s": 322.43935806796463,
+          "z_velocity_m_s": -320.39336927235905,
+          "speed_m_s": 807.4804982404941,
+          "mach": 8.439485713018762,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 158,
+          "local_index": [
+            25,
+            22,
+            0
+          ],
+          "position_m": [
+            -0.05531250000000002,
+            -0.02781818181818187,
+            -0.025636363636363693
+          ],
+          "density_kg_m3": 0.038835692558954256,
+          "total_energy_density_J_m3": 13332.396183154793,
+          "kinetic_energy_density_J_m3": 12697.346310948236,
+          "internal_energy_density_J_m3": 635.0498722065568,
+          "temperature_K": 22.782487591179404,
+          "total_temperature_K": 348.15303544725094,
+          "x_velocity_m_s": -674.8682418568355,
+          "y_velocity_m_s": -328.12315459377163,
+          "z_velocity_m_s": -301.3119777228538,
+          "speed_m_s": 808.6413644915538,
+          "mach": 8.45032768500572,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 187,
+          "local_index": [
+            24,
+            5,
+            3
+          ],
+          "position_m": [
+            -0.05643750000000002,
+            -0.02018181818181824,
+            0.029999999999999905
+          ],
+          "density_kg_m3": 0.042234211687097185,
+          "total_energy_density_J_m3": 14556.461006679312,
+          "kinetic_energy_density_J_m3": 13865.646271390518,
+          "internal_energy_density_J_m3": 690.8147352887936,
+          "temperature_K": 22.788805619982814,
+          "total_temperature_K": 349.50604618176123,
+          "x_velocity_m_s": -687.3898554496963,
+          "y_velocity_m_s": -237.80670474492015,
+          "z_velocity_m_s": 357.1420973162251,
+          "speed_m_s": 810.3130999016515,
+          "mach": 8.466623473955169,
+          "sld": 0.0,
+          "ghs": 0.0
+        }
+      ],
+      "lowest_total_temperature_cells": [
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            6,
+            62
+          ],
+          "position_m": [
+            0.2686875,
+            -0.010363636363636429,
+            0.02454545454545446
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 1.0220810297556394e-26,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -7.052879004823177e-13,
+          "y_velocity_m_s": 3.6278911549731253e-13,
+          "z_velocity_m_s": 2.8562423269079193e-13,
+          "speed_m_s": 8.429876435572954e-13,
+          "mach": 5.226211945338535e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            6,
+            63
+          ],
+          "position_m": [
+            0.2686875,
+            -0.010363636363636429,
+            0.025636363636363547
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 1.400850767882293e-26,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -6.223798975677673e-13,
+          "y_velocity_m_s": 7.087339143053326e-13,
+          "z_velocity_m_s": -2.903740474878598e-13,
+          "speed_m_s": 9.869030274740801e-13,
+          "mach": 6.118434155583496e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            25,
+            51,
+            27
+          ],
+          "position_m": [
+            0.26868749999999997,
+            -0.031090909090909224,
+            -0.013636363636363696
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 6.161013461132758e-27,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -6.278357876331813e-13,
+          "y_velocity_m_s": -1.6012951672156946e-13,
+          "z_velocity_m_s": 9.24180435386054e-14,
+          "speed_m_s": 6.544924240432155e-13,
+          "mach": 4.0576112245656475e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            39,
+            28
+          ],
+          "position_m": [
+            0.2686875,
+            0.025636363636363547,
+            -0.012545454545454606
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 9.300215779205693e-27,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -7.785219160839279e-13,
+          "y_velocity_m_s": -1.582431053819515e-13,
+          "z_velocity_m_s": -1.2443555523363096e-13,
+          "speed_m_s": 8.04127764494061e-13,
+          "mach": 4.9852950520639505e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            37,
+            15
+          ],
+          "position_m": [
+            0.2686875,
+            0.023454545454545367,
+            -0.026727272727272777
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 1.4705703149065157e-26,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -7.456859442244964e-13,
+          "y_velocity_m_s": 6.817118908616737e-13,
+          "z_velocity_m_s": -4.090558998785965e-14,
+          "speed_m_s": 1.0111636350504464e-12,
+          "mach": 6.268840959391123e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            16,
+            39
+          ],
+          "position_m": [
+            0.2686875,
+            0.0005454545454544706,
+            -0.0005454545454546128
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 1.0178392101615234e-26,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -4.298462539934327e-13,
+          "y_velocity_m_s": 7.173206973616602e-13,
+          "z_velocity_m_s": 9.144478061893924e-14,
+          "speed_m_s": 8.412365498705171e-13,
+          "mach": 5.215355811428163e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            37,
+            14
+          ],
+          "position_m": [
+            0.2686875,
+            0.023454545454545367,
+            -0.027818181818181867
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 9.698053790894551e-27,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -6.217454810086213e-13,
+          "y_velocity_m_s": 4.012923852306267e-13,
+          "z_velocity_m_s": 3.5592014935945676e-13,
+          "speed_m_s": 8.211468652554094e-13,
+          "mach": 5.090807189018345e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            16,
+            38
+          ],
+          "position_m": [
+            0.2686875,
+            0.0005454545454544706,
+            -0.0016363636363637066
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 6.1287879539714515e-27,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -4.610434415673647e-13,
+          "y_velocity_m_s": 4.565336210100231e-13,
+          "z_velocity_m_s": -7.166428398550024e-14,
+          "speed_m_s": 6.527785012727961e-13,
+          "mach": 4.0469855366037755e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            7,
+            62
+          ],
+          "position_m": [
+            0.2686875,
+            -0.009272727272727339,
+            0.02454545454545446
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 1.557907264386059e-26,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -8.774894212291938e-13,
+          "y_velocity_m_s": -2.9444268069038014e-13,
+          "z_velocity_m_s": 4.759106895222844e-13,
+          "speed_m_s": 1.0407570134199714e-12,
+          "mach": 6.4523089719056185e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            7,
+            63
+          ],
+          "position_m": [
+            0.2686875,
+            -0.009272727272727339,
+            0.025636363636363547
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 1.5144349723938805e-26,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -9.90142272469793e-13,
+          "y_velocity_m_s": -2.3995768466915085e-13,
+          "z_velocity_m_s": -1.2242761069963294e-13,
+          "speed_m_s": 1.0261334854808347e-12,
+          "mach": 6.361648501396227e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            17,
+            38
+          ],
+          "position_m": [
+            0.2686875,
+            0.0016363636363635609,
+            -0.0016363636363637066
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 9.86975586936179e-27,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -5.261259182068162e-13,
+          "y_velocity_m_s": -5.997221103808326e-13,
+          "z_velocity_m_s": 2.230361230411996e-13,
+          "speed_m_s": 8.283840918739654e-13,
+          "mach": 5.135675320234847e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            17,
+            39
+          ],
+          "position_m": [
+            0.2686875,
+            0.0016363636363635609,
+            -0.0005454545454546128
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 8.782714469669359e-27,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -5.870135759776628e-13,
+          "y_velocity_m_s": -3.948194684647373e-13,
+          "z_velocity_m_s": 3.319239352873709e-13,
+          "speed_m_s": 7.814351219887137e-13,
+          "mach": 4.8446090524064926e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            32,
+            26
+          ],
+          "position_m": [
+            0.2686875,
+            0.017999999999999912,
+            -0.014727272727272787
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.469981746795513e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -6.30630750975852e-13,
+          "y_velocity_m_s": 5.558946605988978e-13,
+          "z_velocity_m_s": 5.615413270166367e-13,
+          "speed_m_s": 1.01096126518593e-12,
+          "mach": 6.267586340997372e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            39,
+            27
+          ],
+          "position_m": [
+            0.2686875,
+            0.025636363636363547,
+            -0.013636363636363696
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.4516755640082,
+          "kinetic_energy_density_J_m3": 6.125266449688388e-27,
+          "internal_energy_density_J_m3": 1336.4516755640082,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -6.21121694950019e-13,
+          "y_velocity_m_s": -1.7744187212012652e-13,
+          "z_velocity_m_s": 9.272082909120584e-14,
+          "speed_m_s": 6.525909362429426e-13,
+          "mach": 4.0458227027152366e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            39,
+            26
+          ],
+          "position_m": [
+            0.2686875,
+            0.025636363636363547,
+            -0.014727272727272787
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.1848372058707304e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -5.973637176111526e-13,
+          "y_velocity_m_s": -2.3967527083082755e-13,
+          "z_velocity_m_s": 6.399226086463471e-13,
+          "speed_m_s": 9.076280028859804e-13,
+          "mach": 5.626958291570819e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            38,
+            52
+          ],
+          "position_m": [
+            0.2686875,
+            0.024545454545454454,
+            0.013636363636363558
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 3.288627443895767e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -1.0807819631591528e-12,
+          "y_velocity_m_s": 1.0575218735151482e-12,
+          "z_velocity_m_s": -7.796693302086183e-15,
+          "speed_m_s": 1.5121186968223058e-12,
+          "mach": 9.374577262786834e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            39,
+            29
+          ],
+          "position_m": [
+            0.2686875,
+            0.025636363636363547,
+            -0.011454545454545516
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.3818717768159934e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -6.395423309771526e-13,
+          "y_velocity_m_s": -2.90123660697067e-13,
+          "z_velocity_m_s": -6.838097846232438e-13,
+          "speed_m_s": 9.801948546867832e-13,
+          "mach": 6.076845962660022e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            38,
+            51
+          ],
+          "position_m": [
+            0.2686875,
+            0.024545454545454454,
+            0.012545454545454464
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 2.8862313906122245e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -8.887672933426686e-13,
+          "y_velocity_m_s": 1.0819222048244745e-12,
+          "z_velocity_m_s": 2.1509014747595278e-13,
+          "speed_m_s": 1.4165898243842967e-12,
+          "mach": 8.782333547145334e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 140,
+          "local_index": [
+            25,
+            6,
+            24
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.033272727272727176,
+            -0.016909090909090967
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.4516755640082,
+          "kinetic_energy_density_J_m3": 1.0312486916724597e-26,
+          "internal_energy_density_J_m3": 1336.4516755640082,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -7.11303925835416e-13,
+          "y_velocity_m_s": -4.0364834703328256e-13,
+          "z_velocity_m_s": 2.193557780120673e-13,
+          "speed_m_s": 8.46759836269326e-13,
+          "mach": 5.249598146503408e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            0,
+            41
+          ],
+          "position_m": [
+            0.2686875,
+            -0.01690909090909097,
+            0.0016363636363635609
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.4516755640082,
+          "kinetic_energy_density_J_m3": 6.3022897583171794e-27,
+          "internal_energy_density_J_m3": 1336.4516755640082,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -4.552629742923613e-13,
+          "y_velocity_m_s": 3.974151819298724e-13,
+          "z_velocity_m_s": -2.701476060663362e-13,
+          "speed_m_s": 6.61953874264101e-13,
+          "mach": 4.1038694592764034e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 140,
+          "local_index": [
+            25,
+            3,
+            26
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.029999999999999905,
+            -0.014727272727272787
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.8903007652318633e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -6.505415573305259e-13,
+          "y_velocity_m_s": -4.688792795011027e-13,
+          "z_velocity_m_s": 8.192851818129296e-13,
+          "speed_m_s": 1.1464206495426296e-12,
+          "mach": 7.107384478068252e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 140,
+          "local_index": [
+            25,
+            2,
+            26
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.028909090909090815,
+            -0.014727272727272787
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.3816397359522316e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -6.138540637608896e-13,
+          "y_velocity_m_s": 2.6421161151739583e-13,
+          "z_velocity_m_s": 7.169351668802471e-13,
+          "speed_m_s": 9.801125551516956e-13,
+          "mach": 6.076335735948328e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 140,
+          "local_index": [
+            25,
+            3,
+            27
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.029999999999999905,
+            -0.013636363636363696
+          ],
+          "density_kg_m3": 0.028765564804355995,
+          "total_energy_density_J_m3": 1336.4516755640072,
+          "kinetic_energy_density_J_m3": 1.9696870083988567e-26,
+          "internal_energy_density_J_m3": 1336.4516755640072,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -9.90867519296661e-13,
+          "y_velocity_m_s": -5.846009694584258e-13,
+          "z_velocity_m_s": 2.1424029067918845e-13,
+          "speed_m_s": 1.1702459726224881e-12,
+          "mach": 7.255092678814901e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 140,
+          "local_index": [
+            25,
+            6,
+            25
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.033272727272727176,
+            -0.015818181818181877
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.4516755640082,
+          "kinetic_energy_density_J_m3": 6.363058660346044e-27,
+          "internal_energy_density_J_m3": 1336.4516755640082,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -4.894389289476509e-13,
+          "y_velocity_m_s": 7.132926727254666e-14,
+          "z_velocity_m_s": -4.4471307219709495e-13,
+          "speed_m_s": 6.651376144242939e-13,
+          "mach": 4.123607472025724e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 129,
+          "local_index": [
+            17,
+            15,
+            52
+          ],
+          "position_m": [
+            0.2686875,
+            -0.0005454545454546163,
+            0.013636363636363558
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.4516755640082,
+          "kinetic_energy_density_J_m3": 4.8621726130998885e-27,
+          "internal_energy_density_J_m3": 1336.4516755640082,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -5.094466665708054e-13,
+          "y_velocity_m_s": 1.4113369969237107e-13,
+          "z_velocity_m_s": 2.420752977417207e-13,
+          "speed_m_s": 5.814250399197685e-13,
+          "mach": 3.604620437999458e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 144,
+          "local_index": [
+            25,
+            3,
+            5
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.029999999999999905,
+            0.014727272727272641
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 2.2691841990918726e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -9.58469123843609e-13,
+          "y_velocity_m_s": -5.370696479970224e-13,
+          "z_velocity_m_s": -6.087708155549815e-13,
+          "speed_m_s": 1.2560687775884957e-12,
+          "mach": 7.787162362070375e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 140,
+          "local_index": [
+            25,
+            3,
+            29
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.029999999999999905,
+            -0.011454545454545516
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 2.1839387526304357e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -8.05613553370895e-13,
+          "y_velocity_m_s": -5.118104309741307e-13,
+          "z_velocity_m_s": -7.794078307438837e-13,
+          "speed_m_s": 1.2322498453047953e-12,
+          "mach": 7.639493781898803e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 140,
+          "local_index": [
+            25,
+            3,
+            28
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.029999999999999905,
+            -0.012545454545454606
+          ],
+          "density_kg_m3": 0.028765564804355995,
+          "total_energy_density_J_m3": 1336.4516755640072,
+          "kinetic_energy_density_J_m3": 2.3757374953058147e-26,
+          "internal_energy_density_J_m3": 1336.4516755640072,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -1.150152597985e-12,
+          "y_velocity_m_s": -5.533928096111943e-13,
+          "z_velocity_m_s": -1.5065887930097317e-13,
+          "speed_m_s": 1.285220875294687e-12,
+          "mach": 7.967894597504877e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 140,
+          "local_index": [
+            25,
+            2,
+            29
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.028909090909090815,
+            -0.011454545454545516
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.53189353232046e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -7.003838891709078e-13,
+          "y_velocity_m_s": 3.016267583682736e-13,
+          "z_velocity_m_s": -6.953935216942679e-13,
+          "speed_m_s": 1.032031222196439e-12,
+          "mach": 6.398212290093632e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 144,
+          "local_index": [
+            25,
+            2,
+            5
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.028909090909090815,
+            0.014727272727272641
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.5813996501454338e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -8.195308643527226e-13,
+          "y_velocity_m_s": 4.5098653550890887e-13,
+          "z_velocity_m_s": -4.738028646653366e-13,
+          "speed_m_s": 1.048574674213586e-12,
+          "mach": 6.50077558056406e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 144,
+          "local_index": [
+            25,
+            3,
+            2
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.029999999999999905,
+            0.011454545454545372
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.7109467479423437e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -8.684786897154365e-13,
+          "y_velocity_m_s": -4.011522464348922e-13,
+          "z_velocity_m_s": 5.238334136717617e-13,
+          "speed_m_s": 1.0906785982078372e-12,
+          "mach": 6.761804353887267e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 144,
+          "local_index": [
+            25,
+            2,
+            2
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.028909090909090815,
+            0.011454545454545372
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.3228573577262648e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -7.948576677315178e-13,
+          "y_velocity_m_s": 2.5417730424527426e-13,
+          "z_velocity_m_s": 4.725947989395339e-13,
+          "speed_m_s": 9.59036317315294e-13,
+          "mach": 5.945670848052007e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        }
+      ]
+    },
+    {
+      "label": "step3425",
+      "plotfile": "/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_support_hook_repair_20260808/testD_final_source_chk03400_step4000_normal_regrid/output/run165/plt03425",
+      "time_s": 0.000692721236454089,
+      "max_level": 2,
+      "domain_dimensions": [
+        256,
+        176,
+        176
+      ],
+      "global_leaf_fluid": {
+        "leaf_cells": 14707200,
+        "fluid_cells": 12616348,
+        "fluid_volume_m3": 0.08173226677685906,
+        "mass_kg": 0.004520182223937732,
+        "total_energy_J": 1017.4798195152259,
+        "kinetic_energy_J": 541.2502786128329,
+        "internal_energy_J": 476.22954090239494,
+        "nonfinite_cells": 0,
+        "rho_nonpositive_cells": 0,
+        "internal_energy_nonpositive_cells": 0,
+        "minimum_density_kg_m3": 0.003985481135680591,
+        "minimum_internal_energy_density_J_m3": 282.5619776968515,
+        "minimum_temperature_K": 21.843972116641194,
+        "minimum_total_temperature_K": 64.72986748216098,
+        "maximum_mach": 8.642893096075321,
+        "temperature_threshold_counts": {
+          "0.0": 0,
+          "5.0": 0,
+          "10.0": 0,
+          "12.0": 0,
+          "15.0": 0,
+          "20.0": 0,
+          "30.0": 37497,
+          "50.0": 358868,
+          "100.0": 5666448
+        },
+        "temperature_threshold_volumes_m3": {
+          "0.0": 0.0,
+          "5.0": 0.0,
+          "10.0": 0.0,
+          "12.0": 0.0,
+          "15.0": 0.0,
+          "20.0": 0.0,
+          "30.0": 4.543932644628093e-05,
+          "50.0": 0.00018836332438016505,
+          "100.0": 0.04955749112603292
+        },
+        "total_temperature_threshold_counts": {
+          "0.0": 0,
+          "100.0": 1397860,
+          "150.0": 1456812,
+          "200.0": 1843027,
+          "250.0": 4544363,
+          "300.0": 6098382,
+          "330.0": 6785032
+        },
+        "total_temperature_threshold_volumes_m3": {
+          "0.0": 0.0,
+          "100.0": 0.013285693636363612,
+          "150.0": 0.0135922364628099,
+          "200.0": 0.014185717438016509,
+          "250.0": 0.024703615636363595,
+          "300.0": 0.0386917700578512,
+          "330.0": 0.04191152859297517
+        },
+        "reference_total_enthalpy_deficit_proxy_J": 340.2921127804442,
+        "internal_energy_fraction": 0.4680481438239164,
+        "kinetic_energy_fraction": 0.5319518561760854
+      },
+      "by_level_leaf_fluid": {
+        "0": {
+          "leaf_cells": 7008256,
+          "fluid_cells": 6965248,
+          "fluid_volume_m3": 0.0746029868429751,
+          "mass_kg": 0.003974293345630737,
+          "total_energy_J": 890.7651968196978,
+          "kinetic_energy_J": 488.1055050887956,
+          "internal_energy_J": 402.6596917309024,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.019126437209544895,
+          "minimum_internal_energy_density_J_m3": 1336.4516755586,
+          "minimum_temperature_K": 64.72965902849131,
+          "minimum_total_temperature_K": 64.72986748216108,
+          "maximum_mach": 4.600000106370352,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 0,
+            "50.0": 0,
+            "100.0": 4524836
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 0.0,
+            "50.0": 0.0,
+            "100.0": 0.04846435914049578
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 1217915,
+            "150.0": 1242202,
+            "200.0": 1250354,
+            "250.0": 1986729,
+            "300.0": 3257294,
+            "330.0": 3503197
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.013044775537190061,
+            "150.0": 0.013304907371900807,
+            "200.0": 0.01339222135537188,
+            "250.0": 0.021279345322314017,
+            "300.0": 0.034888041520661106,
+            "330.0": 0.03752184555371895
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 301.1918251932307,
+          "internal_energy_fraction": 0.45203797046462946,
+          "kinetic_energy_fraction": 0.5479620295353708
+        },
+        "1": {
+          "leaf_cells": 7326208,
+          "fluid_cells": 5278364,
+          "fluid_volume_m3": 0.007066900561983471,
+          "mass_kg": 0.0005281029187897494,
+          "total_energy_J": 120.82325761450355,
+          "kinetic_energy_J": 47.99206273608452,
+          "internal_energy_J": 72.83119487841911,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.003985481135680591,
+          "minimum_internal_energy_density_J_m3": 282.5619776968515,
+          "minimum_temperature_K": 21.843972116641194,
+          "minimum_total_temperature_K": 64.72986748216098,
+          "maximum_mach": 8.642893096075321,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 33431,
+            "50.0": 109523,
+            "100.0": 770027
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 4.475885950413217e-05,
+            "50.0": 0.00014663409917355346,
+            "100.0": 0.0010309452396694205
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 179945,
+            "150.0": 214610,
+            "200.0": 592673,
+            "250.0": 2557634,
+            "300.0": 2841052,
+            "330.0": 3278268
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.0002409180991735533,
+            "150.0": 0.00028732909090909044,
+            "200.0": 0.0007934960826446272,
+            "250.0": 0.0034242703140495855,
+            "300.0": 0.00380372251239669,
+            "330.0": 0.004389086082644622
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 39.09862870401557,
+          "internal_energy_fraction": 0.6027911870311673,
+          "kinetic_energy_fraction": 0.3972088129688334
+        },
+        "2": {
+          "leaf_cells": 372736,
+          "fluid_cells": 372736,
+          "fluid_volume_m3": 6.237937190082636e-05,
+          "mass_kg": 1.7785959517243624e-05,
+          "total_energy_J": 5.891365081026122,
+          "kinetic_energy_J": 5.152710787952511,
+          "internal_energy_J": 0.7386542930736092,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.07830923353917935,
+          "minimum_internal_energy_density_J_m3": 1630.9495398971885,
+          "minimum_temperature_K": 28.44782030331879,
+          "minimum_total_temperature_K": 291.3018852844379,
+          "maximum_mach": 7.470078672809294,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 4066,
+            "50.0": 249345,
+            "100.0": 371585
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 6.804669421487592e-07,
+            "50.0": 4.172922520661151e-05,
+            "100.0": 6.218674586776851e-05
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 0,
+            "150.0": 0,
+            "200.0": 0,
+            "250.0": 0,
+            "300.0": 36,
+            "330.0": 3567
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.0,
+            "150.0": 0.0,
+            "200.0": 0.0,
+            "250.0": 0.0,
+            "300.0": 6.024793388429743e-09,
+            "330.0": 5.969566115702469e-07
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 0.0016588831978063038,
+          "internal_energy_fraction": 0.1253791409825437,
+          "kinetic_energy_fraction": 0.874620859017456
+        }
+      },
+      "regions_leaf_fluid": {
+        "jet_interaction": {
+          "leaf_cells": 1850936,
+          "fluid_cells": 1850936,
+          "fluid_volume_m3": 0.0027429625785123936,
+          "mass_kg": 0.00019862317653262937,
+          "total_energy_J": 59.65915491795096,
+          "kinetic_energy_J": 33.816595399859374,
+          "internal_energy_J": 25.842559518091612,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.01182902367270128,
+          "minimum_internal_energy_density_J_m3": 577.8707360588087,
+          "minimum_temperature_K": 21.843972116641194,
+          "minimum_total_temperature_K": 104.59502729148248,
+          "maximum_mach": 8.642893096075321,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 37497,
+            "50.0": 358868,
+            "100.0": 814259
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 4.543932644628093e-05,
+            "50.0": 0.00018836332438016505,
+            "100.0": 0.0013563632417355346
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 0,
+            "150.0": 13797,
+            "200.0": 53816,
+            "250.0": 180317,
+            "300.0": 370723,
+            "330.0": 442473
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.0,
+            "150.0": 1.8472016528925596e-05,
+            "200.0": 7.205117355371891e-05,
+            "250.0": 0.00024141614876033014,
+            "300.0": 0.000496297710743801,
+            "330.0": 0.0005882231714876028
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 5.659522514289501,
+          "internal_energy_fraction": 0.4331700566934413,
+          "kinetic_energy_fraction": 0.5668299433065592
+        },
+        "near_nozzle": {
+          "leaf_cells": 26740,
+          "fluid_cells": 26740,
+          "fluid_volume_m3": 3.580066115702474e-05,
+          "mass_kg": 1.4794994382995886e-05,
+          "total_energy_J": 4.049607116067802,
+          "kinetic_energy_J": 2.217716828051491,
+          "internal_energy_J": 1.8318902880163113,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.040448060144450015,
+          "minimum_internal_energy_density_J_m3": 2485.0913441601906,
+          "minimum_temperature_K": 80.3239177423934,
+          "minimum_total_temperature_K": 152.03131217179111,
+          "maximum_mach": 3.9035794185544077,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 0,
+            "50.0": 0,
+            "100.0": 1322
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 0.0,
+            "50.0": 0.0,
+            "100.0": 1.7699504132231377e-06
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 0,
+            "150.0": 0,
+            "200.0": 6704,
+            "250.0": 11619,
+            "300.0": 23540,
+            "330.0": 24508
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.0,
+            "150.0": 0.0,
+            "200.0": 8.97560330578511e-06,
+            "250.0": 1.5556016528925596e-05,
+            "300.0": 3.151636363636359e-05,
+            "330.0": 3.2812363636363585e-05
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 0.31282812901845863,
+          "internal_energy_fraction": 0.45236247258353546,
+          "kinetic_energy_fraction": 0.5476375274164645
+        },
+        "forebody_nearfield": {
+          "leaf_cells": 1065464,
+          "fluid_cells": 1065464,
+          "fluid_volume_m3": 0.001340717355371898,
+          "mass_kg": 9.208703295088943e-05,
+          "total_energy_J": 24.96059365921097,
+          "kinetic_energy_J": 11.207803175426328,
+          "internal_energy_J": 13.752790483784665,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.003985481135680591,
+          "minimum_internal_energy_density_J_m3": 282.5619776968515,
+          "minimum_temperature_K": 40.55477741250359,
+          "minimum_total_temperature_K": 150.93071484914947,
+          "maximum_mach": 6.059908721670978,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 0,
+            "50.0": 3413,
+            "100.0": 88629
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 0.0,
+            "50.0": 2.2405537190082612e-06,
+            "100.0": 3.423705991735533e-05
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 0,
+            "150.0": 0,
+            "200.0": 50312,
+            "250.0": 148971,
+            "300.0": 318921,
+            "330.0": 496625
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.0,
+            "150.0": 0.0,
+            "200.0": 6.735986776859494e-05,
+            "250.0": 0.00019944877685950383,
+            "300.0": 0.0004269429669421481,
+            "330.0": 0.0006607241962809908
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 2.6971311607494557,
+          "internal_energy_fraction": 0.550980103740826,
+          "kinetic_energy_fraction": 0.4490198962591748
+        },
+        "failure_probe_5mm": {
+          "leaf_cells": 237,
+          "fluid_cells": 237,
+          "fluid_volume_m3": 3.1730578512396643e-07,
+          "mass_kg": 3.115860697562121e-07,
+          "total_energy_J": 0.09270067071458436,
+          "kinetic_energy_J": 0.06064536813832039,
+          "internal_energy_J": 0.03205530257626398,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.042222498281380944,
+          "minimum_internal_energy_density_J_m3": 2775.309982851235,
+          "minimum_temperature_K": 91.15346646714008,
+          "minimum_total_temperature_K": 160.48072900986986,
+          "maximum_mach": 3.4241389986947186,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 0,
+            "50.0": 0,
+            "100.0": 10
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 0.0,
+            "50.0": 0.0,
+            "100.0": 1.3388429752066095e-08
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 0,
+            "150.0": 0,
+            "200.0": 40,
+            "250.0": 79,
+            "300.0": 112,
+            "330.0": 152
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.0,
+            "150.0": 0.0,
+            "200.0": 5.355371900826438e-08,
+            "250.0": 1.0576859504132214e-07,
+            "300.0": 1.4995041322314025e-07,
+            "330.0": 2.0350413223140463e-07
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 0.0019386351161169205,
+          "internal_energy_fraction": 0.3457936423670428,
+          "kinetic_energy_fraction": 0.6542063576329573
+        },
+        "failure_probe_10mm": {
+          "leaf_cells": 2047,
+          "fluid_cells": 2047,
+          "fluid_volume_m3": 2.7406115702479294e-06,
+          "mass_kg": 4.135695325024123e-06,
+          "total_energy_J": 1.2333482727460716,
+          "kinetic_energy_J": 0.7993809211438735,
+          "internal_energy_J": 0.4339673516021981,
+          "nonfinite_cells": 0,
+          "rho_nonpositive_cells": 0,
+          "internal_energy_nonpositive_cells": 0,
+          "minimum_density_kg_m3": 0.042222498281380944,
+          "minimum_internal_energy_density_J_m3": 2775.309982851235,
+          "minimum_temperature_K": 78.13095800810588,
+          "minimum_total_temperature_K": 157.36006681658677,
+          "maximum_mach": 4.163152178360366,
+          "temperature_threshold_counts": {
+            "0.0": 0,
+            "5.0": 0,
+            "10.0": 0,
+            "12.0": 0,
+            "15.0": 0,
+            "20.0": 0,
+            "30.0": 0,
+            "50.0": 0,
+            "100.0": 305
+          },
+          "temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "5.0": 0.0,
+            "10.0": 0.0,
+            "12.0": 0.0,
+            "15.0": 0.0,
+            "20.0": 0.0,
+            "30.0": 0.0,
+            "50.0": 0.0,
+            "100.0": 4.0834710743801584e-07
+          },
+          "total_temperature_threshold_counts": {
+            "0.0": 0,
+            "100.0": 0,
+            "150.0": 0,
+            "200.0": 446,
+            "250.0": 672,
+            "300.0": 946,
+            "330.0": 1178
+          },
+          "total_temperature_threshold_volumes_m3": {
+            "0.0": 0.0,
+            "100.0": 0.0,
+            "150.0": 0.0,
+            "200.0": 5.971239669421478e-07,
+            "250.0": 8.997024793388416e-07,
+            "300.0": 1.2665454545454526e-06,
+            "330.0": 1.577157024793386e-06
+          },
+          "reference_total_enthalpy_deficit_proxy_J": 0.019972761520888522,
+          "internal_energy_fraction": 0.3518611581106464,
+          "kinetic_energy_fraction": 0.6481388418893537
+        }
+      },
+      "failure_probe_m": [
+        0.00290625,
+        0.005181818182,
+        -0.007363636364
+      ],
+      "nearest_failure_probe_leaf_fluid_cell": {
+        "distance_m": 0.0009071401296915768,
+        "level": 1,
+        "grid_id": 157,
+        "local_index": [
+          5,
+          36,
+          16
+        ],
+        "position_m": [
+          0.0031874999999999968,
+          0.004909090909090828,
+          -0.008181818181818252
+        ],
+        "density_kg_m3": 0.08442699349929537,
+        "total_energy_density_J_m3": 12661.857073150357,
+        "kinetic_energy_density_J_m3": 6131.028207011962,
+        "internal_energy_density_J_m3": 6530.828866138395,
+        "temperature_K": 107.77334028220885,
+        "total_temperature_K": 180.041720078323,
+        "x_velocity_m_s": 189.6075786161544,
+        "y_velocity_m_s": 202.46814933894416,
+        "z_velocity_m_s": -261.33157452820615,
+        "speed_m_s": 381.1017937648805,
+        "mach": 1.831063854178112,
+        "sld": 0.0,
+        "ghs": 0.0
+      },
+      "lowest_temperature_cells": [
+        {
+          "level": 1,
+          "grid_id": 96,
+          "local_index": [
+            17,
+            23,
+            23
+          ],
+          "position_m": [
+            -0.055312500000000014,
+            -0.02672727272727278,
+            -0.02672727272727278
+          ],
+          "density_kg_m3": 0.03685729445221386,
+          "total_energy_density_J_m3": 12664.55050310265,
+          "kinetic_energy_density_J_m3": 12086.679767043841,
+          "internal_energy_density_J_m3": 577.8707360588087,
+          "temperature_K": 21.843972116641194,
+          "total_temperature_K": 348.1911726969158,
+          "x_velocity_m_s": -672.9370434410823,
+          "y_velocity_m_s": -318.5087872337605,
+          "z_velocity_m_s": -318.70289357231326,
+          "speed_m_s": 809.854089544352,
+          "mach": 8.642893096075321,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            41,
+            6,
+            46
+          ],
+          "position_m": [
+            -0.05531250000000001,
+            -0.027818181818181874,
+            0.024545454545454454
+          ],
+          "density_kg_m3": 0.03757284743375602,
+          "total_energy_density_J_m3": 12943.233980242052,
+          "kinetic_energy_density_J_m3": 12348.864187240897,
+          "internal_energy_density_J_m3": 594.3697930011549,
+          "temperature_K": 22.03976626263285,
+          "total_temperature_K": 349.116184609555,
+          "x_velocity_m_s": -677.2003204508641,
+          "y_velocity_m_s": -334.4115327063304,
+          "z_velocity_m_s": 294.78435556956595,
+          "speed_m_s": 810.7583878778648,
+          "mach": 8.61402497603109,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            41,
+            7,
+            47
+          ],
+          "position_m": [
+            -0.05531250000000001,
+            -0.026727272727272783,
+            0.02563636363636354
+          ],
+          "density_kg_m3": 0.03694664196009055,
+          "total_energy_density_J_m3": 12735.67546931433,
+          "kinetic_energy_density_J_m3": 12150.875901376341,
+          "internal_energy_density_J_m3": 584.7995679379892,
+          "temperature_K": 22.052429121996457,
+          "total_temperature_K": 349.3395694837228,
+          "x_velocity_m_s": -677.3969798064029,
+          "y_velocity_m_s": -320.7732494835614,
+          "z_velocity_m_s": 309.82334980895934,
+          "speed_m_s": 811.0195151301381,
+          "mach": 8.614325054356618,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 97,
+          "local_index": [
+            34,
+            47,
+            23
+          ],
+          "position_m": [
+            -0.05418750000000001,
+            0.02563636363636354,
+            -0.02672727272727278
+          ],
+          "density_kg_m3": 0.03869276492397672,
+          "total_energy_density_J_m3": 13278.861695263355,
+          "kinetic_energy_density_J_m3": 12666.34573022508,
+          "internal_energy_density_J_m3": 612.5159650382739,
+          "temperature_K": 22.05525136870772,
+          "total_temperature_K": 347.8303622563023,
+          "x_velocity_m_s": -671.4340210550997,
+          "y_velocity_m_s": 312.5817506102716,
+          "z_velocity_m_s": -325.8572015547742,
+          "speed_m_s": 809.1439372879902,
+          "mach": 8.593853517770595,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 97,
+          "local_index": [
+            33,
+            0,
+            22
+          ],
+          "position_m": [
+            -0.055312500000000014,
+            -0.025636363636363693,
+            -0.02781818181818187
+          ],
+          "density_kg_m3": 0.03725761158679209,
+          "total_energy_density_J_m3": 12797.587830502705,
+          "kinetic_energy_density_J_m3": 12207.485997168094,
+          "internal_energy_density_J_m3": 590.101833334611,
+          "temperature_K": 22.06664543505586,
+          "total_temperature_K": 348.13417423849984,
+          "x_velocity_m_s": -672.9991263686444,
+          "y_velocity_m_s": -303.4189597038356,
+          "z_velocity_m_s": -332.13054305453534,
+          "speed_m_s": 809.5070023356296,
+          "mach": 8.59548961149686,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 97,
+          "local_index": [
+            33,
+            2,
+            21
+          ],
+          "position_m": [
+            -0.055312500000000014,
+            -0.023454545454545513,
+            -0.02890909090909096
+          ],
+          "density_kg_m3": 0.037883653271122246,
+          "total_energy_density_J_m3": 13048.946645250673,
+          "kinetic_energy_density_J_m3": 12448.317252226761,
+          "internal_energy_density_J_m3": 600.6293930239117,
+          "temperature_K": 22.089154466310536,
+          "total_temperature_K": 349.094704006489,
+          "x_velocity_m_s": -676.5240675122909,
+          "y_velocity_m_s": -277.9057714654368,
+          "z_velocity_m_s": -349.67171166347345,
+          "speed_m_s": 810.6705481728306,
+          "mach": 8.603457498382186,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 163,
+          "local_index": [
+            18,
+            0,
+            0
+          ],
+          "position_m": [
+            -0.05418750000000001,
+            0.026727272727272634,
+            -0.025636363636363693
+          ],
+          "density_kg_m3": 0.039319150993061304,
+          "total_energy_density_J_m3": 13502.741540599049,
+          "kinetic_energy_density_J_m3": 12878.570024072656,
+          "internal_energy_density_J_m3": 624.1715165263922,
+          "temperature_K": 22.116896128375483,
+          "total_temperature_K": 348.0735419298016,
+          "x_velocity_m_s": -672.2619211546197,
+          "y_velocity_m_s": 326.92357579310396,
+          "z_velocity_m_s": -310.2638054429819,
+          "speed_m_s": 809.3693495628619,
+          "mach": 8.584259407448242,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            41,
+            8,
+            48
+          ],
+          "position_m": [
+            -0.05531250000000001,
+            -0.025636363636363693,
+            0.026727272727272634
+          ],
+          "density_kg_m3": 0.03785059408531457,
+          "total_energy_density_J_m3": 13032.361376172516,
+          "kinetic_energy_density_J_m3": 12431.054402371103,
+          "internal_energy_density_J_m3": 601.3069738014128,
+          "temperature_K": 22.133388347714174,
+          "total_temperature_K": 348.97067380254924,
+          "x_velocity_m_s": -678.1479227937798,
+          "y_velocity_m_s": -305.12946886031006,
+          "z_velocity_m_s": 322.2731411241038,
+          "speed_m_s": 810.461951880833,
+          "mach": 8.592644564041985,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 163,
+          "local_index": [
+            18,
+            0,
+            47
+          ],
+          "position_m": [
+            -0.05418750000000001,
+            0.026727272727272634,
+            0.02563636363636354
+          ],
+          "density_kg_m3": 0.039118143562626724,
+          "total_energy_density_J_m3": 13453.823026356786,
+          "kinetic_energy_density_J_m3": 12831.786285987271,
+          "internal_energy_density_J_m3": 622.0367403695145,
+          "temperature_K": 22.154510788752233,
+          "total_temperature_K": 348.5958942338537,
+          "x_velocity_m_s": -674.1836649305983,
+          "y_velocity_m_s": 324.26378964161717,
+          "z_velocity_m_s": 310.45500057887426,
+          "speed_m_s": 809.9709418963281,
+          "mach": 8.583344126941801,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            42,
+            55,
+            48
+          ],
+          "position_m": [
+            -0.05418750000000001,
+            0.02563636363636354,
+            0.026727272727272634
+          ],
+          "density_kg_m3": 0.03949399400322211,
+          "total_energy_density_J_m3": 13575.71221283879,
+          "kinetic_energy_density_J_m3": 12943.394057707324,
+          "internal_energy_density_J_m3": 632.3181551314647,
+          "temperature_K": 22.306372964336976,
+          "total_temperature_K": 348.45341611313535,
+          "x_velocity_m_s": -674.4721940621015,
+          "y_velocity_m_s": 309.3514643011982,
+          "z_velocity_m_s": 323.80598925594154,
+          "speed_m_s": 809.6056989092032,
+          "mach": 8.550219130850076,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 97,
+          "local_index": [
+            33,
+            46,
+            22
+          ],
+          "position_m": [
+            -0.055312500000000014,
+            0.024545454545454454,
+            -0.02781818181818187
+          ],
+          "density_kg_m3": 0.038444179702054895,
+          "total_energy_density_J_m3": 13217.467557730255,
+          "kinetic_energy_density_J_m3": 12601.77528296055,
+          "internal_energy_density_J_m3": 615.6922747697045,
+          "temperature_K": 22.312974524645107,
+          "total_temperature_K": 348.52311736075563,
+          "x_velocity_m_s": -674.7717639807214,
+          "y_velocity_m_s": 293.98386056742686,
+          "z_velocity_m_s": -337.408885655206,
+          "speed_m_s": 809.6840123522697,
+          "mach": 8.54978113833553,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 97,
+          "local_index": [
+            35,
+            0,
+            23
+          ],
+          "position_m": [
+            -0.05306250000000002,
+            -0.025636363636363693,
+            -0.02672727272727278
+          ],
+          "density_kg_m3": 0.03832206918531672,
+          "total_energy_density_J_m3": 13144.766094276198,
+          "kinetic_energy_density_J_m3": 12529.47931692635,
+          "internal_energy_density_J_m3": 615.2867773498474,
+          "temperature_K": 22.369330971810346,
+          "total_temperature_K": 347.7414989503377,
+          "x_velocity_m_s": -669.1585161949066,
+          "y_velocity_m_s": -313.4939438710924,
+          "z_velocity_m_s": -328.40910417510736,
+          "speed_m_s": 808.6433777290935,
+          "mach": 8.528029717250595,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            41,
+            10,
+            49
+          ],
+          "position_m": [
+            -0.05531250000000001,
+            -0.023454545454545513,
+            0.02781818181818172
+          ],
+          "density_kg_m3": 0.03930399227447812,
+          "total_energy_density_J_m3": 13544.195618045786,
+          "kinetic_energy_density_J_m3": 12909.893916025441,
+          "internal_energy_density_J_m3": 634.3017020203442,
+          "temperature_K": 22.48451762323926,
+          "total_temperature_K": 349.3599915774677,
+          "x_velocity_m_s": -682.1366541252396,
+          "y_velocity_m_s": -279.3950596144517,
+          "z_velocity_m_s": 336.9767188781688,
+          "speed_m_s": 810.5092987153425,
+          "mach": 8.525785121071046,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 97,
+          "local_index": [
+            34,
+            1,
+            22
+          ],
+          "position_m": [
+            -0.05418750000000001,
+            -0.024545454545454603,
+            -0.02781818181818187
+          ],
+          "density_kg_m3": 0.0379048866494634,
+          "total_energy_density_J_m3": 13032.596723250563,
+          "kinetic_energy_density_J_m3": 12419.00509113215,
+          "internal_energy_density_J_m3": 613.5916321184122,
+          "temperature_K": 22.55322173725514,
+          "total_temperature_K": 348.6060193905505,
+          "x_velocity_m_s": -673.794256739051,
+          "y_velocity_m_s": -294.4668853547037,
+          "z_velocity_m_s": -338.4708768667398,
+          "speed_m_s": 809.4887160868705,
+          "mach": 8.502069930217548,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            42,
+            7,
+            47
+          ],
+          "position_m": [
+            -0.05418750000000001,
+            -0.026727272727272783,
+            0.02563636363636354
+          ],
+          "density_kg_m3": 0.03953958745038688,
+          "total_energy_density_J_m3": 13572.682159205735,
+          "kinetic_energy_density_J_m3": 12932.395451743812,
+          "internal_energy_density_J_m3": 640.2867074619226,
+          "temperature_K": 22.56143483794262,
+          "total_temperature_K": 348.0555721658958,
+          "x_velocity_m_s": -675.9193898199127,
+          "y_velocity_m_s": -319.74408980291787,
+          "z_velocity_m_s": 308.2952011021481,
+          "speed_m_s": 808.7949279768225,
+          "mach": 8.493236734903034,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            41,
+            6,
+            0
+          ],
+          "position_m": [
+            -0.05531250000000001,
+            -0.027818181818181874,
+            -0.025636363636363693
+          ],
+          "density_kg_m3": 0.038833425259433424,
+          "total_energy_density_J_m3": 13352.935317532105,
+          "kinetic_energy_density_J_m3": 12723.808530618922,
+          "internal_energy_density_J_m3": 629.1267869131825,
+          "temperature_K": 22.571313976474197,
+          "total_temperature_K": 348.6389948310038,
+          "x_velocity_m_s": -675.6259893574531,
+          "y_velocity_m_s": -328.4160499078465,
+          "z_velocity_m_s": -301.61948391456207,
+          "speed_m_s": 809.5071910793612,
+          "mach": 8.498855757198767,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            41,
+            5,
+            2
+          ],
+          "position_m": [
+            -0.05531250000000001,
+            -0.028909090909090964,
+            -0.023454545454545513
+          ],
+          "density_kg_m3": 0.03977915076206767,
+          "total_energy_density_J_m3": 13701.977265148154,
+          "kinetic_energy_density_J_m3": 13056.67536899626,
+          "internal_energy_density_J_m3": 645.3018961518937,
+          "temperature_K": 22.60121558090943,
+          "total_temperature_K": 349.2442693918186,
+          "x_velocity_m_s": -677.6736540666454,
+          "y_velocity_m_s": -346.68274401360105,
+          "z_velocity_m_s": -277.53868110627656,
+          "speed_m_s": 810.2210969377747,
+          "mach": 8.500722063062954,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            41,
+            5,
+            45
+          ],
+          "position_m": [
+            -0.05531250000000001,
+            -0.028909090909090964,
+            0.02345454545454536
+          ],
+          "density_kg_m3": 0.03980684897584432,
+          "total_energy_density_J_m3": 13692.890993659601,
+          "kinetic_energy_density_J_m3": 13046.44146888255,
+          "internal_energy_density_J_m3": 646.4495247770501,
+          "temperature_K": 22.625656174597665,
+          "total_temperature_K": 348.78558012750887,
+          "x_velocity_m_s": -678.2900630238277,
+          "y_velocity_m_s": -343.69479627662145,
+          "z_velocity_m_s": 277.9995536308143,
+          "speed_m_s": 809.6216859764988,
+          "mach": 8.489843979778698,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            43,
+            7,
+            46
+          ],
+          "position_m": [
+            -0.05306250000000001,
+            -0.026727272727272783,
+            0.024545454545454454
+          ],
+          "density_kg_m3": 0.03890739804387468,
+          "total_energy_density_J_m3": 13365.322942809209,
+          "kinetic_energy_density_J_m3": 12732.886765659889,
+          "internal_energy_density_J_m3": 632.4361771493204,
+          "temperature_K": 22.646906161521187,
+          "total_temperature_K": 348.32685184049797,
+          "x_velocity_m_s": -673.1580421047024,
+          "y_velocity_m_s": -330.2085791584263,
+          "z_velocity_m_s": 303.88024163763606,
+          "speed_m_s": 809.0257453615498,
+          "mach": 8.479613748780556,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            43,
+            7,
+            0
+          ],
+          "position_m": [
+            -0.05306250000000001,
+            -0.026727272727272783,
+            -0.025636363636363693
+          ],
+          "density_kg_m3": 0.03935654648739042,
+          "total_energy_density_J_m3": 13519.469322761732,
+          "kinetic_energy_density_J_m3": 12879.30851982924,
+          "internal_energy_density_J_m3": 640.1608029324925,
+          "temperature_K": 22.6619073773322,
+          "total_temperature_K": 348.3275118221608,
+          "x_velocity_m_s": -670.8821224896343,
+          "y_velocity_m_s": -326.9292367210868,
+          "z_velocity_m_s": -312.2951917957023,
+          "speed_m_s": 809.0079325432746,
+          "mach": 8.476620073834194,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            43,
+            8,
+            47
+          ],
+          "position_m": [
+            -0.05306250000000001,
+            -0.025636363636363693,
+            0.02563636363636354
+          ],
+          "density_kg_m3": 0.038954145301625956,
+          "total_energy_density_J_m3": 13379.906779651035,
+          "kinetic_energy_density_J_m3": 12745.945527699341,
+          "internal_energy_density_J_m3": 633.9612519516941,
+          "temperature_K": 22.67427441115594,
+          "total_temperature_K": 348.2969993636199,
+          "x_velocity_m_s": -673.6857329118083,
+          "y_velocity_m_s": -315.048504758969,
+          "z_velocity_m_s": 318.27603183271816,
+          "speed_m_s": 808.9546708678823,
+          "mach": 8.473750180913576,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 97,
+          "local_index": [
+            34,
+            0,
+            23
+          ],
+          "position_m": [
+            -0.05418750000000001,
+            -0.025636363636363693,
+            -0.02672727272727278
+          ],
+          "density_kg_m3": 0.03718668682600041,
+          "total_energy_density_J_m3": 12807.89755608612,
+          "kinetic_energy_density_J_m3": 12202.459638289687,
+          "internal_energy_density_J_m3": 605.4379177964329,
+          "temperature_K": 22.683313456342002,
+          "total_temperature_K": 349.2382261160986,
+          "x_velocity_m_s": -673.884415793627,
+          "y_velocity_m_s": -310.4390738470154,
+          "z_velocity_m_s": -325.25138468248934,
+          "speed_m_s": 810.1117747930759,
+          "mach": 8.484179842534443,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            41,
+            4,
+            43
+          ],
+          "position_m": [
+            -0.05531250000000001,
+            -0.030000000000000054,
+            0.02127272727272718
+          ],
+          "density_kg_m3": 0.04127774929907548,
+          "total_energy_density_J_m3": 14231.460814220924,
+          "kinetic_energy_density_J_m3": 13558.822973434595,
+          "internal_energy_density_J_m3": 672.6378407863285,
+          "temperature_K": 22.703334645515053,
+          "total_temperature_K": 349.5938423276308,
+          "x_velocity_m_s": -681.3182954931292,
+          "y_velocity_m_s": -358.6116000050253,
+          "z_velocity_m_s": 253.29555330591023,
+          "speed_m_s": 810.5279370610086,
+          "mach": 8.484794566268938,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            42,
+            7,
+            0
+          ],
+          "position_m": [
+            -0.05418750000000001,
+            -0.026727272727272783,
+            -0.025636363636363693
+          ],
+          "density_kg_m3": 0.03755283960438462,
+          "total_energy_density_J_m3": 12931.344304736182,
+          "kinetic_energy_density_J_m3": 12318.995336069633,
+          "internal_energy_density_J_m3": 612.3489686665489,
+          "temperature_K": 22.718548060626414,
+          "total_temperature_K": 349.17769136646166,
+          "x_velocity_m_s": -674.1699953106676,
+          "y_velocity_m_s": -324.8415023988019,
+          "z_velocity_m_s": -309.9377915820643,
+          "speed_m_s": 809.9929746045107,
+          "mach": 8.476354944688767,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            41,
+            6,
+            1
+          ],
+          "position_m": [
+            -0.05531250000000001,
+            -0.027818181818181874,
+            -0.024545454545454603
+          ],
+          "density_kg_m3": 0.037592597003646006,
+          "total_energy_density_J_m3": 12953.786977098309,
+          "kinetic_energy_density_J_m3": 12340.654239551626,
+          "internal_energy_density_J_m3": 613.1327375466826,
+          "temperature_K": 22.72356883158027,
+          "total_temperature_K": 349.41081761936056,
+          "x_velocity_m_s": -676.5039773124357,
+          "y_velocity_m_s": -336.3048408537994,
+          "z_velocity_m_s": -292.89668445515514,
+          "speed_m_s": 810.2759067540306,
+          "mach": 8.478378948388453,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 97,
+          "local_index": [
+            33,
+            1,
+            22
+          ],
+          "position_m": [
+            -0.055312500000000014,
+            -0.024545454545454603,
+            -0.02781818181818187
+          ],
+          "density_kg_m3": 0.037125321154648734,
+          "total_energy_density_J_m3": 12793.036446621813,
+          "kinetic_energy_density_J_m3": 12187.181110667212,
+          "internal_energy_density_J_m3": 605.8553359546004,
+          "temperature_K": 22.736472278099956,
+          "total_temperature_K": 349.42160771119484,
+          "x_velocity_m_s": -676.6307455768177,
+          "y_velocity_m_s": -292.33245635971997,
+          "z_velocity_m_s": -336.5343473290563,
+          "speed_m_s": 810.2732858939271,
+          "mach": 8.475945358207891,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            40,
+            13,
+            51
+          ],
+          "position_m": [
+            -0.05643750000000001,
+            -0.020181818181818245,
+            0.029999999999999902
+          ],
+          "density_kg_m3": 0.04215878962664496,
+          "total_energy_density_J_m3": 14531.676805071902,
+          "kinetic_energy_density_J_m3": 13843.550395948872,
+          "internal_energy_density_J_m3": 688.1264091230296,
+          "temperature_K": 22.74073281374099,
+          "total_temperature_K": 349.52089223764557,
+          "x_velocity_m_s": -687.5103884489024,
+          "y_velocity_m_s": -237.8796316369984,
+          "z_velocity_m_s": 357.0385346786906,
+          "speed_m_s": 810.3911207672634,
+          "mach": 8.476383833867224,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 163,
+          "local_index": [
+            17,
+            2,
+            3
+          ],
+          "position_m": [
+            -0.055312500000000014,
+            0.028909090909090815,
+            -0.022363636363636422
+          ],
+          "density_kg_m3": 0.04157828930964824,
+          "total_energy_density_J_m3": 14269.53668673727,
+          "kinetic_energy_density_J_m3": 13590.481848048616,
+          "internal_energy_density_J_m3": 679.0548386886549,
+          "temperature_K": 22.754253656896935,
+          "total_temperature_K": 348.0396500124061,
+          "x_velocity_m_s": -677.9899472103187,
+          "y_velocity_m_s": 350.8242555705817,
+          "z_velocity_m_s": -266.4239096283856,
+          "speed_m_s": 808.5355443247859,
+          "mach": 8.45446221782333,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            42,
+            53,
+            49
+          ],
+          "position_m": [
+            -0.05418750000000001,
+            0.02345454545454536,
+            0.02781818181818172
+          ],
+          "density_kg_m3": 0.04032050097624382,
+          "total_energy_density_J_m3": 13878.623262897256,
+          "kinetic_energy_density_J_m3": 13220.09837780368,
+          "internal_energy_density_J_m3": 658.524885093575,
+          "temperature_K": 22.754674923795537,
+          "total_temperature_K": 349.0456754147465,
+          "x_velocity_m_s": -677.9828666905569,
+          "y_velocity_m_s": 283.7466548836887,
+          "z_velocity_m_s": 339.9673053622876,
+          "speed_m_s": 809.7843542566894,
+          "mach": 8.467442033030785,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 97,
+          "local_index": [
+            33,
+            44,
+            21
+          ],
+          "position_m": [
+            -0.055312500000000014,
+            0.022363636363636273,
+            -0.02890909090909096
+          ],
+          "density_kg_m3": 0.040913450822525343,
+          "total_energy_density_J_m3": 14059.249246908033,
+          "kinetic_energy_density_J_m3": 13390.477650587904,
+          "internal_energy_density_J_m3": 668.7715963201299,
+          "temperature_K": 22.773829878955883,
+          "total_temperature_K": 348.48022488995167,
+          "x_velocity_m_s": -678.3578758611862,
+          "y_velocity_m_s": 266.7369884466771,
+          "z_velocity_m_s": -351.0808787585885,
+          "speed_m_s": 809.0585962576544,
+          "mach": 8.456294686848345,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            43,
+            6,
+            45
+          ],
+          "position_m": [
+            -0.05306250000000001,
+            -0.027818181818181874,
+            0.02345454545454536
+          ],
+          "density_kg_m3": 0.03990539679808018,
+          "total_energy_density_J_m3": 13706.818905917968,
+          "kinetic_energy_density_J_m3": 13053.9386438781,
+          "internal_energy_density_J_m3": 652.8802620398674,
+          "temperature_K": 22.794300502826278,
+          "total_temperature_K": 348.33572658774347,
+          "x_velocity_m_s": -673.6281028255594,
+          "y_velocity_m_s": -342.96490990992027,
+          "z_velocity_m_s": 287.8272431909132,
+          "speed_m_s": 808.8536779101416,
+          "mach": 8.450355860484674,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 155,
+          "local_index": [
+            41,
+            5,
+            44
+          ],
+          "position_m": [
+            -0.05531250000000001,
+            -0.028909090909090964,
+            0.022363636363636273
+          ],
+          "density_kg_m3": 0.039208864273208834,
+          "total_energy_density_J_m3": 13516.099682790382,
+          "kinetic_energy_density_J_m3": 12874.18949695941,
+          "internal_energy_density_J_m3": 641.9101858309714,
+          "temperature_K": 22.809426622795964,
+          "total_temperature_K": 349.571740484424,
+          "x_velocity_m_s": -680.3543806649669,
+          "y_velocity_m_s": -349.1476793185797,
+          "z_velocity_m_s": 268.1636047775055,
+          "speed_m_s": 810.3689926143686,
+          "mach": 8.463379192579376,
+          "sld": 0.0,
+          "ghs": 0.0
+        }
+      ],
+      "lowest_total_temperature_cells": [
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            7,
+            62
+          ],
+          "position_m": [
+            0.2686875,
+            -0.009272727272727339,
+            0.02454545454545446
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 1.5723667156467816e-26,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -8.818429581917505e-13,
+          "y_velocity_m_s": -2.9437957551714683e-13,
+          "z_velocity_m_s": 4.784580750576814e-13,
+          "speed_m_s": 1.0455756629636781e-12,
+          "mach": 6.482182818809768e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            7,
+            63
+          ],
+          "position_m": [
+            0.2686875,
+            -0.009272727272727339,
+            0.025636363636363547
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 1.526965046973288e-26,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -9.948370656911386e-13,
+          "y_velocity_m_s": -2.381747756609698e-13,
+          "z_velocity_m_s": -1.2342518441133173e-13,
+          "speed_m_s": 1.030369733241946e-12,
+          "mach": 6.387911672418649e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 106,
+          "local_index": [
+            25,
+            51,
+            27
+          ],
+          "position_m": [
+            0.26868749999999997,
+            -0.031090909090909224,
+            -0.013636363636363696
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 6.109440892750232e-27,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -6.253253967654097e-13,
+          "y_velocity_m_s": -1.5818336032980527e-13,
+          "z_velocity_m_s": 9.338517079733838e-14,
+          "speed_m_s": 6.517473570716602e-13,
+          "mach": 4.040592823516544e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            6,
+            62
+          ],
+          "position_m": [
+            0.2686875,
+            -0.010363636363636429,
+            0.02454545454545446
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 1.0218103327043257e-26,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -7.049453171586069e-13,
+          "y_velocity_m_s": 3.628153860591864e-13,
+          "z_velocity_m_s": 2.861067170592588e-13,
+          "speed_m_s": 8.428760039837129e-13,
+          "mach": 5.2255198212279525e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            17,
+            39
+          ],
+          "position_m": [
+            0.2686875,
+            0.0016363636363635609,
+            -0.0005454545454546128
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 8.82250684587369e-27,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -5.876699723391194e-13,
+          "y_velocity_m_s": -3.961880807498013e-13,
+          "z_velocity_m_s": 3.332964530722329e-13,
+          "speed_m_s": 7.83203369086091e-13,
+          "mach": 4.855571531125192e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            39,
+            28
+          ],
+          "position_m": [
+            0.2686875,
+            0.025636363636363547,
+            -0.012545454545454606
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 9.290371501707483e-27,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -7.778538493497889e-13,
+          "y_velocity_m_s": -1.5767579566387297e-13,
+          "z_velocity_m_s": -1.265651823742189e-13,
+          "speed_m_s": 8.037020672338344e-13,
+          "mach": 4.982655886325879e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            6,
+            63
+          ],
+          "position_m": [
+            0.2686875,
+            -0.010363636363636429,
+            0.025636363636363547
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 1.4104554410371366e-26,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -6.254132385876904e-13,
+          "y_velocity_m_s": 7.109322543290443e-13,
+          "z_velocity_m_s": -2.8998119394479586e-13,
+          "speed_m_s": 9.902805067695565e-13,
+          "mach": 6.139373279393978e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            17,
+            38
+          ],
+          "position_m": [
+            0.2686875,
+            0.0016363636363635609,
+            -0.0016363636363637066
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 9.942715335739174e-27,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -5.292962335799077e-13,
+          "y_velocity_m_s": -6.003533632318776e-13,
+          "z_velocity_m_s": 2.2519821248198236e-13,
+          "speed_m_s": 8.314402555390153e-13,
+          "mach": 5.154622405847862e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            37,
+            14
+          ],
+          "position_m": [
+            0.2686875,
+            0.023454545454545367,
+            -0.027818181818181867
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 9.671930209543794e-27,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -6.221549934445476e-13,
+          "y_velocity_m_s": 4.006173209396313e-13,
+          "z_velocity_m_s": 3.534045717303977e-13,
+          "speed_m_s": 8.200401606170141e-13,
+          "mach": 5.083946029136171e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            37,
+            15
+          ],
+          "position_m": [
+            0.2686875,
+            0.023454545454545367,
+            -0.026727272727272777
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 1.475020681261492e-26,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -7.480275570335407e-13,
+          "y_velocity_m_s": 6.814735022112355e-13,
+          "z_velocity_m_s": -3.993455159634197e-14,
+          "speed_m_s": 1.0126925143935915e-12,
+          "mach": 6.278319446468833e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            16,
+            39
+          ],
+          "position_m": [
+            0.2686875,
+            0.0005454545454544706,
+            -0.0005454545454546128
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 1.0285786113491084e-26,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -4.2613220635432435e-13,
+          "y_velocity_m_s": 7.24766278744809e-13,
+          "z_velocity_m_s": 9.094482991564603e-14,
+          "speed_m_s": 8.456629223197552e-13,
+          "mach": 5.242797685274743e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            16,
+            38
+          ],
+          "position_m": [
+            0.2686875,
+            0.0005454545454544706,
+            -0.0016363636363637066
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.451675564008,
+          "kinetic_energy_density_J_m3": 6.115484482603093e-27,
+          "internal_energy_density_J_m3": 1336.451675564008,
+          "temperature_K": 64.72986748216098,
+          "total_temperature_K": 64.72986748216098,
+          "x_velocity_m_s": -4.583351515145966e-13,
+          "y_velocity_m_s": 4.582209124765254e-13,
+          "z_velocity_m_s": -7.181432906753314e-14,
+          "speed_m_s": 6.520696386154991e-13,
+          "mach": 4.0425908500203076e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            15,
+            31
+          ],
+          "position_m": [
+            0.2686875,
+            -0.0005454545454546163,
+            -0.009272727272727335
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.4516755640082,
+          "kinetic_energy_density_J_m3": 9.086722522448833e-27,
+          "internal_energy_density_J_m3": 1336.4516755640082,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -3.2530597952503136e-13,
+          "y_velocity_m_s": 1.2693409193002078e-13,
+          "z_velocity_m_s": -7.140318963013125e-13,
+          "speed_m_s": 7.948445086584466e-13,
+          "mach": 4.927742295614296e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            32,
+            27
+          ],
+          "position_m": [
+            0.2686875,
+            0.017999999999999912,
+            -0.013636363636363696
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 2.1574187717147398e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -9.697271052417802e-13,
+          "y_velocity_m_s": 7.388513345488603e-13,
+          "z_velocity_m_s": 1.1717093538357417e-13,
+          "speed_m_s": 1.2247452720071617e-12,
+          "mach": 7.59296820004418e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            0,
+            39
+          ],
+          "position_m": [
+            0.2686875,
+            -0.01690909090909097,
+            -0.0005454545454546128
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.4516755640082,
+          "kinetic_energy_density_J_m3": 9.74328952079854e-27,
+          "internal_energy_density_J_m3": 1336.4516755640082,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -3.353183593791919e-13,
+          "y_velocity_m_s": 6.869906561691367e-13,
+          "z_velocity_m_s": 3.0501269019168597e-13,
+          "speed_m_s": 8.230597213923321e-13,
+          "mach": 5.102666190355913e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            32,
+            26
+          ],
+          "position_m": [
+            0.2686875,
+            0.017999999999999912,
+            -0.014727272727272787
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.4698076550718754e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -6.335125687665064e-13,
+          "y_velocity_m_s": 5.569406643520944e-13,
+          "z_velocity_m_s": 5.57136033259713e-13,
+          "speed_m_s": 1.0109013987281141e-12,
+          "mach": 6.267215191076785e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 128,
+          "local_index": [
+            25,
+            2,
+            29
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.028909090909090815,
+            -0.011454545454545516
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.5265615373205796e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -7.005935435915266e-13,
+          "y_velocity_m_s": 2.9722065219882776e-13,
+          "z_velocity_m_s": -6.944132827675692e-13,
+          "speed_m_s": 1.0302335835623206e-12,
+          "mach": 6.387067594705943e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            0,
+            40
+          ],
+          "position_m": [
+            0.2686875,
+            -0.01690909090909097,
+            0.000545454545454474
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.4516755640082,
+          "kinetic_energy_density_J_m3": 7.661845999448473e-27,
+          "internal_energy_density_J_m3": 1336.4516755640082,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -3.9543937414454305e-13,
+          "y_velocity_m_s": 6.12754192228828e-13,
+          "z_velocity_m_s": 2.948869515981461e-14,
+          "speed_m_s": 7.29869564963535e-13,
+          "mach": 4.524921649924765e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 132,
+          "local_index": [
+            25,
+            3,
+            5
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.029999999999999905,
+            0.014727272727272641
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 2.2819450787444982e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -9.626687078880796e-13,
+          "y_velocity_m_s": -5.391891176049727e-13,
+          "z_velocity_m_s": -6.075567123087376e-13,
+          "speed_m_s": 1.2595956114412022e-12,
+          "mach": 7.809027428956123e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            32,
+            28
+          ],
+          "position_m": [
+            0.2686875,
+            0.017999999999999912,
+            -0.012545454545454606
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 2.6324977088680343e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -1.1065029562280836e-12,
+          "y_velocity_m_s": 7.730510118530905e-13,
+          "z_velocity_m_s": -9.140674188048274e-14,
+          "speed_m_s": 1.3528901845788446e-12,
+          "mach": 8.387419314404995e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            32,
+            29
+          ],
+          "position_m": [
+            0.2686875,
+            0.017999999999999912,
+            -0.011454545454545516
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.8404186105373694e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -8.054710113740809e-13,
+          "y_velocity_m_s": 6.273023889580325e-13,
+          "z_velocity_m_s": -4.871412682234072e-13,
+          "speed_m_s": 1.1311933754061456e-12,
+          "mach": 7.0129810041914385e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 128,
+          "local_index": [
+            25,
+            3,
+            26
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.029999999999999905,
+            -0.014727272727272787
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.8962082447989367e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -6.514875739251163e-13,
+          "y_velocity_m_s": -4.717131866897293e-13,
+          "z_velocity_m_s": 8.194133533093945e-13,
+          "speed_m_s": 1.1482106222542795e-12,
+          "mach": 7.118481647568837e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 128,
+          "local_index": [
+            25,
+            3,
+            28
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.029999999999999905,
+            -0.012545454545454606
+          ],
+          "density_kg_m3": 0.028765564804355995,
+          "total_energy_density_J_m3": 1336.4516755640072,
+          "kinetic_energy_density_J_m3": 2.3772878612854964e-26,
+          "internal_energy_density_J_m3": 1336.4516755640072,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -1.1503939955839038e-12,
+          "y_velocity_m_s": -5.52890829647392e-13,
+          "z_velocity_m_s": -1.5419473271831334e-13,
+          "speed_m_s": 1.2856401635690106e-12,
+          "mach": 7.970494029898173e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            15,
+            52
+          ],
+          "position_m": [
+            0.2686875,
+            -0.0005454545454546163,
+            0.013636363636363558
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.4516755640082,
+          "kinetic_energy_density_J_m3": 4.847842345304049e-27,
+          "internal_energy_density_J_m3": 1336.4516755640082,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -5.086032381332716e-13,
+          "y_velocity_m_s": 1.4148566501902134e-13,
+          "z_velocity_m_s": 2.415849354025953e-13,
+          "speed_m_s": 5.805675914645945e-13,
+          "mach": 3.599304574364693e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 128,
+          "local_index": [
+            25,
+            2,
+            26
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.028909090909090815,
+            -0.014727272727272787
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.3809823511979234e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -6.133061252141444e-13,
+          "y_velocity_m_s": 2.6369249172030293e-13,
+          "z_velocity_m_s": 7.172763927977129e-13,
+          "speed_m_s": 9.798793584313065e-13,
+          "mach": 6.074890002437255e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 132,
+          "local_index": [
+            25,
+            2,
+            5
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.028909090909090815,
+            0.014727272727272641
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.580709459177682e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -8.211173548603842e-13,
+          "y_velocity_m_s": 4.4987958687317775e-13,
+          "z_velocity_m_s": -4.715968842271256e-13,
+          "speed_m_s": 1.04834582764984e-12,
+          "mach": 6.499356816416994e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 118,
+          "local_index": [
+            17,
+            15,
+            45
+          ],
+          "position_m": [
+            0.2686875,
+            -0.0005454545454546163,
+            0.005999999999999922
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.4516755640082,
+          "kinetic_energy_density_J_m3": 2.0362171486709413e-26,
+          "internal_energy_density_J_m3": 1336.4516755640082,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -8.527882428508707e-13,
+          "y_velocity_m_s": 2.70731788098678e-13,
+          "z_velocity_m_s": -7.843398129682848e-13,
+          "speed_m_s": 1.1898455489847861e-12,
+          "mach": 7.376602811129498e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 128,
+          "local_index": [
+            25,
+            3,
+            29
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.029999999999999905,
+            -0.011454545454545516
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 2.178885573899802e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -8.049060500358711e-13,
+          "y_velocity_m_s": -5.101079588858941e-13,
+          "z_velocity_m_s": -7.790009303307432e-13,
+          "speed_m_s": 1.2308234351681986e-12,
+          "mach": 7.63065056604409e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 128,
+          "local_index": [
+            25,
+            6,
+            25
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.033272727272727176,
+            -0.015818181818181877
+          ],
+          "density_kg_m3": 0.028765564804356016,
+          "total_energy_density_J_m3": 1336.4516755640082,
+          "kinetic_energy_density_J_m3": 7.270245474029865e-27,
+          "internal_energy_density_J_m3": 1336.4516755640082,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -5.203542175280578e-13,
+          "y_velocity_m_s": -2.348266840656649e-13,
+          "z_velocity_m_s": -4.237575524107785e-13,
+          "speed_m_s": 7.109729576247514e-13,
+          "mach": 4.4077696658416076e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 132,
+          "local_index": [
+            25,
+            2,
+            2
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.028909090909090815,
+            0.011454545454545372
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.3113452445302572e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -7.908617941464721e-13,
+          "y_velocity_m_s": 2.522966932604954e-13,
+          "z_velocity_m_s": 4.718374357549648e-13,
+          "speed_m_s": 9.548542112022012e-13,
+          "mach": 5.9197433352444795e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 132,
+          "local_index": [
+            25,
+            3,
+            2
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.029999999999999905,
+            0.011454545454545372
+          ],
+          "density_kg_m3": 0.028765564804355985,
+          "total_energy_density_J_m3": 1336.4516755640068,
+          "kinetic_energy_density_J_m3": 1.7000181345974667e-26,
+          "internal_energy_density_J_m3": 1336.4516755640068,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -8.655218430146076e-13,
+          "y_velocity_m_s": -3.96986503209841e-13,
+          "z_velocity_m_s": 5.24647558030322e-13,
+          "speed_m_s": 1.0871896819844091e-12,
+          "mach": 6.740174362294245e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        },
+        {
+          "level": 1,
+          "grid_id": 128,
+          "local_index": [
+            25,
+            3,
+            27
+          ],
+          "position_m": [
+            0.26868749999999997,
+            0.029999999999999905,
+            -0.013636363636363696
+          ],
+          "density_kg_m3": 0.028765564804355995,
+          "total_energy_density_J_m3": 1336.4516755640072,
+          "kinetic_energy_density_J_m3": 1.974207790920471e-26,
+          "internal_energy_density_J_m3": 1336.4516755640072,
+          "temperature_K": 64.729867482161,
+          "total_temperature_K": 64.729867482161,
+          "x_velocity_m_s": -9.914656317251112e-13,
+          "y_velocity_m_s": -5.857487919792651e-13,
+          "z_velocity_m_s": 2.1566891467301764e-13,
+          "speed_m_s": 1.1715881643962948e-12,
+          "mach": 7.263413771935085e-15,
+          "sld": 0.0,
+          "ghs": 0.0
+        }
+      ]
+    }
+  ]
+}

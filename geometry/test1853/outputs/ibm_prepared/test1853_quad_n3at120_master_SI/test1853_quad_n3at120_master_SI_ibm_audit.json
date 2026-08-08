@@ -1,0 +1,46 @@
+{
+  "file": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_quad_n3at120_master_SI/test1853_quad_n3at120_master_SI.stl",
+  "kind": "stl",
+  "sha256": "f56ad55ec5f8ff0c5c528cbb10e0779ee45bf74a75142874e3d2f198d6acf6b8",
+  "triangles": 364826,
+  "unique_vertices": 182415,
+  "bounds_lo": [
+    0.0024412688799202442,
+    -0.06350000202655792,
+    -0.06350000202655792
+  ],
+  "bounds_hi": [
+    0.2681376338005066,
+    0.06350000202655792,
+    0.06350000202655792
+  ],
+  "weld_tolerance": 1e-07,
+  "edge_length": {
+    "min": 0.00023056504480748082,
+    "mean": 0.0006740828157760683,
+    "max": 0.0028636496872555834
+  },
+  "area": 0.12477297136798997,
+  "signed_volume": 0.0031973040761043453,
+  "normal_closure": [
+    -4.087442190270352e-17,
+    2.337810934421869e-19,
+    -7.809643773684649e-19
+  ],
+  "normal_closure_relative": 3.276555004083461e-16,
+  "degenerate_facets": 0,
+  "weld_collapsed_facets": 0,
+  "boundary_edges": 0,
+  "nonmanifold_edges": 0,
+  "inconsistent_edges": 0,
+  "duplicate_facets": 0,
+  "connected_components": 1,
+  "zero_stored_normals": 0,
+  "mismatched_stored_normals": 0,
+  "reversed_stored_normals": 0,
+  "fluid_spacing_ratios": [],
+  "self_intersection_checked": false,
+  "warnings": [],
+  "failures": [],
+  "passed": true
+}

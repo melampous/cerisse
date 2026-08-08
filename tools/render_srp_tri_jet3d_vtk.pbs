@@ -1,0 +1,31 @@
+#!/bin/bash
+#PBS -N srp_jet3d_vtk
+#PBS -q cx
+#PBS -l walltime=02:00:00
+#PBS -l select=1:ncpus=4:mem=64gb
+#PBS -j oe
+#PBS -o /rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2/post_latest_plt09000/jet3d_vtk/pbs.log
+
+set -euo pipefail
+
+source /etc/profile.d/modules.sh
+source /etc/profile.d/z00_lmod.sh
+module purge
+module load tools/prod yt/4.3.0-foss-2022a VTK/9.2.2-foss-2022a
+
+CASE=/rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2
+OUT=${CASE}/post_latest_plt09000/jet3d_vtk
+CACHE=${OUT}/plt09000_jet3d_cache.npz
+export MPLCONFIGDIR=${TMPDIR:-/tmp}/mpl-${PBS_JOBID}
+export OMP_NUM_THREADS=4
+mkdir -p "${MPLCONFIGDIR}" "${OUT}"
+
+date -u
+hostname
+xvfb-run -a -s "-screen 0 1920x1200x24" \
+  python3 "${CASE}/render_srp_tri_jet3d_vtk.py" \
+    --plotfile "${CASE}/plot/plt09000" \
+    --stl "${CASE}/trinozzle.stl" \
+    --output-dir "${OUT}" \
+    --cache "${CACHE}" 2>&1 | tee "${OUT}/run.log"
+date -u

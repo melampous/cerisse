@@ -1,0 +1,105 @@
+{
+  "plotfile": "/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_h100_largebox_nojet_20260808/stage0c_external_l0/output/run165/plt01339",
+  "time_s": 0.0005,
+  "method": "maximum absolute streamwise density gradient in [-0.150,-0.002] m",
+  "body_nose_x_m": 0.00244127,
+  "axis_bowshock_x_m": -0.024375000000000008,
+  "axis_standoff_m": 0.026816270000000007,
+  "rays": {
+    "axis": {
+      "y_m": 0.0,
+      "z_m": 0.0,
+      "shock_x_m": -0.024375000000000008,
+      "shock_density_gradient_kg_m4": 17.709361025187555,
+      "pre_shock_left_state": {
+        "density_kg_m3": 0.029629874805004466,
+        "pressure_Pa": 581.4137664258827,
+        "temperature_K": 68.16730161404404,
+        "x_velocity_m_s": 733.2216518326092
+      },
+      "post_shock_right_state": {
+        "density_kg_m3": 0.14778999622136754,
+        "pressure_Pa": 12037.865607009377,
+        "temperature_K": 287.3431508759677,
+        "x_velocity_m_s": 19.48575993813853
+      }
+    },
+    "y_plus_30mm": {
+      "y_m": 0.03,
+      "z_m": 0.0,
+      "shock_x_m": -0.01762500000000003,
+      "shock_density_gradient_kg_m4": 17.28494864328891,
+      "pre_shock_left_state": {
+        "density_kg_m3": 0.029636167095956106,
+        "pressure_Pa": 585.4141907786594,
+        "temperature_K": 68.60284920885437,
+        "x_velocity_m_s": 732.9463236882931
+      },
+      "post_shock_right_state": {
+        "density_kg_m3": 0.123386429919146,
+        "pressure_Pa": 11408.677655084392,
+        "temperature_K": 322.07600975113075,
+        "x_velocity_m_s": 167.44955310928492
+      }
+    },
+    "y_minus_30mm": {
+      "y_m": -0.03,
+      "z_m": 0.0,
+      "shock_x_m": -0.01762500000000003,
+      "shock_density_gradient_kg_m4": 17.252172875943998,
+      "pre_shock_left_state": {
+        "density_kg_m3": 0.029629527997980947,
+        "pressure_Pa": 585.0567113747644,
+        "temperature_K": 68.57878269655953,
+        "x_velocity_m_s": 732.990324623703
+      },
+      "post_shock_right_state": {
+        "density_kg_m3": 0.12316570568097858,
+        "pressure_Pa": 11387.908151193284,
+        "temperature_K": 322.06469623554665,
+        "x_velocity_m_s": 167.1567903581927
+      }
+    },
+    "z_plus_30mm": {
+      "y_m": 0.0,
+      "z_m": 0.03,
+      "shock_x_m": -0.01762500000000003,
+      "shock_density_gradient_kg_m4": 17.40564619127985,
+      "pre_shock_left_state": {
+        "density_kg_m3": 0.02962171089022862,
+        "pressure_Pa": 584.4690358578063,
+        "temperature_K": 68.53231085963857,
+        "x_velocity_m_s": 733.0831213191763
+      },
+      "post_shock_right_state": {
+        "density_kg_m3": 0.12346045308751112,
+        "pressure_Pa": 11418.50419977254,
+        "temperature_K": 322.1616613350433,
+        "x_velocity_m_s": 166.9649765818549
+      }
+    },
+    "z_minus_30mm": {
+      "y_m": 0.0,
+      "z_m": -0.03,
+      "shock_x_m": -0.01762500000000003,
+      "shock_density_gradient_kg_m4": 17.397923320215185,
+      "pre_shock_left_state": {
+        "density_kg_m3": 0.02965747698268802,
+        "pressure_Pa": 586.3853744425479,
+        "temperature_K": 68.65871874010674,
+        "x_velocity_m_s": 732.7686975966056
+      },
+      "post_shock_right_state": {
+        "density_kg_m3": 0.12341812970304393,
+        "pressure_Pa": 11409.485228743111,
+        "temperature_K": 322.01847137745216,
+        "x_velocity_m_s": 166.93264356023883
+      }
+    }
+  },
+  "symmetry": {
+    "y_pair_shock_x_difference_m": 0.0,
+    "z_pair_shock_x_difference_m": 0.0,
+    "mean_y_vs_mean_z_shock_x_difference_m": 0.0
+  }
+}

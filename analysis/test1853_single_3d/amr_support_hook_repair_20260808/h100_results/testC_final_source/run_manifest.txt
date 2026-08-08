@@ -1,0 +1,20 @@
+started_utc=2026-08-08T11:56:55Z
+host=ip-10-0-135-55.us-east-2.compute.internal
+restart=/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_support_hook_repair_20260808/testB_chk03300_regrid_step3370/output/run165/chk03370
+target_step=3400
+regrid_on_restart=0
+regrid_int=1000000 1000000
+strict_positivity=1
+soft_positivity=0
+method=pure_shared_gp_full_cartesian
+cut_control=disabled
+f433b965e52436654e973fc69eb5bb07290512743e9cb6ed61fc52d825dceec1  main3d.gnu.TPROF.MPI.CUDA.ex
+9659136e1277bcaf6d7da08fdcbb55881b6f4f2000045b95dca5f5e9c185b5b0  inputs.run165
+e7d0dbf2aa6613f2877af587531ff4eec8389602d5f89b763fe5ffd43c9d6864  prob.h
+248016d02d5d841e5c6dc2284960ce95ef33fb549efda6de251d2bea080bb4f4  /shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_support_hook_repair_20260808/testB_chk03300_regrid_step3370/output/run165/chk03370/Header
+final_step=3400
+exit_status=0
+failure_count=0
+hook_line=[IBM-AMR-Support-Hook] detected=1 dispatch=automatic default=whole_interface
+level2_gp_line=[IBM-AMR-Support] GP level=2 targets=0 active-supports=0 physical-BC-supports=0 coarse-fine-missing-targets=0 coarse-fine-missing-supports=0
+finished_utc=2026-08-08T12:01:27Z

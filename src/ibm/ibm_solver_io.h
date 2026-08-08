@@ -34,6 +34,20 @@ void gatherSurfData()
         amrex::Abort("gatherSurfData: ntotalfaces must be positive");
     }
 
+    // computeSurfIndices intentionally excludes RZ contour segments whose
+    // centroid lies on the symmetry axis: their revolved area is exactly zero.
+    // Mirror that definition here so MPI ownership remains strict for every
+    // physical surface element without requiring an owner for an axis closure.
+    const bool is_rz = amr_p->Geom(0).IsRZ();
+    const auto is_zero_area_axis_closure = [this, is_rz](int face) {
+        return is_rz
+            && std::abs(SurfElem_a[face].centroid[0]) <= IBM_EPS::GEOM;
+    };
+    int expected_owned_faces = 0;
+    for (int face = 0; face < ntotalfaces; ++face) {
+        expected_owned_faces += is_zero_area_axis_closure(face) ? 0 : 1;
+    }
+
     // Structure for packing data to send to Rank 0
     // This struct must be trivially copyable to be safely sent via MPI as raw bytes.
     struct SurfOut {
@@ -41,7 +55,8 @@ void gatherSurfData()
         int lev;       // AMR level
         int rank;      // Owning rank
         int ipq;       // Interpolation quality (number of fluid points)
-        Real p, T, dTdn, tau1, tau2; // Physical quantities
+        int ipfit;     // First-IP polynomial fit order (2/1/0)
+        Real p, T, dTdn, tau_normal, tau1, tau2; // Physical quantities
         Real pshock, pfallback;       // Pressure-closure diagnostics
     };
     static_assert(std::is_trivially_copyable<SurfOut>::value,
@@ -61,9 +76,11 @@ void gatherSurfData()
         s.lev  = surfphys_soa.lev[i];
         s.rank = surfphys_soa.rank[i];
         s.ipq  = surfphys_soa.ip_quality[i];
+        s.ipfit = surfphys_soa.ip_fit_order[i];
         s.p    = surfphys_soa.pressure[i];
         s.T    = surfphys_soa.temperature[i];
         s.dTdn = surfphys_soa.dTdn[i];
+        s.tau_normal = surfphys_soa.tau_normal[i];
         s.tau1 = surfphys_soa.tau1[i];
         s.tau2 = surfphys_soa.tau2[i];
         s.pshock = surfphys_soa.pressure_shock_sensor[i];
@@ -140,6 +157,12 @@ void gatherSurfData()
     // Step 5: Unpack on root back into SoA
     // ======================================================================
     if (my_rank == 0) {
+        if (total != expected_owned_faces) {
+            amrex::Abort(
+                "gatherSurfData: surface ownership is incomplete or duplicated");
+        }
+        std::vector<uint8_t> received(static_cast<std::size_t>(ntotalfaces),
+                                      uint8_t(0));
         for (int k = 0; k < total; ++k) {
             // vector<char> does not guarantee SurfOut alignment. Copy each
             // record into aligned storage instead of reinterpret_casting the
@@ -153,18 +176,35 @@ void gatherSurfData()
             if (i < 0 || i >= ntotalfaces) {
                 amrex::Abort("gatherSurfData: received face index out of range");
             }
+            if (is_zero_area_axis_closure(i)) {
+                amrex::Abort(
+                    "gatherSurfData: zero-area RZ axis closure has an owner");
+            }
+            if (received[i] != 0) {
+                amrex::Abort(
+                    "gatherSurfData: duplicate distributed surface owner");
+            }
+            received[i] = uint8_t(1);
 
             surfphys_soa.lev[i]        = s.lev;
             surfphys_soa.rank[i]       = s.rank;
             surfphys_soa.ip_quality[i] = s.ipq;
-
+            surfphys_soa.ip_fit_order[i] = s.ipfit;
             surfphys_soa.pressure[i]    = s.p;
             surfphys_soa.temperature[i] = s.T;
             surfphys_soa.dTdn[i]        = s.dTdn;
+            surfphys_soa.tau_normal[i]  = s.tau_normal;
             surfphys_soa.tau1[i]        = s.tau1;
             surfphys_soa.tau2[i]        = s.tau2;
             surfphys_soa.pressure_shock_sensor[i] = s.pshock;
             surfphys_soa.pressure_fallback[i] = s.pfallback;
+        }
+        for (int i = 0; i < ntotalfaces; ++i) {
+            const bool should_be_owned = !is_zero_area_axis_closure(i);
+            if (should_be_owned != (received[i] != uint8_t(0))) {
+                amrex::Abort(
+                    "gatherSurfData: physical surface ownership is incomplete");
+            }
         }
     }
 }
@@ -178,6 +218,7 @@ void plotSURF(
 {
     // Only Rank 0 writes the file (serial I/O)
     if (amrex::ParallelDescriptor::MyProc() != 0) return;
+
 
     // Parse prefix to get base directory and filename prefix
     std::string base_dir = ".";
@@ -240,7 +281,6 @@ void plotSURF(
         ofs << "<VTKFile type=\"PolyData\" version=\"1.0\" byte_order=\"LittleEndian\" header_type=\"UInt64\">\n";
         ofs << "  <PolyData>\n";
         ofs << "    <Piece NumberOfPoints=\"" << n_points << "\" NumberOfPolys=\"" << n_cells << "\">\n";
-
         // ==================================================================
         // 3. Write Points (Vertices)
         // ==================================================================
@@ -364,106 +404,23 @@ void plotSURF(
 
         write_scalar_field("Pressure",    surfphys_soa.pressure);
         write_scalar_field("Temperature", surfphys_soa.temperature);
+        write_scalar_field("TauNormal",   surfphys_soa.tau_normal);
         write_scalar_field("Tau1",        surfphys_soa.tau1);
         write_scalar_field("Tau2",        surfphys_soa.tau2);
         write_scalar_field("dTdn",        surfphys_soa.dTdn);
         write_scalar_field("PressureShockSensor",
                            surfphys_soa.pressure_shock_sensor);
         write_scalar_field("PressureFallbackFraction", surfphys_soa.pressure_fallback);
-
         write_int_field("Rank",       surfphys_soa.rank);
         write_int_field("Level",      surfphys_soa.lev);
         write_int_field("IP_quality", surfphys_soa.ip_quality);
-
+        write_int_field("IP_fit_order", surfphys_soa.ip_fit_order);
         ofs << "      </CellData>\n";
         ofs << "    </Piece>\n";
         ofs << "  </PolyData>\n";
         ofs << "</VTKFile>\n";
 
         ofs.close();
-    }
-}
-
-void plotGP(
-    const amrex::Real time, int step, const std::string& prefix, int lev)
-{
-    if (lev < 0 || lev >= static_cast<int>(gpstore_a.size())) return;
-    const auto& gpstore = gpstore_a[lev];
-    if (gpstore.total_ngps == 0) return;
-
-    // The computeAllGPs kernel that fills n_valid / recon_prim is asynchronous;
-    // the host reads of those managed arrays below must wait for it (WSL2
-    // managed memory faults on concurrent access — same class as the
-    // computeSURFs fix in 524df480a). Sync here (cold diagnostic path) rather
-    // than at the end of computeAllGPs (hot path, called every RK stage).
-    Gpu::streamSynchronize();
-
-    std::string base_dir = ".";
-    std::string file_prefix = prefix;
-    auto pos = prefix.find_last_of("/\\");
-    if (pos != std::string::npos) {
-        base_dir = prefix.substr(0, pos);
-        file_prefix = prefix.substr(pos + 1);
-        if (!amrex::UtilCreateDirectory(base_dir, 0755)) {
-            amrex::Print() << "Error: Could not create directory " << base_dir << "\n";
-        }
-    }
-
-    const int rank = amrex::ParallelDescriptor::MyProc();
-    std::ostringstream name;
-    name << base_dir << "/" << file_prefix
-         << "_lev" << lev
-         << "_rank" << rank
-         << "_" << std::setw(5) << std::setfill('0') << step
-         << ".csv";
-
-    std::ofstream ofs(name.str());
-    if (!ofs.good()) {
-        amrex::Print() << "Error: Cannot open GP diagnostic file "
-                       << name.str() << " for writing.\n";
-        return;
-    }
-
-    const auto prob_lo = amr_p->Geom(lev).ProbLoArray();
-    const auto& dx = dx_a[lev];
-
-    ofs << "time,step,level,rank,gp_index,i,j,k,x,y,z,"
-           "ib_x,ib_y,ib_z,disGP,n_valid,rho,u,v,w,p,T\n";
-    ofs << std::setprecision(17);
-    for (int ii = 0; ii < gpstore.total_ngps; ++ii) {
-        const int i = gpstore.gp_ijk[ii](0);
-        const int j = gpstore.gp_ijk[ii](1);
-#if (AMREX_SPACEDIM == 3)
-        const int k = gpstore.gp_ijk[ii](2);
-#else
-        const int k = 0;
-#endif
-        const Real x = prob_lo[0] + (Real(0.5) + Real(i)) * dx[0];
-        const Real y = prob_lo[1] + (Real(0.5) + Real(j)) * dx[1];
-#if (AMREX_SPACEDIM == 3)
-        const Real z = prob_lo[2] + (Real(0.5) + Real(k)) * dx[2];
-#else
-        const Real z = Real(0.0);
-#endif
-        ofs << time << "," << step << "," << lev << "," << rank << "," << ii
-            << "," << i << "," << j << "," << k
-            << "," << x << "," << y << "," << z
-            << "," << gpstore.ib_xyz[ii](0)
-            << "," << gpstore.ib_xyz[ii](1)
-#if (AMREX_SPACEDIM == 3)
-            << "," << gpstore.ib_xyz[ii](2)
-#else
-            << "," << Real(0.0)
-#endif
-            << "," << gpstore.disGP[ii]
-            << "," << gpstore.n_valid[ii]
-            << "," << gpstore.recon_prim[ii](0)
-            << "," << gpstore.recon_prim[ii](1)
-            << "," << gpstore.recon_prim[ii](2)
-            << "," << gpstore.recon_prim[ii](3)
-            << "," << gpstore.recon_prim[ii](4)
-            << "," << gpstore.recon_prim[ii](5)
-            << "\n";
     }
 }
 
@@ -636,31 +593,52 @@ void read_geom()
     }
     min_dx *= Real(0.5);
 
+    const bool timing_enabled = performanceTimingEnabled();
+    Real timing_mesh_io = Real(0.0);
+    Real timing_closed_check = Real(0.0);
+    Real timing_acceleration_build = Real(0.0);
+    Real timing_inside_tester = Real(0.0);
+    Real timing_geometry_cache = Real(0.0);
+    Real timing_consistency = Real(0.0);
+
     for (int i = 0; i < ngeom; i++) {
         Print() << "----------------------------------" << std::endl;
+        Real phase_start = timing_enabled ? amrex::second() : Real(0.0);
 
 #if (AMREX_SPACEDIM == 2)
 
         if (!read_polygon_2d(files_a[i], geom_a[i], min_dx)) {
             amrex::Abort(std::string("Invalid 2D geometry filename: ") + files_a[i]);
         }
+        if (timing_enabled) {
+            timing_mesh_io += amrex::second() - phase_start;
+        }
         Print() << "Geometry (i=" << i << ") " << files_a[i] << " read" << std::endl;
         Print() << "Number of vertices in polygon: " << geom_a[i].size() << "\n";
 
+        phase_start = timing_enabled ? amrex::second() : Real(0.0);
 #ifdef AMREX_USE_CGAL
         tree_a[i].insert(geom_a[i].edges_begin(), geom_a[i].edges_end());
         tree_a[i].build();
         Print() << "CGAL AABB tree constructed" << std::endl;
-
-        inout_fa[i] = std::make_unique<inside_t>(geom_a[i]);
-        Print() << "2D in/out testing functor constructed for polygon " << files_a[i] << "\n";
 #else
         bvh_a[i].build(geom_a[i]);
         Print() << "BVH constructed" << std::endl;
-
-        inout_fa[i] = std::make_unique<inside_t>(geom_a[i], bvh_a[i]);
-        Print() << "2D in/out testing functor constructed for polygon " << files_a[i] << "\n";
 #endif
+        if (timing_enabled) {
+            timing_acceleration_build += amrex::second() - phase_start;
+        }
+
+        phase_start = timing_enabled ? amrex::second() : Real(0.0);
+#ifdef AMREX_USE_CGAL
+        inout_fa[i] = std::make_unique<inside_t>(geom_a[i]);
+#else
+        inout_fa[i] = std::make_unique<inside_t>(geom_a[i], bvh_a[i]);
+#endif
+        if (timing_enabled) {
+            timing_inside_tester += amrex::second() - phase_start;
+        }
+        Print() << "2D in/out testing functor constructed for polygon " << files_a[i] << "\n";
 
         bbox_body_a[i] = geom_a[i].bbox();
         bbox_a[i] = transform_a[i].transform_bbox(bbox_body_a[i]);
@@ -677,9 +655,13 @@ void read_geom()
             amrex::Abort(std::string("Invalid geometry filename: ") + files_a[i]);
         }
 #endif
+        if (timing_enabled) {
+            timing_mesh_io += amrex::second() - phase_start;
+        }
         Print() << "Geometry (i=" << i << ") " << files_a[i] << " read" << std::endl;
         Print() << "Number of facets " << geom_a[i].size_of_facets() << std::endl;
 
+        phase_start = timing_enabled ? amrex::second() : Real(0.0);
         if (!geom_a[i].is_closed()) {
             if (skip_validation) {
                 amrex::Warning("IBM mesh is not closed (watertight) — validation skipped by ib.skip_validation=1");
@@ -687,22 +669,34 @@ void read_geom()
                 amrex::Abort("IBM mesh validation failed: Mesh is not closed.");
             }
         }
+        if (timing_enabled) {
+            timing_closed_check += amrex::second() - phase_start;
+        }
 
+        phase_start = timing_enabled ? amrex::second() : Real(0.0);
 #ifdef AMREX_USE_CGAL
         tree_a[i].insert(faces(geom_a[i]).first, faces(geom_a[i]).second, geom_a[i]);
         tree_a[i].build();
         Print() << "CGAL AABB tree constructed" << std::endl;
-
-        inout_fa[i] = std::make_unique<inside_t>(geom_a[i]);
-        Print() << "In out testing function constructed for geometry " << files_a[i] << "\n";
 #else
         bvh_a[i].build(geom_a[i]);
         Print() << "BVH constructed (" << bvh_a[i].nodes.size() << " BVH2 nodes, "
                 << bvh_a[i].nodes4.size() << " BVH4 nodes)" << std::endl;
-
-        inout_fa[i] = std::make_unique<inside_t>(geom_a[i], bvh_a[i]);
-        Print() << "In out testing function constructed for geometry " << files_a[i] << "\n";
 #endif
+        if (timing_enabled) {
+            timing_acceleration_build += amrex::second() - phase_start;
+        }
+
+        phase_start = timing_enabled ? amrex::second() : Real(0.0);
+#ifdef AMREX_USE_CGAL
+        inout_fa[i] = std::make_unique<inside_t>(geom_a[i]);
+#else
+        inout_fa[i] = std::make_unique<inside_t>(geom_a[i], bvh_a[i]);
+#endif
+        if (timing_enabled) {
+            timing_inside_tester += amrex::second() - phase_start;
+        }
+        Print() << "In out testing function constructed for geometry " << files_a[i] << "\n";
 
 #ifdef AMREX_USE_CGAL
         bbox_body_a[i] = PMP::bbox(geom_a[i]);
@@ -714,6 +708,7 @@ void read_geom()
 
 #endif
 
+        phase_start = timing_enabled ? amrex::second() : Real(0.0);
         this->geom_offsets[i] = static_cast<int>(this->LocalFrame_a.size());
 #ifdef AMREX_USE_CGAL
         build_geometry_cache(geom_a[i], SurfElem_a, LocalFrame_a,
@@ -723,9 +718,15 @@ void read_geom()
 #else
         build_geometry_cache(geom_a[i], SurfElem_a, LocalFrame_a, this->geom_offsets[i], i);
 #endif
+        if (timing_enabled) {
+            Gpu::streamSynchronize();
+            timing_geometry_cache += amrex::second() - phase_start;
+        }
     } // end loop over geometries
 
     this->geom_offsets[ngeom] = static_cast<int>(this->LocalFrame_a.size());
+
+    annotateSharpFeatures2D();
 
     if ((static_cast<int>(SurfElem_a.size()) != ntotalfaces) ||
         (static_cast<int>(LocalFrame_a.size()) != ntotalfaces)) {
@@ -739,7 +740,12 @@ void read_geom()
     // Build temporary raw-pointer array for consistency check API
     Vector<inside_t*> inout_raw(ngeom);
     for (int i = 0; i < ngeom; ++i) inout_raw[i] = inout_fa[i].get();
+    const Real consistency_start =
+        timing_enabled ? amrex::second() : Real(0.0);
     check_ibm_geometry_consistency(ngeom, geom_a.data(), inout_raw.data(), files_a.data());
+    if (timing_enabled) {
+        timing_consistency += amrex::second() - consistency_start;
+    }
 
     if (interior_is_solid) {
         Print() << "Interior of geometry is marked as SOLID" << std::endl;
@@ -753,9 +759,27 @@ void read_geom()
 
     if (plot_surf) {
         Print() << "Total number of faces across all geometries: " << ntotalfaces << std::endl;
-        surfimp_soa.resize(ntotalfaces);
+        surfimp_soa.resize(
+            ntotalfaces, nsSurfaceCellAverageRecoveryEnabled());
         surfphys_soa.resize(ntotalfaces);
     }
+
+    reportPerformanceDuration("geometry_mesh_io", -1, timing_mesh_io,
+                              Long(ntotalfaces), true);
+    reportPerformanceDuration("geometry_closed_check", -1,
+                              timing_closed_check, Long(ntotalfaces), true);
+    reportPerformanceDuration("geometry_bvh_build", -1,
+                              timing_acceleration_build,
+                              Long(ntotalfaces), true);
+    reportPerformanceDuration("geometry_inside_tester", -1,
+                              timing_inside_tester,
+                              Long(ntotalfaces), true);
+    reportPerformanceDuration("geometry_cache", -1,
+                              timing_geometry_cache,
+                              Long(ntotalfaces), true);
+    reportPerformanceDuration("geometry_consistency", -1,
+                              timing_consistency,
+                              Long(ntotalfaces), true);
 }
 
 #endif // IBM_SOLVER_IO_H_

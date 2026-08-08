@@ -1,10 +1,49 @@
 #include <CNS.h>
 #include <CNS_K.h>
+#include <EulerAdmissibleProlongation.H>
 #include <prob.h>
+
+#include <limits>
+#include <memory>
+#include <type_traits>
 
 using namespace amrex;
 
 int CNS::num_state_data_types = 0;
+
+namespace {
+
+template <typename T, typename = void>
+struct inviscid_scheme_manifest {
+  static constexpr const char* value = "unreported";
+};
+
+template <typename T>
+struct inviscid_scheme_manifest<
+    T, std::void_t<decltype(T::scheme_name)>> {
+  static constexpr const char* value = T::scheme_name;
+};
+
+template <typename T, typename = void>
+struct rz_paired_pressure_capability : std::false_type {};
+
+template <typename T>
+struct rz_paired_pressure_capability<
+    T, std::void_t<decltype(T::rz_paired_pressure_flux_capable)>>
+    : std::bool_constant<T::rz_paired_pressure_flux_capable> {};
+
+template <typename T, typename = void>
+struct local_llf_fallback_manifest {
+  static void print() {}
+};
+
+template <typename T>
+struct local_llf_fallback_manifest<
+    T, std::void_t<decltype(T::print_local_llf_fallback_manifest())>> {
+  static void print() { T::print_local_llf_fallback_manifest(); }
+};
+
+}  // namespace
 
 static Box the_same_box(const Box& b) { return b; }
 // static Box grow_box_by_one (const Box& b) { return amrex::grow(b,1); }
@@ -35,6 +74,20 @@ inline int safe_bc_index(int bc) {
   if (bc < 0) return 0;
   if (bc > 7) amrex::Abort("Unsupported cns.lo_bc/hi_bc value");
   return bc;
+}
+
+// BC type for a STATISTICS component in one direction.
+// Stats ghosts are only consumed by interpolation at regrid; they must never
+// take the ext_dir/bcnormal path (bcnormal writes conservative-variable
+// values, meaningless for stats). Mirror parity applies at Symmetry/SlipWall:
+// odd for components with an odd number of u_d factors in direction d.
+static int stat_bc_type(int physbc, bool odd) {
+  switch (safe_bc_index(physbc)) {
+    case 0: return BCType::int_dir;                                   // Interior
+    case 3:                                                            // Symmetry
+    case 4: return odd ? BCType::reflect_odd : BCType::reflect_even;   // SlipWall
+    default: return BCType::foextrap;  // Inflow/Outflow/NoSlipWall/User/FarField
+  }
 }
 
 static void set_scalar_bc(BCRec& bc, const BCRec* phys_bc) {
@@ -117,12 +170,105 @@ void CNS::variableSetUp() {
 
   // Read input parameters
   read_params();
+  amrex::Print() << "[Numerics] inviscid_scheme="
+                 << inviscid_scheme_manifest<PROB::ProbRHS>::value << '\n';
+  local_llf_fallback_manifest<PROB::ProbRHS>::print();
+  int removed_rz_companion_option = 0;
+  if (ParmParse("cns").query(
+          "rz_companion_pressure_flux", removed_rz_companion_option)) {
+    amrex::Abort(
+        "cns.rz_companion_pressure_flux has been removed; the paired "
+        "radial-pressure operator is automatic for every compatible R-Z "
+        "inviscid scheme, including pure shared-GP builds");
+  }
+#if !defined(CNS_USE_EB)
+  if constexpr (rz_paired_pressure_capability<PROB::ProbRHS>::value) {
+    amrex::Print()
+        << "[Numerics] rz_paired_pressure_operator="
+        << "paired_metric_advection_and_pressure_gradient_when_RZ\n"
+        << "[Numerics] rz_axis_pressure_auxiliary="
+        << "order_matched_parity_reconstruction"
+        << " selector="
+        << inviscid_scheme_manifest<PROB::ProbRHS>::value
+#ifdef AMREX_USE_GPIBM
+        << " stencil=marker_aware_shared_gp"
+#else
+        << " stencil=all_fluid"
+#endif
+        << '\n';
+#ifdef AMREX_USE_GPIBM
+    if (CNS::ibm_positivity_flux_limiter) {
+      amrex::Print()
+          << "[Numerics] ibm_positivity_rz_operator="
+          << "shared_face_dual_channel_metric_flux_and_pressure_gradient\n"
+          << "[Numerics] ibm_positivity_rz_pressure_blend="
+          << "same_theta_as_complete_flux\n"
+          << "[Numerics] ibm_positivity_amr_reflux="
+          << "multilevel_fail_closed_pending_invariant_domain_sync\n"
+          << "[Numerics] ibm_positivity_active_rhs_hooks="
+          << "forbidden_face_flux_operator_only\n";
+    }
+#endif
+  }
+#endif
 
   // Independent (solved) variables and their boundary condition types
   bool state_data_extrap = false;
   bool store_in_checkpoint = true;
+  static std::unique_ptr<cerisse::amr::EulerAdmissibleConservativeLinear>
+      admissible_linear_interp;
+  Interpolater* state_interp = nullptr;
+  const char* state_interp_name = nullptr;
+  if (amr_state_interp == 1) {
+    state_interp = &quartic_interp;
+    state_interp_name =
+        "AMReX conservative quartic (smooth-flow verification only)";
+  } else if (amr_state_interp == 2) {
+    state_interp = &lincc_interp;
+    state_interp_name = "legacy limited conservative linear";
+  } else {
+    Real specific_internal_energy_floor = Real(0.0);
+    Real internal_energy_density_floor =
+        CNSConstants::min_press() / h_prob_closures->gamma_m1;
+#if CLIP_TEMPERATURE_MIN
+    // Match the strict post-step audit while leaving a small representable
+    // interior margin. This prevents regrid interpolation from creating a
+    // conservative state that cons2prims would silently temperature-clip.
+    const Real thermodynamic_floor_scale =
+        Real(1.0) + Real(1024.0) * std::numeric_limits<Real>::epsilon();
+    specific_internal_energy_floor =
+        h_prob_closures->cv * CNSConstants::min_temp() *
+        thermodynamic_floor_scale;
+    internal_energy_density_floor *= thermodynamic_floor_scale;
+#endif
+    if (!admissible_linear_interp) {
+      admissible_linear_interp = std::make_unique<
+          cerisse::amr::EulerAdmissibleConservativeLinear>(
+          cerisse::amr::EulerStateLayout{
+              PROB::ProbClosures::UMX,
+              PROB::ProbClosures::UMY,
+              PROB::ProbClosures::UMZ,
+              PROB::ProbClosures::UET,
+              PROB::ProbClosures::URHO,
+              CNSConstants::small_rho(),
+              internal_energy_density_floor,
+              specific_internal_energy_floor});
+    }
+    state_interp = admissible_linear_interp.get();
+    state_interp_name =
+        "closure-admissibility-preserving limited conservative linear "
+        "(parent-block conservative theta; configured rho-e floor)";
+    amrex::Print()
+        << "  AMR state interpolation floors: rho="
+        << CNSConstants::small_rho()
+        << " rhoe=" << internal_energy_density_floor
+        << " ei=" << specific_internal_energy_floor << '\n';
+  }
+  amrex::Print() << "  AMR state interpolation = "
+                 << state_interp_name << "\n";
   desc_lst.addDescriptor(State_Type, IndexType::TheCellType(),
-                         StateDescriptor::Point, h_prob_closures->NGHOST, h_prob_closures->NCONS, &lincc_interp,
+                         StateDescriptor::Point, h_prob_closures->NGHOST,
+                         h_prob_closures->NCONS, state_interp,
                          state_data_extrap, store_in_checkpoint);
   // https://github.com/AMReX-Codes/amrex/issues/396
 
@@ -219,8 +365,31 @@ void CNS::variableSetUp() {
     // names species (TODO)
   
     // bc
-    for (statv=0;statv<h_prob_closures->NSTAT;statv++) {
-      set_scalar_bc(stats_bcs[statv], h_phys_bc);
+    // Per-component reflection parity per direction: odd iff the statistic
+    // contains an odd number of u_d factors (u_d MEAN and u_d*u_e cross
+    // moments are odd; squares and P/T/rho stats are even).
+    {
+      constexpr int NS = PROB::ProbClosures::NSTAT;
+      int stat_odd[NS][AMREX_SPACEDIM] = {};
+      if (h_prob_closures->record_velocity > 0) {
+        for (int d = 0; d < AMREX_SPACEDIM; ++d) stat_odd[d][d] = 1;   // u_d MEAN
+#if (AMREX_SPACEDIM >= 2)
+        stat_odd[2*AMREX_SPACEDIM][0] = 1;                              // xy cross
+        stat_odd[2*AMREX_SPACEDIM][1] = 1;
+#endif
+#if (AMREX_SPACEDIM == 3)
+        stat_odd[2*AMREX_SPACEDIM+1][0] = 1;                            // xz cross
+        stat_odd[2*AMREX_SPACEDIM+1][2] = 1;
+        stat_odd[2*AMREX_SPACEDIM+2][1] = 1;                            // yz cross
+        stat_odd[2*AMREX_SPACEDIM+2][2] = 1;
+#endif
+      }
+      for (statv = 0; statv < h_prob_closures->NSTAT; statv++) {
+        for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+          stats_bcs[statv].setLo(d, stat_bc_type(h_phys_bc->lo(d), stat_odd[statv][d] != 0));
+          stats_bcs[statv].setHi(d, stat_bc_type(h_phys_bc->hi(d), stat_odd[statv][d] != 0));
+        }
+      }
     }
     StateDescriptor::BndryFunc bndryfuncstats( cns_bcfill);
     bndryfuncstats.setRunOnGPU(true);

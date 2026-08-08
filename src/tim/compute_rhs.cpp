@@ -1,8 +1,9 @@
 #include <AMReX_FluxRegister.H>
-#include <AMReX_ParmParse.H>  // runtime knobs (RZ near-axis dissipation)
-#include <AMReX_FillPatchUtil.H>  // coarse-fine ghosts for the overlap path (FPinfo patches, FillPatchInterp)
+#include <AMReX_iMultiFab.H>
+#include <AMReX_ParmParse.H>
 #include <CNS.h>
 #include <prob.h>
+#include <RZFiniteVolume.h>
 #include <limits>  // for std::numeric_limits (RZ divergence floor)
 
 // IBM and EB marker paths use different array types; combined mode is not yet supported.
@@ -14,31 +15,201 @@
 #include <ibm_solver.h>
 #endif
 
-
 using namespace amrex;
 
 namespace {
 
-// Detection idiom: does the flux scheme advertise rz_pressure_split_capable?
-// Defaults to FALSE for any flux that does not define the trait (keep_euler_t,
-// no_euler_t, and any future flux). Only weno_t opts in (=true). This guards the
-// RZ pressure-split (which removes the radial pressure flux only in weno_t) from
-// being silently enabled with an incompatible flux -> see compute_rhs guard.
+using FaceFluxArray = std::array<FArrayBox*, AMREX_SPACEDIM>;
+using FaceFallbackMaskArray =
+    std::array<Array4<int>, AMREX_SPACEDIM>;
+
 template <typename T, typename = void>
-struct rz_psplit_capable : std::false_type {};
+struct local_llf_fallback_mask_capable : std::false_type {};
 template <typename T>
-struct rz_psplit_capable<T, std::void_t<decltype(T::rz_pressure_split_capable)>>
-    : std::bool_constant<T::rz_pressure_split_capable> {};
+struct local_llf_fallback_mask_capable<
+    T, std::void_t<decltype(T::local_llf_fallback_mask_capable)>>
+    : std::bool_constant<T::local_llf_fallback_mask_capable> {};
+
+// Every Euler operator uses the standard cylindrical +p/r radial-momentum
+// source unless it explicitly opts out.  no_euler_t opts out so a
+// diffusion-only R-Z RHS is not contaminated by a pressure source without a
+// matching pressure face flux.
+template <typename T, typename = void>
+struct rz_euler_geometric_source_active : std::true_type {};
+template <typename T>
+struct rz_euler_geometric_source_active<
+    T, std::void_t<decltype(T::rz_euler_geometric_source_active)>>
+    : std::bool_constant<T::rz_euler_geometric_source_active> {};
+
+template <typename T, typename = void>
+struct rz_annular_pressure_consistency_capable : std::false_type {};
+template <typename T>
+struct rz_annular_pressure_consistency_capable<
+    T, std::void_t<decltype(T::rz_annular_pressure_consistency_capable)>>
+    : std::bool_constant<T::rz_annular_pressure_consistency_capable> {};
+
+template <typename T, typename = void>
+struct rz_radial_axis_face_flux_is_metric : std::false_type {};
+template <typename T>
+struct rz_radial_axis_face_flux_is_metric<
+    T, std::void_t<decltype(T::rz_radial_axis_face_flux_is_metric)>>
+    : std::bool_constant<T::rz_radial_axis_face_flux_is_metric> {};
+
+// Most paired-pressure operators impose zero radial-momentum advection at
+// r=0.  An operator may instead provide an auxiliary metric flux in the axis
+// face slot, for example to close a parity-aware low-order rescue at the first
+// interior radial face.  This is deliberately a separate capability from the
+// generic axis-metric storage trait so existing WENO/AFD paths are unchanged.
+template <typename T, typename = void>
+struct rz_paired_axis_advective_flux_is_metric : std::false_type {};
+template <typename T>
+struct rz_paired_axis_advective_flux_is_metric<
+    T,
+    std::void_t<decltype(T::rz_paired_axis_advective_flux_is_metric)>>
+    : std::bool_constant<T::rz_paired_axis_advective_flux_is_metric> {};
+
+template <typename T, typename = void>
+struct rz_paired_pressure_flux_capable : std::false_type {};
+template <typename T>
+struct rz_paired_pressure_flux_capable<
+    T, std::void_t<decltype(T::rz_paired_pressure_flux_capable)>>
+    : std::bool_constant<T::rz_paired_pressure_flux_capable> {};
+
+template <typename T, typename = void>
+struct rz_paired_pressure_flux_required : std::false_type {};
+template <typename T>
+struct rz_paired_pressure_flux_required<
+    T, std::void_t<decltype(T::rz_paired_pressure_flux_required)>>
+    : std::bool_constant<T::rz_paired_pressure_flux_required> {};
+
+template <typename RhsT, typename PrimitiveView, typename StateView,
+          typename ClosureT>
+void compute_all_fluid_euler_fluxes(
+    RhsT& rhs_operator, const Geometry& geom, const MFIter& mfi,
+    const PrimitiveView& prims, const FaceFluxArray& face_fluxes,
+    const StateView& state, const ClosureT* closure,
+    const Array4<const Real>& pressure_reconstruction_states,
+    const int pressure_reconstruction_component,
+    const Array4<Real>& radial_pressure_face_flux,
+    const bool capture_llf_fallback_mask,
+    const FaceFallbackMaskArray& llf_fallback_mask)
+{
+  if (capture_llf_fallback_mask) {
+    if constexpr (local_llf_fallback_mask_capable<RhsT>::value) {
+      if (geom.IsRZ()) {
+        rhs_operator
+            .eflux_with_rz_paired_pressure_and_local_llf_fallback_mask(
+                geom, mfi, prims, face_fluxes, state, closure,
+                pressure_reconstruction_states,
+                pressure_reconstruction_component,
+                radial_pressure_face_flux, llf_fallback_mask);
+      } else {
+        rhs_operator.eflux_with_local_llf_fallback_mask(
+            geom, mfi, prims, face_fluxes, state, closure,
+            llf_fallback_mask);
+      }
+      return;
+    } else {
+      amrex::Abort(
+          "the selected Euler operator cannot record an LLF fallback mask");
+    }
+  }
+
+  if constexpr (rz_paired_pressure_flux_capable<RhsT>::value) {
+    if (geom.IsRZ()) {
+      rhs_operator.eflux_with_rz_paired_pressure(
+          geom, mfi, prims, face_fluxes, state, closure,
+          pressure_reconstruction_states,
+          pressure_reconstruction_component,
+          radial_pressure_face_flux);
+      return;
+    }
+  }
+
+  rhs_operator.eflux(
+      geom, mfi, prims, face_fluxes, state, closure);
+}
+
+#ifdef AMREX_USE_GPIBM
+template <typename RhsT, typename PrimitiveView, typename StateView,
+          typename ClosureT, typename MarkerView>
+void compute_shared_gp_euler_fluxes(
+    RhsT& rhs_operator, const Geometry& geom, const MFIter& mfi,
+    const PrimitiveView& prims, const FaceFluxArray& face_fluxes,
+    const StateView& state, const ClosureT* closure,
+    const MarkerView& markers,
+    const Array4<const Real>& pressure_reconstruction_states,
+    const int pressure_reconstruction_component,
+    const Array4<Real>& radial_pressure_face_flux,
+    const bool capture_llf_fallback_mask,
+    const FaceFallbackMaskArray& llf_fallback_mask)
+{
+  if (capture_llf_fallback_mask) {
+    if constexpr (local_llf_fallback_mask_capable<RhsT>::value) {
+      if (geom.IsRZ()) {
+        rhs_operator
+            .eflux_ibm_with_rz_paired_pressure_and_local_llf_fallback_mask(
+                geom, mfi, prims, face_fluxes, state, closure, markers,
+                pressure_reconstruction_states,
+                pressure_reconstruction_component,
+                radial_pressure_face_flux, llf_fallback_mask);
+      } else {
+        rhs_operator.eflux_ibm_with_local_llf_fallback_mask(
+            geom, mfi, prims, face_fluxes, state, closure, markers,
+            llf_fallback_mask);
+      }
+      return;
+    } else {
+      amrex::Abort(
+          "the selected GP Euler operator cannot record an LLF fallback mask");
+    }
+  }
+
+  if constexpr (rz_paired_pressure_flux_capable<RhsT>::value) {
+    if (geom.IsRZ()) {
+      rhs_operator.eflux_ibm_with_rz_paired_pressure(
+          geom, mfi, prims, face_fluxes, state, closure, markers,
+          pressure_reconstruction_states,
+          pressure_reconstruction_component,
+          radial_pressure_face_flux);
+      return;
+    }
+  }
+  rhs_operator.eflux_ibm(
+      geom, mfi, prims, face_fluxes, state, closure, markers);
+}
+#endif
+
+template <typename RhsT, typename PrimArrayT>
+AMREX_GPU_DEVICE AMREX_FORCE_INLINE Real
+dispatch_rz_annular_pressure_from_cell_average(
+    const IntVect& cell, const PrimArrayT& prims, const Real radial,
+    const Real dr, const int pressure_component) noexcept
+{
+  if constexpr (rz_annular_pressure_consistency_capable<RhsT>::value) {
+    return RhsT::rz_annular_pressure_from_cell_average(
+        cell, prims, radial, dr);
+  } else {
+    return prims(cell, pressure_component);
+  }
+}
 
 template <typename PrimArrayT, typename RhsArrayT, typename ClosuresT,
           typename ProbParmT>
 auto try_rhs_nscbc(int, const Geometry& geom, const MFIter& mfi,
                    PrimArrayT const& prims, RhsArrayT const& rhs,
                    const ClosuresT* closures, const ProbParmT* pparm,
-                   const Real dt, const Real time)
+                   const Real dt, const Real time,
+                   const bool forbid_active_rhs_override)
     -> decltype(rhs_nscbc(geom, mfi, prims, rhs, closures, pparm, dt, time),
                 void())
 {
+  if (forbid_active_rhs_override) {
+    amrex::Abort(
+        "the pure-GP shared-face positivity limiter cannot be combined with "
+        "a problem rhs_nscbc hook that may overwrite active-cell RHS; use "
+        "the certified stage-local ghost-cell NSCBC path instead");
+  }
   rhs_nscbc(geom, mfi, prims, rhs, closures, pparm, dt, time);
 }
 
@@ -47,203 +218,470 @@ template <typename PrimArrayT, typename RhsArrayT, typename ClosuresT,
 void try_rhs_nscbc(long, const Geometry&, const MFIter&,
                    PrimArrayT const&, RhsArrayT const&,
                    const ClosuresT*, const ProbParmT*,
-                   const Real, const Real)
+                   const Real, const Real, const bool)
 {
 }
 
-// ---------------------------------------------------------------------------
-// Detection idiom for the region-parameterized (Box instead of MFIter) flux
-// overloads used by the comm/comp-overlap path. Flux schemes that do not
-// provide them (e.g. Riemann/Rusanov/Skew) simply report false, and
-// compute_rhs_overlap aborts at runtime instead of failing to compile.
-template <typename T, typename = void>
-struct has_region_eflux : std::false_type {};
-template <typename T>
-struct has_region_eflux<
-    T, std::void_t<decltype(std::declval<T&>().eflux(
-           std::declval<const Geometry&>(), std::declval<const Box&>(),
-           std::declval<const Array4<const Real>&>(),
-           std::declval<std::array<FArrayBox*, AMREX_SPACEDIM> const&>(),
-           std::declval<const Array4<Real>&>(),
-           std::declval<const PROB::ProbClosures*>()))>> : std::true_type {};
-
-template <typename T, typename = void>
-struct has_region_dflux : std::false_type {};
-template <typename T>
-struct has_region_dflux<
-    T, std::void_t<decltype(std::declval<T&>().dflux(
-           std::declval<const Geometry&>(), std::declval<const Box&>(),
-           std::declval<const Array4<Real>&>(),
-           std::declval<std::array<FArrayBox*, AMREX_SPACEDIM> const&>(),
-           std::declval<const Array4<Real>&>(),
-           std::declval<const PROB::ProbClosures*>()))>> : std::true_type {};
-
-// Local equivalents of AMReX's FArrayBox patch makers used by
-// FillPatchTwoLevels / FillPatcher (make_mf_crse_patch / make_mf_fine_patch).
-// Reproduced here because their namespace differs across AMReX versions
-// (anonymous namespace in older snapshots, amrex::detail in newer ones).
-inline MultiFab ovl_make_mf_crse_patch(FabArrayBase::FPinfo const& fpc,
-                                       int ncomp) {
-  return MultiFab(fpc.ba_crse_patch, fpc.dm_patch, ncomp, 0, MFInfo(),
-                  *fpc.fact_crse_patch);
-}
-inline MultiFab ovl_make_mf_fine_patch(FabArrayBase::FPinfo const& fpc,
-                                       int ncomp) {
-  return MultiFab(fpc.ba_fine_patch, fpc.dm_patch, ncomp, 0, MFInfo(),
-                  *fpc.fact_fine_patch);
-}
-
-// Euler + diffusive fluxes and finite-volume flux divergence on an explicit
-// cell region rbx (subset of a tilebox). Cells (and the faces interior to)
-// the optional 'skip' box are not touched — used by the overlap shell pass,
-// which covers the whole tilebox but skips the interior region already
-// handled in Pass 1. Cartesian only (the overlap path aborts for RZ).
-// Per-face and per-cell numerics are identical to the corresponding legacy
-// compute_rhs code, so splitting a tilebox into interior + shell regions
-// produces bitwise-identical RHS values (seam faces are recomputed from the
-// same prims).
-template <typename RhsT>
-void region_flux_div(RhsT& prob_rhs, const Geometry& geom, const Box& rbx,
-                     Array4<Real> const& prims, Array4<Real> const& rhs,
-                     const PROB::ProbClosures* cls_d, const int ncons,
-                     const Box& skip = Box())
+// The numerical schemes fill face_fluxes. These helpers only assemble their
+// conservative flux difference into rhs.
+void assemble_cartesian_flux_divergence(
+    const Geometry& geom, const Box& cell_box,
+    const FaceFluxArray& face_fluxes, const Array4<Real>& rhs,
+    const int ncons)
 {
-  if constexpr (has_region_eflux<RhsT>::value && has_region_dflux<RhsT>::value) {
-    const Box skipbox = skip;
-    const bool skip_ok = skipbox.ok();
-
-    // flux arrays sized on the faces of this region only; zero only the
-    // faces this call will actually compute (masked like the flux kernels
-    // themselves) — skipped faces are never read by the masked divergence
-    std::array<FArrayBox, AMREX_SPACEDIM> fluxt;
-    for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
-      const Box fbx = amrex::surroundingNodes(rbx, dir);
-      fluxt[dir].resize(fbx, ncons, The_Async_Arena());
-      auto const& f4 = fluxt[dir].array();
-      const IntVect ivd = IntVect::TheDimensionVector(dir);
-      ParallelFor(fbx, ncons,
-                  [=] AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept {
-                    if (skip_ok) {
-                      const IntVect iv{AMREX_D_DECL(i, j, k)};
-                      if (skipbox.contains(iv) && skipbox.contains(iv - ivd)) {
-                        return;
-                      }
-                    }
-                    f4(i, j, k, n) = Real(0.0);
-                  });
-    }
-
-    {
-      BL_PROFILE_VAR("CNS::compute_rhs::eflux", prof_eflux);
-      prob_rhs.eflux(geom, rbx, prims,
-                     {AMREX_D_DECL(&fluxt[0], &fluxt[1], &fluxt[2])}, rhs,
-                     cls_d, skip);
-      BL_PROFILE_VAR_STOP(prof_eflux);
-    }
-    {
-      BL_PROFILE_VAR("CNS::compute_rhs::dflux", prof_dflux);
-      prob_rhs.dflux(geom, rbx, prims,
-                     {AMREX_D_DECL(&fluxt[0], &fluxt[1], &fluxt[2])}, rhs,
-                     cls_d, skip);
-      BL_PROFILE_VAR_STOP(prof_dflux);
-    }
-
-    const auto dx = geom.CellSizeArray();
-    auto const& fx = fluxt[0].array();
+  const auto dx = geom.CellSizeArray();
+  auto const& fx = face_fluxes[0]->array();
 #if (AMREX_SPACEDIM >= 2)
-    auto const& fy = fluxt[1].array();
+  auto const& fy = face_fluxes[1]->array();
 #endif
 #if (AMREX_SPACEDIM == 3)
-    auto const& fz = fluxt[2].array();
+  auto const& fz = face_fluxes[2]->array();
 #endif
-    const int nc = ncons;
 
 #if (AMREX_SPACEDIM == 1)
-    const Real invdx = Real(1.0) / dx[0];
-    ParallelFor(rbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
-      if (skip_ok && skipbox.contains(i, j, k)) { return; }
-      for (int n = 0; n < nc; ++n) {
-        rhs(i, j, k, n) += (fx(i, j, k, n) - fx(i + 1, j, k, n)) * invdx;
-      }
-    });
+  const Real invdx = Real(1.0) / dx[0];
+  ParallelFor(
+      cell_box, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+        for (int n = 0; n < ncons; ++n) {
+          rhs(i, j, k, n) +=
+              (fx(i, j, k, n) - fx(i + 1, j, k, n)) * invdx;
+        }
+      });
 #elif (AMREX_SPACEDIM == 2)
-    const Real invdx = Real(1.0) / dx[0];
-    const Real invdy = Real(1.0) / dx[1];
-    ParallelFor(rbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
-      if (skip_ok && skipbox.contains(i, j, k)) { return; }
-      for (int n = 0; n < nc; ++n) {
-        rhs(i, j, k, n) += (fx(i, j, k, n) - fx(i + 1, j, k, n)) * invdx;
-        rhs(i, j, k, n) += (fy(i, j, k, n) - fy(i, j + 1, k, n)) * invdy;
-      }
-    });
+  const Real invdx = Real(1.0) / dx[0];
+  const Real invdy = Real(1.0) / dx[1];
+  ParallelFor(
+      cell_box, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+        for (int n = 0; n < ncons; ++n) {
+          rhs(i, j, k, n) +=
+              (fx(i, j, k, n) - fx(i + 1, j, k, n)) * invdx;
+          rhs(i, j, k, n) +=
+              (fy(i, j, k, n) - fy(i, j + 1, k, n)) * invdy;
+        }
+      });
 #else
-    const Real invdx = Real(1.0) / dx[0];
-    const Real invdy = Real(1.0) / dx[1];
-    const Real invdz = Real(1.0) / dx[2];
-    ParallelFor(rbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
-      if (skip_ok && skipbox.contains(i, j, k)) { return; }
-      for (int n = 0; n < nc; ++n) {
-        rhs(i, j, k, n) += (fx(i, j, k, n) - fx(i + 1, j, k, n)) * invdx;
-        rhs(i, j, k, n) += (fy(i, j, k, n) - fy(i, j + 1, k, n)) * invdy;
-        rhs(i, j, k, n) += (fz(i, j, k, n) - fz(i, j, k + 1, n)) * invdz;
-      }
-    });
+  const Real invdx = Real(1.0) / dx[0];
+  const Real invdy = Real(1.0) / dx[1];
+  const Real invdz = Real(1.0) / dx[2];
+  ParallelFor(
+      cell_box, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+        for (int n = 0; n < ncons; ++n) {
+          rhs(i, j, k, n) +=
+              (fx(i, j, k, n) - fx(i + 1, j, k, n)) * invdx;
+          rhs(i, j, k, n) +=
+              (fy(i, j, k, n) - fy(i, j + 1, k, n)) * invdy;
+          rhs(i, j, k, n) +=
+              (fz(i, j, k, n) - fz(i, j, k + 1, n)) * invdz;
+        }
+      });
 #endif
-  } else {
-    amrex::ignore_unused(prob_rhs, geom, rbx, prims, rhs, cls_d, ncons, skip);
+}
+
+#if (AMREX_SPACEDIM == 2)
+template <typename RhsT>
+void assemble_rz_flux_divergence(
+    const Geometry& geom, const Box& cell_box,
+    const Array4<Real>& prims, const FaceFluxArray& face_fluxes,
+    const Array4<const Real>& rz_center_pressure,
+    const bool use_cell_average_deconvolution,
+    const Array4<Real>& rz_pressure_face_flux,
+    const bool use_rz_paired_pressure,
+    const Array4<Real>& rhs, const int ncons)
+{
+  const auto dx = geom.CellSizeArray();
+  const auto prob_lo = geom.ProbLoArray();
+  auto const& radial_flux = face_fluxes[0]->array();
+  auto const& axial_flux = face_fluxes[1]->array();
+
+  const Real dr = dx[0];
+  const Real dz = dx[1];
+  const Real radial_origin = prob_lo[0];
+  const int pressure_component = PROB::ProbClosures::QPRES;
+  const int radial_momentum_component = PROB::ProbClosures::UMX;
+  const Real inverse_dz = Real(1.0) / dz;
+  const Real inverse_dr = Real(1.0) / dr;
+
+  static const int s_annular_pressure_consistency = [] {
+    int value = 0;
+    ParmParse pp("cns");
+    pp.query("rz_euler_annular_pressure_consistency", value);
+    return value;
+  }();
+  static const int s_euler_point_flux = [] {
+    int value = 0;
+    ParmParse pp("cns");
+    pp.query("rz_euler_point_flux", value);
+    return value;
+  }();
+
+  const bool requested_annular_pressure_consistency =
+      s_annular_pressure_consistency != 0;
+  const bool use_annular_pressure_consistency =
+      requested_annular_pressure_consistency && !use_rz_paired_pressure;
+  constexpr bool euler_geometric_source_active =
+      rz_euler_geometric_source_active<RhsT>::value;
+  constexpr bool axis_face_flux_is_metric =
+      rz_radial_axis_face_flux_is_metric<RhsT>::value;
+  constexpr bool paired_axis_advective_flux_is_metric =
+      rz_paired_axis_advective_flux_is_metric<RhsT>::value;
+
+  if (use_annular_pressure_consistency && s_euler_point_flux == 0) {
     amrex::Abort(
-        "cns.overlap_comm=1: the configured flux scheme does not provide "
-        "region-parameterized eflux/dflux overloads (only WENO/TENO eflux "
-        "and viscous_t dflux do). Disable cns.overlap_comm.");
+        "cns.rz_euler_annular_pressure_consistency=1 requires explicit "
+        "cns.rz_euler_point_flux=1");
   }
+  if (use_annular_pressure_consistency &&
+      !rz_annular_pressure_consistency_capable<RhsT>::value) {
+    amrex::Abort(
+        "cns.rz_euler_annular_pressure_consistency requires a compatible "
+        "R-Z WENO/TENO Euler flux");
+  }
+  if (use_cell_average_deconvolution && !use_rz_paired_pressure &&
+      !use_annular_pressure_consistency) {
+    amrex::Abort(
+        "cns.rz_euler_cell_average_deconvolution requires "
+        "cns.rz_euler_annular_pressure_consistency=1");
+  }
+
+  ParallelFor(
+      cell_box, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+        const Real r_lo = radial_origin + Real(i) * dr;
+        const Real r_hi = r_lo + dr;
+        const Real r_center = r_lo + Real(0.5) * dr;
+        const Real radial_volume_factor = (r_hi + r_lo) * dr;
+        const Real radial_volume_floor =
+            amrex::max(std::numeric_limits<Real>::min(),
+                       Real(1.0e-14) * dr * dr);
+        const Real inverse_radial_volume =
+            Real(1.0) /
+            amrex::max(radial_volume_factor, radial_volume_floor);
+        const Real inverse_radius =
+            Real(1.0) /
+            amrex::max(r_center, Real(1.0e-14) * dr);
+
+        for (int n = 0; n < ncons; ++n) {
+          if (n == radial_momentum_component &&
+              use_rz_paired_pressure) {
+            const Real pressure_lo = rz_pressure_face_flux(i, j, k, 0);
+            const Real pressure_hi =
+                rz_pressure_face_flux(i + 1, j, k, 0);
+            const Real metric_advective_lo =
+                r_lo > Real(0.0)
+                    ? r_lo *
+                          (radial_flux(i, j, k, n) - pressure_lo)
+                    : (paired_axis_advective_flux_is_metric
+                           ? radial_flux(i, j, k, n)
+                           : Real(0.0));
+            const Real metric_advective_hi =
+                r_hi *
+                (radial_flux(i + 1, j, k, n) - pressure_hi);
+            rhs(i, j, k, n) +=
+                Real(2.0) *
+                    (metric_advective_lo - metric_advective_hi) *
+                    inverse_radial_volume +
+                (pressure_lo - pressure_hi) * inverse_dr;
+          } else {
+            const Real radial_low_metric_flux =
+                axis_face_flux_is_metric && !(r_lo > Real(0.0))
+                    ? radial_flux(i, j, k, n)
+                    : r_lo * radial_flux(i, j, k, n);
+            rhs(i, j, k, n) +=
+                Real(2.0) *
+                (radial_low_metric_flux -
+                 r_hi * radial_flux(i + 1, j, k, n)) *
+                inverse_radial_volume;
+          }
+
+          if (n == radial_momentum_component &&
+              euler_geometric_source_active &&
+              !use_rz_paired_pressure) {
+            if (use_annular_pressure_consistency) {
+              Real pressure_center;
+              Real pressure_hi;
+              Real pressure_lo;
+              if (use_cell_average_deconvolution) {
+                pressure_center = rz_center_pressure(i, j, k);
+                pressure_hi = rz_center_pressure(i + 1, j, k);
+                pressure_lo = rz_center_pressure(i - 1, j, k);
+              } else {
+                const IntVect cell(AMREX_D_DECL(i, j, k));
+                const IntVect radial_cell =
+                    IntVect::TheDimensionVector(0);
+                pressure_center =
+                    dispatch_rz_annular_pressure_from_cell_average<RhsT>(
+                        cell, prims, r_center, dr, pressure_component);
+                pressure_hi =
+                    dispatch_rz_annular_pressure_from_cell_average<RhsT>(
+                        cell + radial_cell, prims, r_center + dr, dr,
+                        pressure_component);
+                pressure_lo =
+                    dispatch_rz_annular_pressure_from_cell_average<RhsT>(
+                        cell - radial_cell, prims, r_center - dr, dr,
+                        pressure_component);
+              }
+              const Real pressure_source_correction =
+                  (pressure_hi - Real(2.0) * pressure_center + pressure_lo) *
+                  (inverse_radius / Real(24.0));
+              rhs(i, j, k, n) +=
+                  pressure_center * inverse_radius +
+                  pressure_source_correction;
+            } else {
+              rhs(i, j, k, n) +=
+                  prims(i, j, k, pressure_component) * inverse_radius;
+            }
+          }
+
+          rhs(i, j, k, n) +=
+              (axial_flux(i, j, k, n) -
+               axial_flux(i, j + 1, k, n)) *
+              inverse_dz;
+        }
+      });
+}
+#endif
+
+template <typename RhsT>
+void assemble_face_flux_divergence(
+    const Geometry& geom, const Box& cell_box,
+    const Array4<Real>& prims, const FaceFluxArray& face_fluxes,
+    const Array4<const Real>& rz_center_pressure,
+    const bool use_cell_average_deconvolution,
+    const Array4<Real>& rz_pressure_face_flux,
+    const bool use_rz_paired_pressure,
+    const Array4<Real>& rhs, const int ncons)
+{
+#if (AMREX_SPACEDIM == 2)
+  if (geom.IsRZ()) {
+    assemble_rz_flux_divergence<RhsT>(
+        geom, cell_box, prims, face_fluxes, rz_center_pressure,
+        use_cell_average_deconvolution, rz_pressure_face_flux,
+        use_rz_paired_pressure, rhs, ncons);
+    return;
+  }
+#else
+  amrex::ignore_unused(
+      prims, rz_center_pressure, use_cell_average_deconvolution,
+      rz_pressure_face_flux, use_rz_paired_pressure);
+#endif
+
+  assemble_cartesian_flux_divergence(
+      geom, cell_box, face_fluxes, rhs, ncons);
 }
 
 }  // namespace
 
-// Since we do not want to use expensive cudaMemCopy, we are storing all our
-// data on the GPU to begin with. Concurrency on GPU using streams, parallel
-// computation and data transfer, is not useful then. Therefore, we can have all
-// grid point computations, per fab, in a single MFIter loop (single stream).
+// Assemble one Runge--Kutta stage RHS. Device kernels are launched once per FAB
+// from a single untiled MFIter loop.
 
 void CNS::compute_rhs(MultiFab& statemf, Real dt, FluxRegister* fr_as_crse,
-                      FluxRegister* fr_as_fine, Real stage_time) {
+                      FluxRegister* fr_as_fine, Real stage_time,
+                      Real reflux_dt,
+                      std::array<MultiFab*, AMREX_SPACEDIM>
+                          captured_face_flux,
+                      MultiFab* captured_rz_pressure_face_flux,
+                      std::array<iMultiFab*, AMREX_SPACEDIM>
+                          captured_llf_fallback_mask) {
   BL_PROFILE("CNS::compute_rhs()");
 
-  // Variables
   const PROB::ProbClosures* cls_d = CNS::d_prob_closures;
   const PROB::ProbClosures& cls_h = *CNS::h_prob_closures;
   const PROB::ProbParm* pparm_d = CNS::d_prob_parm;
 
-  // time
+  // Reflux must integrate the actual numerical face flux with the final RK
+  // quadrature weight, which is generally not the same as the local substep
+  // scale passed as dt (SSPRK33 is the simplest counterexample).  Keep this
+  // allocation entirely off the default do_reflux=0 path.
+  const bool register_fluxes =
+      reflux_dt != Real(0.0) && (fr_as_crse != nullptr || fr_as_fine != nullptr);
+  bool capture_stage_flux = false;
+  for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+    capture_stage_flux = capture_stage_flux || captured_face_flux[dir] != nullptr;
+  }
+  if (capture_stage_flux) {
+    for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+      if (captured_face_flux[dir] == nullptr) {
+        amrex::Abort(
+            "compute_rhs face-flux capture requires every direction");
+      }
+      const BoxArray expected_boxes = amrex::convert(
+          statemf.boxArray(), IntVect::TheDimensionVector(dir));
+      if (captured_face_flux[dir]->boxArray() != expected_boxes ||
+          captured_face_flux[dir]->DistributionMap() !=
+              statemf.DistributionMap() ||
+          captured_face_flux[dir]->nComp() != cls_h.NCONS) {
+        amrex::Abort("compute_rhs face-flux capture layout mismatch");
+      }
+    }
+  }
+  if (captured_rz_pressure_face_flux != nullptr) {
+#if (AMREX_SPACEDIM == 2)
+    const BoxArray expected_boxes = amrex::convert(
+        statemf.boxArray(), IntVect::TheDimensionVector(0));
+    if (!geom.IsRZ() ||
+        captured_rz_pressure_face_flux->boxArray() != expected_boxes ||
+        captured_rz_pressure_face_flux->DistributionMap() !=
+            statemf.DistributionMap() ||
+        captured_rz_pressure_face_flux->nComp() != 1) {
+      amrex::Abort(
+          "compute_rhs R-Z pressure-face capture layout mismatch");
+    }
+#else
+    amrex::Abort(
+        "compute_rhs R-Z pressure-face capture requires a 2-D build");
+#endif
+  }
+  const bool capture_rz_pressure =
+      captured_rz_pressure_face_flux != nullptr;
+  bool capture_llf_fallback = false;
+  for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+    capture_llf_fallback = capture_llf_fallback ||
+                           captured_llf_fallback_mask[dir] != nullptr;
+  }
+  if (capture_llf_fallback) {
+    if constexpr (!local_llf_fallback_mask_capable<PROB::ProbRHS>::value) {
+      amrex::Abort(
+          "cns.llf_fallback_mask_diagnostics requires a WENO/TENO LLF "
+          "Euler operator");
+    }
+    for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+      if (captured_llf_fallback_mask[dir] == nullptr) {
+        amrex::Abort(
+            "LLF fallback-mask capture requires every coordinate direction");
+      }
+      const BoxArray expected_boxes = amrex::convert(
+          statemf.boxArray(), IntVect::TheDimensionVector(dir));
+      if (captured_llf_fallback_mask[dir]->boxArray() != expected_boxes ||
+          captured_llf_fallback_mask[dir]->DistributionMap() !=
+              statemf.DistributionMap() ||
+          captured_llf_fallback_mask[dir]->nComp() != 1) {
+        amrex::Abort("compute_rhs LLF fallback-mask layout mismatch");
+      }
+    }
+  }
+  const bool retain_level_face_fluxes = register_fluxes || capture_stage_flux;
+  std::array<std::unique_ptr<MultiFab>, AMREX_SPACEDIM> level_face_fluxes;
+  std::array<std::unique_ptr<MultiFab>, AMREX_SPACEDIM> level_face_areas;
+  if (retain_level_face_fluxes) {
+    for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+      BoxArray face_boxes = amrex::convert(
+          statemf.boxArray(), IntVect::TheDimensionVector(dir));
+      level_face_fluxes[dir] = std::make_unique<MultiFab>(
+          face_boxes, statemf.DistributionMap(), cls_h.NCONS, 0,
+          MFInfo().SetArena(The_Async_Arena()));
+      if (register_fluxes) {
+        level_face_areas[dir] = std::make_unique<MultiFab>(
+            face_boxes, statemf.DistributionMap(), 1, 0,
+            MFInfo().SetArena(The_Async_Arena()));
+        geom.GetFaceArea(*level_face_areas[dir], dir);
+      }
+    }
+  }
+  std::unique_ptr<MultiFab> level_rz_pressure_face_flux;
+  if (capture_rz_pressure) {
+    const BoxArray radial_face_boxes = amrex::convert(
+        statemf.boxArray(), IntVect::TheDimensionVector(0));
+    level_rz_pressure_face_flux = std::make_unique<MultiFab>(
+        radial_face_boxes, statemf.DistributionMap(), 1, 0,
+        MFInfo().SetArena(The_Async_Arena()));
+  }
+
   // RK stage time is explicit.  StateData::curTime() is not reliable for the
   // first stage after swapTimeLevels(): it already points at t^{n+1} while
   // FillPatch reads U^n at t^n.
   const Real cur_time = stage_time;
 
+  static const int s_rz_euler_cell_average_deconvolution = [] {
+    int value = 0;
+    ParmParse pp("cns");
+    pp.query("rz_euler_cell_average_deconvolution", value);
+    return value;
+  }();
+  const bool rz_euler_cell_average_deconvolution =
+      s_rz_euler_cell_average_deconvolution != 0;
+#if (AMREX_SPACEDIM == 2) && !defined(CNS_USE_EB)
+  const bool use_rz_paired_pressure =
+      geom.IsRZ() &&
+      rz_paired_pressure_flux_capable<PROB::ProbRHS>::value;
+#else
+  const bool use_rz_paired_pressure = false;
+#endif
+  if (geom.IsRZ() &&
+      rz_paired_pressure_flux_required<PROB::ProbRHS>::value &&
+      !use_rz_paired_pressure) {
+    amrex::Abort(
+        "The selected R-Z inviscid scheme requires the paired metric-"
+        "advection/ordinary-pressure operator.  The selected diffusive or "
+        "geometry path is not compatible; refusing a silent direct-p/r "
+        "fallback.");
+  }
+  if (capture_rz_pressure && !use_rz_paired_pressure) {
+    amrex::Abort(
+        "R-Z pressure-face capture requires the paired pressure operator");
+  }
+  static const int s_rz_gp_annular_bic = [] {
+    int value = 0;
+    ParmParse pp("cns");
+    pp.query("rz_gp_annular_bic", value);
+    return value;
+  }();
+  const bool rz_gp_annular_bic = s_rz_gp_annular_bic != 0;
+  if (rz_euler_cell_average_deconvolution && !geom.IsRZ()) {
+    amrex::Abort(
+        "cns.rz_euler_cell_average_deconvolution requires R-Z geometry");
+  }
+#ifdef CNS_USE_EB
+  if (rz_euler_cell_average_deconvolution || rz_gp_annular_bic) {
+    amrex::Abort(
+        "R-Z annular shared-GP semantics are not an EB flow path");
+  }
+#endif
 #ifdef AMREX_USE_GPIBM
+  if (rz_euler_cell_average_deconvolution != rz_gp_annular_bic) {
+    amrex::Abort(
+        "R-Z GP-IBM requires cns.rz_euler_cell_average_deconvolution and "
+        "cns.rz_gp_annular_bic to be enabled together");
+  }
+  if (use_rz_paired_pressure && CNS::ibm_positivity_flux_limiter &&
+      !capture_rz_pressure) {
+    amrex::Abort(
+        "R-Z paired-pressure GP-IBM positivity limiting requires stage-local "
+        "capture of the radial pressure companion");
+  }
+#else
+  if (rz_gp_annular_bic) {
+    amrex::Abort("cns.rz_gp_annular_bic requires AMREX_USE_GPIBM");
+  }
+#endif
+
+#if (AMREX_SPACEDIM < 3)
+  // UMZ (theta/z-momentum) is identically zero in 2D but the component exists
+  // and cons2prims reads it unconditionally. CPU malloc zero-pages hid this;
+  // CUDA arena memory is recycled and NOT zeroed. Sanitize on EVERY build
+  // (was IBM-only; GPU-gate fix 2026-07-15).
+  statemf.setVal(Real(0.0), PROB::ProbClosures::UMZ, 1, statemf.nGrow());
+#endif
+
+#ifdef AMREX_USE_GPIBM
+  MultiFab& conservative_flux_state = statemf;
+
   // Convert conserved variables to primitives level-wide, then apply IBM
   // ghost-point corrections in a single pass before the MFIter loop.
   // This avoids redundant per-fab conversions and ensures all ghost-point
   // data are consistent when each fab's flux kernel executes.
+  // WENO needs NGHOST cells, while IBM image points can reach farther when
+  // alpha/eorder > 1.  The wider primitive-only scratch halo is exchanged in
+  // computeAllGPs; the conservative state allocation remains unchanged.
+  const int ibm_primitive_nghost =
+      IBM::ib.volumeInterpolationNghost(level);
   MultiFab prims_mf(statemf.boxArray(), statemf.DistributionMap(),
-                    cls_h.NPRIM, cls_h.NGHOST,
+                    cls_h.NPRIM, ibm_primitive_nghost,
                     MFInfo().SetArena(The_Async_Arena()));
 
-  // In 2D, prob_initdata and bcnormal do not write UMZ (z-momentum). That
-  // leaves UMZ in valid cells and physical-BC ghosts as uninitialized memory
-  // — occasionally NaN. cons2prims reads UMZ unconditionally, and a NaN
-  // there cascades: uz = NaN → rhoke = NaN → E' = NaN → all prims NaN at
-  // that cell → WENO stencils produce NaN flux → RHS = NaN → blow-up at
-  // step 1 (typically exposed by AMR because extra fab allocations deplete
-  // zero-pages and expose stale/NaN memory). Zero the UMZ component each
-  // call to guarantee a clean 2D slice regardless of prob.h conventions.
-#if (AMREX_SPACEDIM < 3)
-  statemf.setVal(Real(0.0), PROB::ProbClosures::UMZ, 1, statemf.nGrow());
-#endif
   {
     BL_PROFILE_VAR("CNS::compute_rhs::cons2prims", prof_cons2prims);
-    for (MFIter mfi(statemf, false); mfi.isValid(); ++mfi) {
-      cls_h.cons2prims(mfi, statemf.array(mfi), prims_mf.array(mfi));
+    for (MFIter mfi(conservative_flux_state, false); mfi.isValid(); ++mfi) {
+      cls_h.cons2prims(mfi, conservative_flux_state.array(mfi),
+                       prims_mf.array(mfi));
     }
     BL_PROFILE_VAR_STOP(prof_cons2prims);
   }
@@ -255,744 +693,352 @@ void CNS::compute_rhs(MultiFab& statemf, Real dt, FluxRegister* fr_as_crse,
 #endif
 
     BL_PROFILE_VAR("IBM::computeAllGPs", prof_gp);
-    IBM::ib.computeAllGPs(prims_mf, cls_d, level);
+    if (IBM::ib.nsGPCellAverageRecoveryEnabled()) {
+      IBM::ib.computeAllGPsCartesianConservativeAverage(
+          prims_mf, conservative_flux_state, cls_d, level);
+    } else if (IBM::ib.rzAnnularCellAverageEnabled(level)) {
+      IBM::ib.computeAllGPsRZAnnular(
+          prims_mf, conservative_flux_state, cls_d, level);
+    } else {
+      IBM::ib.computeAllGPs(prims_mf, cls_d, level);
+    }
     BL_PROFILE_VAR_STOP(prof_gp);
   }
-
-  // Validation hook: poison only unreconstructed interior-solid primitives.
-  // A marker-safe IBM flux must produce bitwise-identical fluid RHS values
-  // with this enabled.  The default is off and adds no production kernel.
-  static const bool poison_interior_solid = [] {
-    int value = 0;
-    ParmParse pp("ib");
-    pp.query("poison_interior_solid", value);
-    return value != 0;
-  }();
-  if (poison_interior_solid) {
-    const Real poison = std::numeric_limits<Real>::quiet_NaN();
-    auto& marker_mf = *IBM::ib.bmf_a[level];
-    for (MFIter mfi(prims_mf, false); mfi.isValid(); ++mfi) {
-      const Box bxg = mfi.growntilebox(cls_h.NGHOST);
-      const auto prims = prims_mf.array(mfi);
-      const auto marker = marker_mf.array(mfi);
-      ParallelFor(bxg, cls_h.NPRIM,
-                  [=] AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept {
-                    if (marker(i, j, k, 0) != 0 &&
-                        marker(i, j, k, 1) == 0) {
-                      prims(i, j, k, n) = poison;
-                    }
-                  });
-    }
-  }
 #endif
 
-  //...................................................................
   for (MFIter mfi(statemf, false); mfi.isValid(); ++mfi) {
-    Array4<Real> const& state = statemf.array(mfi);
-
-    const Box& bx  = mfi.growntilebox(0);
-    const Box& bxg = mfi.growntilebox(cls_h.NGHOST);
-#ifdef CNS_USE_EB     
-    const Box& bxflux = mfi.growntilebox(cls_h.NGHOST+1); // add 1 cell 
-#else
-    const Box& bxflux = mfi.growntilebox(cls_h.NGHOST); 
-#endif    
-    
-    // primitives and fluxes arrays
+    const Array4<Real>& conservative_state = statemf.array(mfi);
 #ifdef AMREX_USE_GPIBM
-    // Prims already filled + GP-corrected in pre-loop; just alias
+    const Array4<Real>& flux_state = conservative_flux_state.array(mfi);
+#else
+    const Array4<Real>& flux_state = conservative_state;
+#endif
+
+    const Box& cell_box = mfi.growntilebox(0);
+    const Box& ghost_cell_box = mfi.growntilebox(cls_h.NGHOST);
+#ifdef CNS_USE_EB
+    // The experimental EB correction reads one additional face-flux layer.
+    const Box& flux_stencil_box =
+        mfi.growntilebox(cls_h.NGHOST + 1);
+#else
+    const Box& flux_stencil_box = mfi.growntilebox(cls_h.NGHOST);
+#endif
+
+    // Primitive variables are level-wide for GP-IBM and FAB-local otherwise.
+#ifdef AMREX_USE_GPIBM
+    // The level-wide array was converted and GP-corrected before this loop.
     Array4<Real> const& prims = prims_mf.array(mfi);
 #else
-    FArrayBox primf(bxg, cls_h.NPRIM, The_Async_Arena());
-    Array4<Real> const& prims = primf.array();
+    FArrayBox primitive_scratch(
+        ghost_cell_box, cls_h.NPRIM, The_Async_Arena());
+    Array4<Real> const& prims = primitive_scratch.array();
 #endif
 
-    
-#ifdef CNS_USE_EB     
-    // auxiliary arrays for redistribution 
-    FArrayBox divcfab(bxg, cls_h.NCONS, The_Async_Arena());
-    Array4<Real> const& divc = divcfab.array();    
-
-    // store array cons 
-    FArrayBox consfab(bxg, cls_h.NCONS, The_Async_Arena());
-    Array4<Real> const& cons = consfab.array();    
-    amrex::ParallelFor(bxg, cls_h.NCONS,
-      [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
-      {
-        cons(i,j,k,n) = state(i,j,k,n);
-      });
-#endif
-
-    // flux arrays  
-    std::array<FArrayBox ,AMREX_SPACEDIM> fluxt;
-    for (int dir=0; dir < AMREX_SPACEDIM; ++dir)
-    {
-      fluxt[dir].resize(amrex::surroundingNodes(bxflux, dir),cls_h.NCONS, The_Async_Arena() );
-      fluxt[dir].setVal<RunOn::Device>(0.);
-    }
-     
-    // We want to minimise function calls. So, we call prims2cons, flux and
-    // source term evaluations once per fab from CPU, to be run on GPU.
+    std::unique_ptr<FArrayBox> rz_center_pressure_owner;
+    Array4<const Real> rz_center_pressure;
 #ifndef AMREX_USE_GPIBM
-    cls_h.cons2prims(mfi, state, prims);
+    if (rz_euler_cell_average_deconvolution) {
+      rz_center_pressure_owner = std::make_unique<FArrayBox>(
+          ghost_cell_box, 1, The_Async_Arena());
+      const Array4<Real> pressure = rz_center_pressure_owner->array();
+      const auto rz_prob_lo = geom.ProbLoArray();
+      const auto rz_cell_size = geom.CellSizeArray();
+      const int radial_data_lo = ghost_cell_box.smallEnd(0);
+      const int radial_data_hi = ghost_cell_box.bigEnd(0);
+      const Real radial_origin_over_dr =
+          rz_prob_lo[0] / rz_cell_size[0];
+      ParallelFor(
+          ghost_cell_box,
+          [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+            pressure(i, j, k) =
+                cerisse::rz_fv::annular_average_to_radial_center_pressure(
+                    i, j, k, radial_data_lo, radial_data_hi,
+                    radial_origin_over_dr, flux_state, cls_d);
+          });
+      rz_center_pressure = rz_center_pressure_owner->const_array();
+    }
+#endif
+#ifdef CNS_USE_EB
+    // Scratch data used only by the isolated experimental EB redistribution.
+    FArrayBox eb_divergence_scratch(
+        ghost_cell_box, cls_h.NCONS, The_Async_Arena());
+    Array4<Real> const& eb_divergence = eb_divergence_scratch.array();
+    FArrayBox eb_state_scratch(
+        ghost_cell_box, cls_h.NCONS, The_Async_Arena());
+    Array4<Real> const& eb_conservative_state = eb_state_scratch.array();
+    ParallelFor(
+        ghost_cell_box, cls_h.NCONS,
+        [=] AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept {
+          eb_conservative_state(i, j, k, n) =
+              conservative_state(i, j, k, n);
+        });
 #endif
 
-    // Geometry markers (one of IBM/EB is expected to be enabled).
-    // Alias geoMarkers to the underlying marker MultiFab to avoid
-    // allocating an auxiliary fab + doing a device copy.
+    // Face-centred flux storage, one FArrayBox for each coordinate direction.
+    std::array<FArrayBox, AMREX_SPACEDIM> face_flux_storage;
+    for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+      face_flux_storage[dir].resize(
+          amrex::surroundingNodes(flux_stencil_box, dir), cls_h.NCONS,
+          The_Async_Arena());
+      face_flux_storage[dir].setVal<RunOn::Device>(Real(0.0));
+    }
+    const FaceFluxArray face_fluxes{
+        AMREX_D_DECL(
+            &face_flux_storage[0], &face_flux_storage[1],
+            &face_flux_storage[2])};
+
+    std::array<std::unique_ptr<BaseFab<int>>, AMREX_SPACEDIM>
+        llf_fallback_mask_storage;
+    FaceFallbackMaskArray llf_fallback_mask_views{};
+    if (capture_llf_fallback) {
+      for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+        llf_fallback_mask_storage[dir] = std::make_unique<BaseFab<int>>(
+            amrex::surroundingNodes(flux_stencil_box, dir), 1,
+            The_Async_Arena());
+        llf_fallback_mask_storage[dir]->setVal<RunOn::Device>(0);
+        llf_fallback_mask_views[dir] =
+            llf_fallback_mask_storage[dir]->array();
+      }
+    }
+
+    // The fixed all-fluid RZ LLF-WENO operator also exposes its paired
+    // pressure flux as stage-local scratch for the split divergence below.
+    // Its contribution is already folded into the final radial-momentum face
+    // flux. That final shared flux is captured and entered in flux registers.
+    std::unique_ptr<FArrayBox> rz_pressure_face_owner;
+    Array4<Real> rz_pressure_face_flux;
+    if (use_rz_paired_pressure) {
+      rz_pressure_face_owner = std::make_unique<FArrayBox>(
+          amrex::surroundingNodes(flux_stencil_box, 0), 1,
+          The_Async_Arena());
+      rz_pressure_face_owner->setVal<RunOn::Device>(Real(0.0));
+      rz_pressure_face_flux = rz_pressure_face_owner->array();
+    }
+
+    // Convert the local conservative state before evaluating the face fluxes.
+#ifndef AMREX_USE_GPIBM
+    cls_h.cons2prims(mfi, conservative_state, prims);
+#endif
+
+    // The companion pressure must use radial-centre values with the same
+    // stage-local semantics as the flux stencil.  The pure shared-GP annular
+    // path has already published marker-safe fluid/unique-GP centre states to
+    // prims; the generic all-fluid annular recovery may use its separate
+    // centre-pressure scratch.
+    Array4<const Real> pressure_reconstruction_states = prims;
+    int pressure_reconstruction_component = cls_h.QPRES;
+#ifndef AMREX_USE_GPIBM
+    if (rz_euler_cell_average_deconvolution) {
+      pressure_reconstruction_states = rz_center_pressure;
+      pressure_reconstruction_component = 0;
+    }
+#endif
+
+    // Geometry markers are present only in the GP-IBM and experimental EB
+    // builds. The GP path aliases the existing marker MultiFab.
 #if (AMREX_USE_GPIBM && !CNS_USE_EB)
     auto& marker_mf = *IBM::ib.bmf_a[level];
     auto const& geoMarkers = marker_mf.array(mfi);
 #elif (CNS_USE_EB && !AMREX_USE_GPIBM)
-    // EB markers (bool) -> convert to uint8_t for interface compatibility
-    // with eflux_ibm/dflux_ibm which expect Array4<uint8_t>.
-    // EBM core uses bool internally; we convert at the boundary here
-    // to avoid modifying EBM code that is shared with other users.
+    // Convert the EB bool marker to the uint8_t marker interface.
     auto& eb_marker_mf = *EBM::eb.bmf_a[level];
-    auto const& ebBoolMarkers = eb_marker_mf.array(mfi);
-    BaseFab<uint8_t> geoMarkerFab(bxg, 2, The_Async_Arena());
-    auto const& geoMarkers = geoMarkerFab.array();
-    amrex::ParallelFor(bxg, 2,
-      [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept {
-        geoMarkers(i,j,k,n) = static_cast<uint8_t>(ebBoolMarkers(i,j,k,n));
-      });
+    auto const& eb_bool_markers = eb_marker_mf.array(mfi);
+    BaseFab<uint8_t> marker_scratch(
+        ghost_cell_box, 2, The_Async_Arena());
+    auto const& geoMarkers = marker_scratch.array();
+    ParallelFor(
+        ghost_cell_box, 2,
+        [=] AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept {
+          geoMarkers(i, j, k, n) =
+              static_cast<uint8_t>(eb_bool_markers(i, j, k, n));
+        });
 #endif
-  
-    // Euler/Diff Fluxes including boundary/discontinuity corrections
-    // WARNING: state is the U array (cons)
+
+    // Compute the inviscid numerical face fluxes. flux_state contains the
+    // conservative variables used by the selected Euler operator.
     {
-    BL_PROFILE_VAR("CNS::compute_rhs::eflux", prof_eflux);
-#if (AMREX_USE_GPIBM || CNS_USE_EB)
-    prob_rhs.eflux_ibm(geom, mfi, prims, {AMREX_D_DECL(&fluxt[0], &fluxt[1], &fluxt[2])}, state, cls_d, geoMarkers);
+      BL_PROFILE_VAR("CNS::compute_rhs::eflux", prof_eflux);
+#if defined(AMREX_USE_GPIBM)
+      compute_shared_gp_euler_fluxes(
+          prob_rhs, geom, mfi, prims, face_fluxes, flux_state, cls_d,
+          geoMarkers, pressure_reconstruction_states,
+          pressure_reconstruction_component, rz_pressure_face_flux,
+          capture_llf_fallback, llf_fallback_mask_views);
+#elif defined(CNS_USE_EB)
+      prob_rhs.eflux_ibm(
+          geom, mfi, prims, face_fluxes, flux_state, cls_d, geoMarkers);
 #else
-    prob_rhs.eflux(geom, mfi, prims, {AMREX_D_DECL(&fluxt[0], &fluxt[1], &fluxt[2])}, state, cls_d);
+      compute_all_fluid_euler_fluxes(
+          prob_rhs, geom, mfi, prims, face_fluxes, flux_state, cls_d,
+          pressure_reconstruction_states,
+          pressure_reconstruction_component,
+          rz_pressure_face_flux, capture_llf_fallback,
+          llf_fallback_mask_views);
 #endif
-    BL_PROFILE_VAR_STOP(prof_eflux);
+      BL_PROFILE_VAR_STOP(prof_eflux);
+    }
+    if (capture_llf_fallback) {
+      for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+        const Box face_box = amrex::surroundingNodes(cell_box, dir);
+        const auto src = llf_fallback_mask_storage[dir]->const_array();
+        const auto dst = captured_llf_fallback_mask[dir]->array(mfi);
+        ParallelFor(
+            face_box,
+            [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+              dst(i, j, k, 0) = src(i, j, k, 0);
+            });
+      }
     }
     {
-    BL_PROFILE_VAR("CNS::compute_rhs::dflux", prof_dflux);
-#if (AMREX_USE_GPIBM || CNS_USE_EB)
-    prob_rhs.dflux_ibm(geom, mfi, prims, {AMREX_D_DECL(&fluxt[0], &fluxt[1], &fluxt[2])}, state, cls_d, geoMarkers);
+      BL_PROFILE_VAR("CNS::compute_rhs::dflux", prof_dflux);
+#if defined(AMREX_USE_GPIBM) || defined(CNS_USE_EB)
+      prob_rhs.dflux_ibm(
+          geom, mfi, prims, face_fluxes, flux_state, cls_d, geoMarkers);
 #else
-    prob_rhs.dflux(geom, mfi, prims, {AMREX_D_DECL(&fluxt[0], &fluxt[1], &fluxt[2])}, state, cls_d);
+      prob_rhs.dflux(
+          geom, mfi, prims, face_fluxes, flux_state, cls_d);
 #endif
-    BL_PROFILE_VAR_STOP(prof_dflux);
+      BL_PROFILE_VAR_STOP(prof_dflux);
+    }
+    // Preserve the combined Euler+diffusive face flux before the conservative
+    // state storage is reused for the RHS. MFIter is untiled here, so every
+    // valid face of every level box is copied exactly once into its owning FAB.
+    if (retain_level_face_fluxes) {
+      for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+        const Box face_box = amrex::surroundingNodes(cell_box, dir);
+        auto const src = face_flux_storage[dir].const_array();
+        auto const dst = level_face_fluxes[dir]->array(mfi);
+        ParallelFor(face_box, cls_h.NCONS,
+                    [=] AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept {
+                      dst(i, j, k, n) = src(i, j, k, n);
+                    });
+      }
+    }
+    if (capture_rz_pressure) {
+      const Box radial_face_box =
+          amrex::surroundingNodes(cell_box, 0);
+      const auto src = rz_pressure_face_owner->const_array();
+      const auto dst = level_rz_pressure_face_flux->array(mfi);
+      ParallelFor(
+          radial_face_box,
+          [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+            dst(i, j, k, 0) = src(i, j, k, 0);
+          });
     }
 
-    // compute rhs as finite-volume flux divergence, i.e.
-    //   rhs += ((F·A)_lo - (F·A)_hi) / V
-    // WARNING: state is now the RHS array
-    // set RHS=0 (everywhere including ghost points)
-    ParallelFor(bxg, cls_h.NCONS, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
-      {state(i,j,k,n) = 0.0;});
-
-    // Geometry-aware finite-volume flux divergence.  Metrics are evaluated
-    // per-cell inside the kernel, avoiding temporary volume/area arrays.
-    //   Cartesian : standard uniform-cell form, dU/dt += (F_lo - F_hi)/dx.
-    //   RZ (2D)   : cylindrical (r,z) with r_i = prob_lo[0] + (i+1/2)*dr;
-    //               the r-flux term uses the metric-consistent form
-    //               -(1/r) d(rF_r)/dr ≈ 2(r_lo F_lo - r_hi F_hi)/(r_hi^2 - r_lo^2).
-    const auto dx = geom.CellSizeArray();
-    const auto prob_lo = geom.ProbLoArray();
-
-    auto const& fx = fluxt[0].array();
-#if (AMREX_SPACEDIM >= 2)
-    auto const& fy = fluxt[1].array();
-#endif
-#if (AMREX_SPACEDIM == 3)
-    auto const& fz = fluxt[2].array();
-#endif
-
-    const bool is_rz = geom.IsRZ();
-
-    // Performance note: a 3D kernel with an inner loop over components reuses
-    // per-cell metrics across all NCONS equations, avoiding redundant metric
-    // evaluations that would arise from a 4D (i,j,k,n) ParallelFor.
+    // The input conservative state is no longer needed after both face-flux
+    // operators finish. Reuse its storage for the stage RHS.
+    const Array4<Real>& rhs = conservative_state;
     const int ncons = cls_h.NCONS;
+    ParallelFor(
+        ghost_cell_box, ncons,
+        [=] AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept {
+          rhs(i, j, k, n) = Real(0.0);
+        });
 
-#if (AMREX_SPACEDIM == 2)
-    if (is_rz) {
+    // Convert the finalized face fluxes into the conservative flux-difference
+    // contribution to dU/dt. The helper selects Cartesian or axisymmetric RZ
+    // metrics from geom without changing the face fluxes.
+    assemble_face_flux_divergence<PROB::ProbRHS>(
+        geom, cell_box, prims, face_fluxes, rz_center_pressure,
+        rz_euler_cell_average_deconvolution, rz_pressure_face_flux,
+        use_rz_paired_pressure, rhs, ncons);
 
-        const Real dr = dx[0];
-        const Real dz = dx[1];
-        const Real r0 = prob_lo[0];
-        const Box domain = geom.Domain();
-        const int ilo = domain.smallEnd(0);
-        const int ihi = domain.bigEnd(0);
-        const int qpres   = PROB::ProbClosures::QPRES;
-        const int qrho    = PROB::ProbClosures::QRHO;
-        const int qu      = PROB::ProbClosures::QU;   // radial velocity (dir 0 = r)
-        const int qc      = PROB::ProbClosures::QC;   // sound speed
-        const int umom_r  = PROB::ProbClosures::UMX;
-        const Real inv_dz = Real(1.0) / dz;
-
-        // --- (Route B) near-axis radial-momentum dissipation -----------------
-        // Damps the spurious odd-even / carbuncle-like u_r seeded at strong
-        // on-axis shocks by the singular RZ axis discretisation (the p/r source
-        // amplified by 1/r_c=2/dr at i=0).  OFF by default (coeff 0) so no other
-        // case is affected; enable per-case with cns.rz_axis_diss=<O(0.5)>.
-        static const Real s_rz_diss = []{ Real v=Real(0.0);
-            amrex::ParmParse pp("cns"); pp.query("rz_axis_diss", v); return v; }();
-        static const int  s_rz_nc   = []{ int n=3;
-            amrex::ParmParse pp("cns"); pp.query("rz_axis_diss_ncell", n); return n; }();
-        // Experimental WENO/TENO-only pressure split:
-        //   radial momentum pressure force = -dp/dr, not
-        //   -(1/r)d(rp)/dr + p/r.  The matching Weno.h path removes p from
-        //   the r-momentum r-face flux.  Leave OFF unless that path is active.
-        static const int s_rz_pressure_split = []{ int v=0;
-            amrex::ParmParse pp("cns"); pp.query("rz_pressure_split", v); return v; }();
-        // Near-axis well-balanced geometric pressure source (default OFF, 0 cells).
-        // In the first N radial cells it replaces the cell-centre source p_c/r
-        // with the flux-face-average 1/2(F_r(i)+F_r(i+1))/r.  Combined with the
-        // metric divergence this collapses to the Cartesian flux difference
-        // (F_r(i)-F_r(i+1))/dr, which is exactly well-balanced (uniform state ->
-        // 0) and, since u_r->0 at the axis so F_r=rho*u_r^2+p -> p, reproduces
-        // -dp/dr WITHOUT the 1/r-amplified [p_c - mean(p_face)] residual (the
-        // eq.12 seed of the spurious on-axis radial momentum at the Mach disk).
-        // Uses the SAME face fluxes as the divergence (exact consistency); bulk
-        // cells (i-ilo >= N) keep the standard p_c/r source so the validated
-        // shock structure / standoff is untouched.  Pairs with the baseline flux
-        // (NOT rz_pressure_split, which removes p from the flux entirely).
-        static const int s_rz_wb_ncell = []{ int n=0;
-            amrex::ParmParse pp("cns"); pp.query("rz_wb_axis_ncell", n); return n; }();
-        const Real rz_diss = s_rz_diss;   // local copies -> captured by value (GPU-safe)
-        const int  rz_nc   = s_rz_nc;
-        const int  rz_wb_ncell = s_rz_wb_ncell;
-        const bool rz_pressure_split = (s_rz_pressure_split != 0);
-        // HARD GUARD: the -dp/dr pressure-split form below MUST be paired with a
-        // flux that removed the radial pressure flux. Only weno_t::eflux does so
-        // (rz_pressure_split_capable=true). With any other flux scheme the radial
-        // pressure would be counted twice (in the flux AND here) -> wrong equations.
-        if (rz_pressure_split && !rz_psplit_capable<PROB::ProbRHS>::value) {
-          amrex::Abort("cns.rz_pressure_split is experimental and WENO/TENO-only: "
-                       "it requires weno_t::eflux to remove the radial pressure flux. "
-                       "The active flux scheme does not, so the pressure would be "
-                       "double-counted. Disable cns.rz_pressure_split or use weno_t.");
-        }
-        const Real dr_loc  = dr;
-        const Real inv_2dr = Real(0.5) / dr;
-
-        ParallelFor(bx,
-                [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
-
-                    // Axisymmetric RZ: dir=0 is r, dir=1 is z.
-                    // In this branch:
-                    //   fx = flux density through r-faces (i±1/2)
-                    //   fy = flux density through z-faces (j±1/2)
-                    const Real r_lo = r0 + Real(i) * dr;
-                    const Real r_hi = r_lo + dr;
-                    const Real r_c  = r_lo + Real(0.5) * dr;
-
-                    // r2diff = r_hi^2 - r_lo^2 = (r_hi + r_lo)*(r_hi - r_lo)
-                    //        = (r_hi + r_lo) * dr
-                    const Real r2diff = (r_hi + r_lo) * dr;
-                    // For well-posed RZ problems prob_lo[0]=0 and i>=0, so
-                    // r2diff is strictly positive; the floor guards against
-                    // pathological setups and is inactive in normal use.
-                    const Real tiny = amrex::max(std::numeric_limits<Real>::min(), Real(1.0e-14) * dr * dr);
-                    const Real inv_r2diff = Real(1.0) / amrex::max(r2diff, tiny);
-                    const Real tiny_r = Real(1.0e-14) * dr;
-                    const Real inv_r = Real(1.0) / amrex::max(r_c, tiny_r);
-
-                    for (int n = 0; n < ncons; ++n) {
-                        // FV form with metrics. After cancellation of common factors:
-                        // - z term reduces to Cartesian difference / dz
-                        // - r term is (2*r*F_r)|_lo - (2*r*F_r)|_hi over (r_hi^2 - r_lo^2)
-                        
-                        // r-direction: metric-consistent RZ divergence
-                        //   -(1/r) d(rF_r)/dr ≈ 2(r_lo*F_lo - r_hi*F_hi) / (r_hi^2 - r_lo^2)
-                        Real rhs_rz = (Real(2.0) * (r_lo * fx(i, j, k, n) - r_hi * fx(i + 1, j, k, n))) * inv_r2diff;
-                        state(i, j, k, n) += rhs_rz;
-
-                        // Axisymmetric Euler geometric source for radial momentum:
-                        // +p/r term is not contained in -(1/r) d(r F_r)/dr - dF_z/dz
-                        // when F_r uses the standard Cartesian-form momentum flux.
-                        if (n == umom_r) {
-                            if (rz_pressure_split) {
-                                Real dpdr;
-                                if (i <= ilo) {
-                                    dpdr = (-Real(3.0) * prims(i, j, k, qpres)
-                                            + Real(4.0) * prims(i + 1, j, k, qpres)
-                                            - prims(i + 2, j, k, qpres)) * inv_2dr;
-                                } else if (i >= ihi) {
-                                    dpdr = ( Real(3.0) * prims(i, j, k, qpres)
-                                            - Real(4.0) * prims(i - 1, j, k, qpres)
-                                            + prims(i - 2, j, k, qpres)) * inv_2dr;
-                                } else {
-                                    // A2-a: monotone (minmod-limited) radial pressure
-                                    // gradient. Well-balanced (uniform p -> 0) AND
-                                    // non-oscillatory at shocks -- unlike the central
-                                    // difference, which Gibbs-oscillates at the on-axis
-                                    // Mach disk / bow shock and (via the 1/r metric)
-                                    // seeds the spurious near-axis radial momentum.
-                                    // Consistent with the cell-centre pressure that
-                                    // weno_t removed from the advective r-momentum flux.
-                                    const Real gL = prims(i,   j, k, qpres) - prims(i-1, j, k, qpres);
-                                    const Real gR = prims(i+1, j, k, qpres) - prims(i,   j, k, qpres);
-                                    const Real slope = (gL * gR <= Real(0.0)) ? Real(0.0)
-                                        : (amrex::Math::abs(gL) < amrex::Math::abs(gR) ? gL : gR);
-                                    dpdr = slope / dr_loc;
-                                }
-                                state(i, j, k, n) -= dpdr;
-                            } else if (rz_wb_ncell > 0 && (i - ilo) < rz_wb_ncell) {
-                                // Near-axis well-balanced source (see derivation
-                                // above): flux-face-average in place of p_c/r.
-                                // metric-div(line ~310) + this == (F_r(i)-F_r(i+1))/dr.
-                                state(i, j, k, n) += Real(0.5)
-                                    * (fx(i, j, k, n) + fx(i + 1, j, k, n)) * inv_r;
-                            } else {
-                                state(i, j, k, n) += prims(i, j, k, qpres) * inv_r;
-                            }
-
-                            // (Route B) near-axis radial-momentum dissipation:
-                            // artificial radial viscosity nu = rz_diss*(|u_r|+a)*dr,
-                            // RHS += nu/dr^2 * d2(rho*u_r)/dr2, ramped 1->0 over rz_nc cells.
-                            if (rz_diss > Real(0.0) && i <= rz_nc) {
-                                const Real mL = prims(i-1,j,k,qrho)*prims(i-1,j,k,qu);
-                                const Real mC = prims(i,  j,k,qrho)*prims(i,  j,k,qu);
-                                const Real mR = prims(i+1,j,k,qrho)*prims(i+1,j,k,qu);
-                                const Real lap   = mL - Real(2.0)*mC + mR;
-                                const Real speed = std::abs(prims(i,j,k,qu)) + prims(i,j,k,qc);
-                                const Real wgt   = Real(1.0) - Real(i)/Real(rz_nc + 1);
-                                state(i, j, k, n) += rz_diss * wgt * (speed / dr_loc) * lap;
-                            }
-                        }
-
-                        state(i, j, k, n) += (fy(i, j, k, n) - fy(i, j + 1, k, n)) * inv_dz;
-                    }
-                });
-    } else
-#endif
-    {
-#if (AMREX_SPACEDIM == 1)
-        const Real invdx = Real(1.0) / dx[0];
-        ParallelFor(bx,
-                [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
-                    for (int n = 0; n < ncons; ++n) {
-                        state(i, j, k, n) += (fx(i, j, k, n) - fx(i + 1, j, k, n)) * invdx;
-                    }
-                });
-#elif (AMREX_SPACEDIM == 2)
-        const Real invdx = Real(1.0) / dx[0];
-        const Real invdy = Real(1.0) / dx[1];
-        ParallelFor(bx,
-                [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
-                    for (int n = 0; n < ncons; ++n) {
-                        state(i, j, k, n) += (fx(i, j, k, n) - fx(i + 1, j, k, n)) * invdx;
-                        state(i, j, k, n) += (fy(i, j, k, n) - fy(i, j + 1, k, n)) * invdy;
-                    }
-                });
-#else
-        const Real invdx = Real(1.0) / dx[0];
-        const Real invdy = Real(1.0) / dx[1];
-        const Real invdz = Real(1.0) / dx[2];
-        ParallelFor(bx,
-                [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
-                    for (int n = 0; n < ncons; ++n) {
-                        state(i, j, k, n) += (fx(i, j, k, n) - fx(i + 1, j, k, n)) * invdx;
-                        state(i, j, k, n) += (fy(i, j, k, n) - fy(i, j + 1, k, n)) * invdy;
-                        state(i, j, k, n) += (fz(i, j, k, n) - fz(i, j, k + 1, n)) * invdz;
-                    }
-                });
-#endif
+    // Add RZ viscous geometric terms that are not part of the face-flux
+    // difference. Cartesian operators return immediately.
+    if (geom.IsRZ()) {
+      prob_rhs.rz_geometric_source(geom, mfi, prims, rhs, cls_d);
     }
-
-    // RZ viscous geometric source (hoop-stress and related terms) not captured
-    // by the metric FV divergence of the face fluxes.
-    if (is_rz) {
-        prob_rhs.rz_geometric_source(geom, mfi, prims, state, cls_d);
-    }
-                      
-#if CNS_USE_EB    
-    // internal geometry fluxes
-    const Box&  ebbox  = mfi.growntilebox(0);  // box without ghost points 
+#if CNS_USE_EB
+    // Experimental EB-only correction. This block is not compiled into the
+    // pure shared-GP production executable.
+    const Box& eb_box = mfi.growntilebox(0);
     const auto& flag = (*EBM::eb.ebflags_a[level])[mfi];
-    FabType t = flag.getType(ebbox);
-
-    const bool fab_with_eb = (FabType::singlevalued == t);  
-    // EB flux     
+    const FabType fab_type = flag.getType(eb_box);
+    const bool fab_with_eb = (FabType::singlevalued == fab_type);
     if (fab_with_eb) {
-      EBM::eb.ebflux(geom,mfi, prims, {AMREX_D_DECL(&fluxt[0], &fluxt[1], &fluxt[2])},state, cls_d,level);
+      EBM::eb.ebflux(
+          geom, mfi, prims, face_fluxes, rhs, cls_d, level);
     }
 
-    // redistribution 
-    // WARNING: state is  the RHS array, prims is the prims 
-    // compute divc here
-    amrex::ParallelFor(bxg, cls_h.NCONS,  
-    [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
-    {
-      divc(i,j,k,n) = state(i,j,k,n);
-    });  
-    
-    // do redistribution only in box with EB
-    if (eb_redistribution && fab_with_eb){      
+    ParallelFor(
+        ghost_cell_box, ncons,
+        [=] AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept {
+          eb_divergence(i, j, k, n) = rhs(i, j, k, n);
+        });
 
-      EBM::eb.redist(geom,mfi,cons,divc, {AMREX_D_DECL(&fluxt[0], &fluxt[1], &fluxt[2])},
-                    state, cls_d,level,dt,h_phys_bc);
-    }                    
-#endif 
-
-    // Optional RHS-level NSCBC hook.  This is intentionally after the finite-
-    // volume flux divergence (and EB redistribution when present) so a problem
-    // can directly replace boundary-cell dU/dt instead of only influencing
-    // ghost-cell states before the Riemann solve.
-    try_rhs_nscbc(0, geom, mfi, prims, state, cls_d, pparm_d, dt, cur_time);
-
-    // Source terms (body forces, chemistry, etc.)
-#if (AMREX_USE_GPIBM || CNS_USE_EB)
-    prob_rhs.src(geom,mfi, prims, state, cls_d, dt, cur_time, geoMarkers);
-#else
-    prob_rhs.src(geom,mfi, prims, state, cls_d, dt, cur_time);
+    if (eb_redistribution && fab_with_eb) {
+      EBM::eb.redist(
+          geom, mfi, eb_conservative_state, eb_divergence, face_fluxes,
+          rhs, cls_d, level, dt, h_phys_bc);
+    }
 #endif
 
-    // Zero the RHS inside solid cells (state holds RHS at this point)
-#if (AMREX_USE_GPIBM || CNS_USE_EB)
-        amrex::ParallelFor(bxg,
-        [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-        {
-            // IBM: geoMarkers(i,j,k,0) stores geometry_index in a uint8_t.
-            // EB : geoMarkers(i,j,k,0) is a bool covered-cell marker.
-            // In both cases, nonzero => solid.
-            if (geoMarkers(i,j,k,0) != 0) {
-                for (int n = 0; n < ncons; ++n) {
-                    state(i,j,k,n) = Real(0.0);
-                }
-            }
+    // A problem-specific NSCBC hook may replace boundary-cell dU/dt after the
+    // conservative face-flux difference has been assembled.
+    try_rhs_nscbc(
+        0, geom, mfi, prims, rhs, cls_d, pparm_d, dt, cur_time,
+        capture_stage_flux);
+
+    // Add problem-defined source terms.
+#if defined(AMREX_USE_GPIBM) || defined(CNS_USE_EB)
+    prob_rhs.src(
+        geom, mfi, prims, rhs, cls_d, dt, cur_time, geoMarkers);
+#else
+    prob_rhs.src(geom, mfi, prims, rhs, cls_d, dt, cur_time);
+#endif
+
+    // Solid cells supply ghost states to crossing stencils but are not
+    // advanced. Fluid cells retain the full-Cartesian flux-difference RHS.
+#if defined(AMREX_USE_GPIBM) || defined(CNS_USE_EB)
+    ParallelFor(
+        ghost_cell_box, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+          if (geoMarkers(i, j, k, 0) == 0) return;
+          for (int n = 0; n < ncons; ++n) {
+            rhs(i, j, k, n) = Real(0.0);
+          }
         });
 #endif
   }
 
-}
-
-// ============================================================================
-// Communication/computation overlap variant of (FillPatch + compute_rhs) for
-// one RK stage (cns.overlap_comm=1). Design:
-//
-//   (a)  valid region <- SRC (plain local copy; the RK3 driver arranges state
-//        time levels so the legacy FillPatch's valid fill is exactly this)
-//   (b1) coarse-fine boundary ghosts, phase 1 (level > 0): start non-blocking
-//        fetches (ParallelCopy_nowait) of any coarse source data not in the
-//        per-level cache. Split-phase re-implementation of
-//        amrex::FillPatcher::fillCoarseFineBoundary (AMReX 25.12) — same
-//        FPinfo patches, same time-interp formula, same coarse physbc, same
-//        FillPatchInterp call, so the result is bitwise-identical; only the
-//        communication is overlapped. Cache reset in CNS::post_timestep.
-//   (c)  same-level ghost exchange started with FillBoundary_nowait
-//   (d)  PASS 1 (overlapped with both exchanges): prims on the VALID box,
-//        RHS zeroed on the interior, flux + divergence on the interior
-//        region ibx = grow(bx, -NGHOST) whose stencils never reach ghosts
-//   (e)  FillBoundary_finish  (the MPI wait now overlaps Pass-1 kernels)
-//   (b2) coarse-fine boundary ghosts, phase 2: finish the fetches, time-
-//        interpolate the coarse patch, coarse physbc, space-interpolate and
-//        copy into statemf's coarse-fine ghosts
-//   (f)  physical-BC ghosts via StateDataPhysBCFunct (same functor and time
-//        as the legacy FillPatch applies last)
-//   (g)  PASS 2: ghost-ring prims from the fresh ghost cons (one masked
-//        kernel), ghost-ring + shell RHS zeroed, then ONE masked flux +
-//        divergence call over the tilebox that skips the interior region
-//        already handled in Pass 1; then the NSCBC hook and source terms
-//        once per fab (legacy ordering)
-//
-// Seam faces between interior and shell are computed twice from identical
-// prims, giving bitwise-identical fluxes => conservation preserved and the
-// result is bitwise-identical to FillPatch + compute_rhs.
-// ============================================================================
-void CNS::compute_rhs_overlap(MultiFab& statemf, Real dt,
-                              FluxRegister* fr_as_crse,
-                              FluxRegister* fr_as_fine, Real t_fill,
-                              MultiFab& SRC, MultiFab& prims_mf) {
-  BL_PROFILE("CNS::compute_rhs_overlap()");
-
-  amrex::ignore_unused(fr_as_crse, fr_as_fine);  // reflux not supported here
-
-#if defined(AMREX_USE_GPIBM) || defined(CNS_USE_EB)
-  amrex::ignore_unused(statemf, dt, t_fill, SRC, prims_mf);
-  amrex::Abort("cns.overlap_comm=1 is not supported in IBM/EB builds");
-#else
-  const PROB::ProbClosures* cls_d = CNS::d_prob_closures;
-  const PROB::ProbClosures& cls_h = *CNS::h_prob_closures;
-  const PROB::ProbParm* pparm_d = CNS::d_prob_parm;
-
-  // The overlap driver already supplies the exact RK abscissa.
-  const Real cur_time = t_fill;
-
-  const int ncons = cls_h.NCONS;
-  const int ng = cls_h.NGHOST;
-
-  if (geom.IsRZ()) {
-    amrex::Abort("cns.overlap_comm=1 does not support RZ geometry");
-  }
-  AMREX_ALWAYS_ASSERT(statemf.nGrowVect().allGE(IntVect(ng)));
-  AMREX_ALWAYS_ASSERT(prims_mf.nGrowVect().allGE(IntVect(ng)));
-
-  // ---- (a) valid-region copy (local, no communication) --------------------
-  MultiFab::Copy(statemf, SRC, 0, 0, ncons, 0);
-
-  // ---- (c) same-level ghost exchange, non-blocking -------------------------
-  // Posted FIRST so the sends leave as soon as the pack kernels finish; the
-  // coarse-fine interpolation chain below would otherwise delay the pack
-  // synchronization (and thus the neighbours' FillBoundary_finish).
-  statemf.FillBoundary_nowait(geom.periodicity());
-
-  // ---- (b1) coarse-fine ghosts, phase 1: start coarse fetches --------------
-  const StateDescriptor& desc = AmrLevel::desc_lst[State_Type];
-  InterpBase* cfb_mapper = desc.interp(0);
-  FabArrayBase::FPinfo const* cfb_fpc = nullptr;
-  Vector<MultiFab*> cfb_pending;  // fetches to finish in phase 2
-  IntVect cfb_ratio;
-  bool cfb_precomputed = false;  // chain done + ghost copy in flight from B1
-
-  // Time-interp of the cached coarse patches + coarse physbc + space-interp
-  // into m_ovl_cfb_fine. Replicates FillPatcher::fillCoarseFineBoundary
-  // (AMReX 25.12) step for step, so the values are bitwise-identical to the
-  // legacy FillPatchTwoLevels result. Requires all needed coarse source
-  // patches present in m_ovl_cfb_data.
-  auto run_cfb_chain = [&]() {
-    if (m_ovl_cfb_tmp == nullptr) {
-      m_ovl_cfb_tmp = std::make_unique<MultiFab>(
-          ovl_make_mf_crse_patch(*cfb_fpc, ncons));
-    }
-    if (m_ovl_cfb_fine == nullptr) {
-      m_ovl_cfb_fine = std::make_unique<MultiFab>(
-          ovl_make_mf_fine_patch(*cfb_fpc, ncons));
-    }
-
-    AmrLevel& crse_level = parent->getLevel(level - 1);
-    const Geometry& cgeom = crse_level.Geom();
-
-    int const ng_space_interp = 8;  // must match FillPatcher
-    Box domain = cgeom.growPeriodicDomain(ng_space_interp);
-    domain.convert(statemf.ixType());
-
-    int idata = -1;
-    if (m_ovl_cfb_data.size() == 1) {
-      idata = 0;
-    } else if (m_ovl_cfb_data.size() == 2) {
-      Real const teps =
-          std::abs(m_ovl_cfb_data[1].first - m_ovl_cfb_data[0].first) *
-          Real(1.e-3);
-      if (t_fill > m_ovl_cfb_data[0].first - teps &&
-          t_fill < m_ovl_cfb_data[0].first + teps) {
-        idata = 0;
-      } else if (t_fill > m_ovl_cfb_data[1].first - teps &&
-                 t_fill < m_ovl_cfb_data[1].first + teps) {
-        idata = 1;
-      } else {
-        idata = 2;
-      }
-    }
-
-    if (idata == 0 || idata == 1) {
-      auto const& dst = m_ovl_cfb_tmp->arrays();
-      auto const& src = m_ovl_cfb_data[idata].second->const_arrays();
-      amrex::ParallelFor(
-          *m_ovl_cfb_tmp, IntVect(0), ncons,
-          [=] AMREX_GPU_DEVICE(int bi, int i, int j, int k, int n) noexcept {
-            if (domain.contains(i, j, k)) {
-              dst[bi](i, j, k, n) = src[bi](i, j, k, n);
-            }
-          });
-    } else if (idata == 2) {
-      Real t0 = m_ovl_cfb_data[0].first;
-      Real t1 = m_ovl_cfb_data[1].first;
-      Real alpha = (t1 - t_fill) / (t1 - t0);
-      Real beta = (t_fill - t0) / (t1 - t0);
-      auto const& a = m_ovl_cfb_tmp->arrays();
-      auto const& a0 = m_ovl_cfb_data[0].second->const_arrays();
-      auto const& a1 = m_ovl_cfb_data[1].second->const_arrays();
-      amrex::ParallelFor(
-          *m_ovl_cfb_tmp, IntVect(0), ncons,
-          [=] AMREX_GPU_DEVICE(int bi, int i, int j, int k, int n) noexcept {
-            if (domain.contains(i, j, k)) {
-              a[bi](i, j, k, n) =
-                  alpha * a0[bi](i, j, k, n) + beta * a1[bi](i, j, k, n);
-            }
-          });
-    } else {
-      amrex::Abort(
-          "compute_rhs_overlap: invalid coarse-fine cache (more than two "
-          "coarse times — was resetOvlCFB() skipped?)");
-    }
-    Gpu::streamSynchronize();
-
-    StateDataPhysBCFunct cbc(crse_level.get_state_data(State_Type), 0, cgeom);
-    cbc(*m_ovl_cfb_tmp, 0, ncons, m_ovl_cfb_tmp->nGrowVect(), t_fill, 0);
-
-    FillPatchInterp(*m_ovl_cfb_fine, 0, *m_ovl_cfb_tmp, 0, ncons, IntVect(0),
-                    cgeom, geom,
-                    amrex::grow(amrex::convert(geom.Domain(), statemf.ixType()),
-                                IntVect(ng)),
-                    cfb_ratio, cfb_mapper, desc.getBCs(), 0);
-  };
-
-  if (level > 0) {
-    BL_PROFILE("CNS::compute_rhs_overlap::cfb_start");
-    AmrLevel& crse_level = parent->getLevel(level - 1);
-    const Geometry& cgeom = crse_level.Geom();
-
-    if (level > 1 &&
-        !amrex::ProperlyNested(crse_ratio, parent->blockingFactor(level), ng,
-                               statemf.ixType(), cfb_mapper)) {
-      amrex::Abort(
-          "cns.overlap_comm=1: grids are not properly nested for the "
-          "coarse-fine fill; increase amr.blocking_factor or disable "
-          "cns.overlap_comm");
-    }
-
-    for (int idim = 0; idim < AMREX_SPACEDIM; ++idim) {
-      cfb_ratio[idim] =
-          geom.Domain().length(idim) / cgeom.Domain().length(idim);
-    }
-
-    // Same FPinfo as FillPatcher::getFPinfo (cached inside amrex, keyed by
-    // the BoxArray/DistributionMapping/nghost/coarsener)
-    MultiFab sfine(grids, dmap, 1, IntVect(ng), MFInfo().SetAlloc(false));
-    const InterpolaterBoxCoarsener& coarsener =
-        cfb_mapper->BoxCoarsener(cfb_ratio);
-    cfb_fpc = &FabArrayBase::TheFPinfo(sfine, sfine, IntVect(ng), coarsener,
-                                       geom, cgeom, nullptr);
-
-    if (!cfb_fpc->ba_crse_patch.empty()) {
-      Vector<MultiFab*> smf_crse;
-      Vector<Real> stime_crse;
-      crse_level.get_state_data(State_Type).getData(smf_crse, stime_crse,
-                                                    t_fill);
-      for (int i = 0; i < smf_crse.size(); ++i) {
-        const Real t = stime_crse[i];
-        auto it = std::find_if(m_ovl_cfb_data.begin(), m_ovl_cfb_data.end(),
-                               [=](auto const& x) {
-                                 return amrex::almostEqual(x.first, t, 5);
-                               });
-        if (it == m_ovl_cfb_data.end()) {
-          auto p = std::make_unique<MultiFab>(
-              ovl_make_mf_crse_patch(*cfb_fpc, ncons));
-          p->ParallelCopy_nowait(*smf_crse[i], cgeom.periodicity());
-          cfb_pending.push_back(p.get());
-          m_ovl_cfb_data.emplace_back(t, std::move(p));
-        }
-      }
-
-      if (cfb_pending.empty()) {
-        // All coarse source data already cached (typical for RK stages 2,3
-        // and later substeps): run the whole interpolation chain NOW and
-        // start the ghost copy non-blocking, so the FPinfo-patch exchange
-        // (knapsack-distributed, i.e. real communication) also overlaps
-        // Pass 1. A FabArray keeps FillBoundary and ParallelCopy requests
-        // in separate handlers, so both can be in flight simultaneously.
-        run_cfb_chain();
-        statemf.ParallelCopy_nowait(*m_ovl_cfb_fine, 0, 0, ncons, IntVect{0},
-                                    IntVect(ng));
-        cfb_precomputed = true;
-      }
+  // The production positivity limiter needs the conservative face-flux
+  // contribution used by this stage RHS. Copy it only when the caller
+  // provides stage-local capture storage.
+  if (capture_stage_flux) {
+    for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+      MultiFab::Copy(*captured_face_flux[dir], *level_face_fluxes[dir], 0, 0,
+                     cls_h.NCONS, 0);
+      captured_face_flux[dir]->OverrideSync(geom.periodicity());
     }
   }
-
-  // No device synchronization is needed before Pass 1: the in-flight
-  // exchanges read only (i) neighbouring fabs' valid data within NGHOST of
-  // fab interfaces (shell cells — Pass 1 leaves the whole shell untouched
-  // and only writes the interior region ibx), (ii) the coarse level's state,
-  // and (iii) m_ovl_cfb_fine; their ghost writes target regions no Pass-1
-  // kernel touches. All reads/writes are therefore disjoint from Pass 1.
-
-  // ---- (d) PASS 1: interior (overlapped with the ghost exchange) ----------
-  {
-    BL_PROFILE("CNS::compute_rhs_overlap::pass1");
-    for (MFIter mfi(statemf, false); mfi.isValid(); ++mfi) {
-      const Box& bx = mfi.tilebox();
-      Array4<Real> const& state4 = statemf.array(mfi);
-      Array4<Real> const& prims4 = prims_mf.array(mfi);
-
-      // prims for ALL valid cells (pointwise; needs no ghosts) — extracted
-      // BEFORE any RHS zeroing wipes the conservative data
-      cls_h.cons2prims(bx, state4, prims4);
-
-      // interior region: stencils (WENO ng=3 <= NGHOST, viscous halfsten
-      // <= NGHOST) never reach outside the valid box
-      const Box ibx = amrex::grow(bx, -ng);
-      if (ibx.ok()) {
-        // zero RHS on the INTERIOR ONLY. The shell (and ghost ring) keep
-        // their conservative data until Pass 2: the physical-BC fill in
-        // step (f) extrapolates domain ghosts from near-boundary valid
-        // cells (all within the shell), so they must stay intact here.
-        ParallelFor(ibx, ncons,
-                    [=] AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept {
-                      state4(i, j, k, n) = 0.0;
-                    });
-        region_flux_div(prob_rhs, geom, ibx, prims4, state4, cls_d, ncons);
-      }
+  if (capture_rz_pressure) {
+    MultiFab::Copy(*captured_rz_pressure_face_flux,
+                   *level_rz_pressure_face_flux, 0, 0, 1, 0);
+    captured_rz_pressure_face_flux->OverrideSync(geom.periodicity());
+  }
+  if (capture_llf_fallback) {
+    for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+      captured_llf_fallback_mask[dir]->OverrideSync(geom.periodicity());
     }
   }
-
-  // ---- (e) finish the same-level exchange ----------------------------------
-  statemf.FillBoundary_finish();
-
-  // ---- (b2) coarse-fine ghosts, phase 2 ------------------------------------
-  // Cache hit (typical): only finish the ghost copy started in (b1).
-  // Cache miss (first stage on fresh coarse data): finish the overlapped
-  // coarse fetches, run the interpolation chain, and copy the ghosts.
-  if (level > 0 && cfb_fpc != nullptr && !cfb_fpc->ba_crse_patch.empty()) {
-    BL_PROFILE("CNS::compute_rhs_overlap::cfb_finish");
-    if (cfb_precomputed) {
-      statemf.ParallelCopy_finish();
-    } else {
-      for (auto* p : cfb_pending) {
-        p->ParallelCopy_finish();
+  if (register_fluxes) {
+    for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+      if (fr_as_crse != nullptr) {
+        fr_as_crse->CrseInit(
+            *level_face_fluxes[dir], *level_face_areas[dir], dir, 0, 0,
+            cls_h.NCONS,
+            -reflux_dt, FluxRegister::ADD);
       }
-      run_cfb_chain();
-      statemf.ParallelCopy(*m_ovl_cfb_fine, 0, 0, ncons, IntVect{0},
-                           IntVect(ng));
-    }
-  }
-
-  // ---- (f) physical-BC ghosts (same functor/time as legacy FillPatch) -----
-  {
-    BL_PROFILE("CNS::compute_rhs_overlap::physbc");
-    StateDataPhysBCFunct physbcf(state[State_Type], 0, geom);
-    physbcf(statemf, 0, ncons, statemf.nGrowVect(), t_fill, 0);
-  }
-
-  // ---- (g) PASS 2: shell + finalize ----------------------------------------
-  {
-    BL_PROFILE("CNS::compute_rhs_overlap::pass2");
-    for (MFIter mfi(statemf, false); mfi.isValid(); ++mfi) {
-      const Box& bx = mfi.tilebox();
-      const Box& bxg = mfi.growntilebox(ng);
-      Array4<Real> const& state4 = statemf.array(mfi);
-      Array4<Real> const& prims4 = prims_mf.array(mfi);
-
-      // interior region handled in Pass 1 (invalid box if the fab is too
-      // small — then the whole tilebox is done here)
-      const Box ibx0 = amrex::grow(bx, -ng);
-      const Box ibx = ibx0.ok() ? ibx0 : Box();
-      const bool have_ibx = ibx.ok();
-
-      // ghost-ring prims from the freshly exchanged conservative data
-      // (single masked kernel; valid-cell prims come from Pass 1) ...
-      cls_h.cons2prims(bxg, state4, prims4, bx);
-
-      // ... then zero the RHS on the ghost ring + shell (the interior was
-      // zeroed in Pass 1; parity with the legacy bxg-wide zero)
-      {
-        const Box skipz = ibx;
-        const bool skipz_ok = have_ibx;
-        ParallelFor(bxg, ncons,
-                    [=] AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept {
-                      if (skipz_ok && skipz.contains(i, j, k)) { return; }
-                      state4(i, j, k, n) = 0.0;
-                    });
+      if (fr_as_fine != nullptr) {
+        fr_as_fine->FineAdd(
+            *level_face_fluxes[dir], *level_face_areas[dir], dir, 0, 0,
+            cls_h.NCONS,
+            reflux_dt);
       }
-
-      // fluxes + divergence for the shell in ONE masked call over the
-      // tilebox: faces and cells interior to ibx are skipped (Pass 1 did
-      // them); seam faces are recomputed from the same prims -> identical
-      region_flux_div(prob_rhs, geom, bx, prims4, state4, cls_d, ncons, ibx);
-
-      // NSCBC hook and source terms once per fab, after the divergence is
-      // complete on the whole tilebox (same ordering as the legacy path)
-      try_rhs_nscbc(0, geom, mfi, prims4, state4, cls_d, pparm_d, dt,
-                    cur_time);
-      prob_rhs.src(geom, mfi, prims4, state4, cls_d, dt, cur_time);
     }
+    // The face MultiFabs use The_Async_Arena(), whose deallocation is ordered
+    // after work already submitted to the active stream.  An extra stream
+    // wait here only serializes the next RK stage.
   }
-#endif  // !(AMREX_USE_GPIBM || CNS_USE_EB)
+
 }

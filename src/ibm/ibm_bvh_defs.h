@@ -180,6 +180,26 @@ struct ClosestPointResult {
     }
 };
 
+/// First intersection of an open finite segment with a surface primitive.
+/// `fraction` parameterises point = start + fraction * (end - start).
+struct SegmentHitResult {
+    Point point;
+    int prim_id;
+    amrex::Real fraction;
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    SegmentHitResult ()
+        : prim_id(-1), fraction(std::numeric_limits<amrex::Real>::max())
+    {
+        for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+            point[d] = amrex::Real(0.0);
+        }
+    }
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    bool hit () const { return prim_id >= 0; }
+};
+
 /// Alias kept for drop-in compatibility
 using Bbox = AABB;
 
@@ -613,14 +633,33 @@ struct SurfElem {
     int  geomIdx;
     amrex::Real centroid[AMREX_SPACEDIM];
     amrex::Real measure;
+#if (AMREX_SPACEDIM == 2)
+    // Arc-length distance from each edge endpoint to the nearest sharp
+    // polygon vertex.  Negative values mean that sharp-feature annotation is
+    // disabled.  Keeping the distances on the geometry cache makes the
+    // per-GP feature query O(1) and preserves the owning edge's normal.
+    amrex::Real sharp_distance_source;
+    amrex::Real sharp_distance_target;
+#endif
 
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-    SurfElem () : geomIdx(-1), measure(amrex::Real(0.0)) {
+    SurfElem () : geomIdx(-1), measure(amrex::Real(0.0))
+#if (AMREX_SPACEDIM == 2)
+                , sharp_distance_source(amrex::Real(-1.0))
+                , sharp_distance_target(amrex::Real(-1.0))
+#endif
+    {
         for (int i = 0; i < AMREX_SPACEDIM; ++i) centroid[i] = amrex::Real(0.0);
     }
 
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-    SurfElem (const amrex::Real* c, amrex::Real s, int g_idx) : geomIdx(g_idx), measure(s) {
+    SurfElem (const amrex::Real* c, amrex::Real s, int g_idx)
+        : geomIdx(g_idx), measure(s)
+#if (AMREX_SPACEDIM == 2)
+        , sharp_distance_source(amrex::Real(-1.0))
+        , sharp_distance_target(amrex::Real(-1.0))
+#endif
+    {
         for (int i = 0; i < AMREX_SPACEDIM; ++i) centroid[i] = c[i];
     }
 };

@@ -8,6 +8,7 @@
 #include <AMReX_ParmParse.H>
 #include <Closures.h>
 #include <RHS.h>
+#include <Weno_old.h>
 
 #if CNS_USE_EB    
 #include <ebm.h>
@@ -104,7 +105,7 @@ template <typename cls_t > class user_source_t;
 //typedef closures_dt<indicies_t, transport_const_t<const_viscparm_t>, calorifically_perfect_gas_t<indicies_t>> ProbClosures;
 
 // define nuemrical scheme comment/uncomment to set up 
-typedef rhs_dt<weno_t<ReconScheme::Teno5, ProbClosures>, viscous_t<viscous_param_t, ProbClosures>, user_source_t<ProbClosures> > ProbRHS;
+typedef rhs_dt<weno_old_t<OldReconScheme::Teno5, ProbClosures>, viscous_t<viscous_param_t, ProbClosures>, user_source_t<ProbClosures> > ProbRHS;
 //typedef rhs_dt<riemann_t<false, ProbClosures>, viscous_t<viscous_param_t, ProbClosures>, user_source_t<ProbClosures> > ProbRHS;
 
 

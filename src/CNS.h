@@ -3,13 +3,16 @@
 
 #include <AMReX_AmrLevel.H>
 #include <AMReX_FluxRegister.H>
+#include <AMReX_iMultiFab.H>
 #include <AMReX_Math.H>
 #include <prob.h>
 #include <CNSconstants.h>
 #include <nscbc.h>
+#include <RestartDtControl.h>
 
 #include <Utilities.h>
 
+#include <array>
 
 using namespace amrex;
 
@@ -52,34 +55,13 @@ class CNS : public amrex::AmrLevel {
   void compute_rhs(amrex::MultiFab& S, amrex::Real dt,
                    amrex::FluxRegister* fr_as_crse,
                    amrex::FluxRegister* fr_as_fine,
-                   amrex::Real stage_time);
-
-  // Communication/computation-overlap variant of (FillPatch + compute_rhs)
-  // for one RK stage. Enabled by cns.overlap_comm=1; supports only the
-  // non-IBM/non-EB, non-RZ, SSP-RK(3,3) configuration. Fills Stemp itself
-  // (valid copy from SRC; coarse-fine ghosts via a split-phase equivalent
-  // of amrex::FillPatcher whose communication overlaps the interior flux
-  // computation; same-level ghosts via FillBoundary_nowait/finish, also
-  // overlapped; physical BCs via StateDataPhysBCFunct) and leaves the RHS
-  // in Stemp, exactly like FillPatch + compute_rhs would.
-  void compute_rhs_overlap(amrex::MultiFab& Stemp, amrex::Real dt,
-                           amrex::FluxRegister* fr_as_crse,
-                           amrex::FluxRegister* fr_as_fine,
-                           amrex::Real t_fill, amrex::MultiFab& SRC,
-                           amrex::MultiFab& prims_mf);
-
-  // comm/comp overlap: cached coarse-fine boundary data (level > 0). This is
-  // a split-phase re-implementation of amrex::FillPatcher's
-  // fillCoarseFineBoundary: the coarse-patch communication is started with
-  // ParallelCopy_nowait before the interior computation and finished after,
-  // so the coarse-fine exchange wait is overlapped as well. The cache must
-  // be reset whenever the coarse data changes (done in post_timestep, same
-  // lifetime rule as AmrLevel's FillPatcher).
-  amrex::Vector<std::pair<amrex::Real, std::unique_ptr<amrex::MultiFab>>>
-      m_ovl_cfb_data;
-  std::unique_ptr<amrex::MultiFab> m_ovl_cfb_tmp;
-  std::unique_ptr<amrex::MultiFab> m_ovl_cfb_fine;
-  void resetOvlCFB() { m_ovl_cfb_data.clear(); }
+                   amrex::Real stage_time,
+                   amrex::Real reflux_dt,
+                   std::array<amrex::MultiFab*, AMREX_SPACEDIM>
+                       captured_face_flux = {},
+                   amrex::MultiFab* captured_rz_pressure_face_flux = nullptr,
+                   std::array<amrex::iMultiFab*, AMREX_SPACEDIM>
+                       captured_llf_fallback_mask = {});
 
 #if NUM_SPECIES > 1
   void clip_species_state(amrex::MultiFab& S);                   
@@ -116,6 +98,8 @@ class CNS : public amrex::AmrLevel {
 
   virtual void post_restart() override;
 
+  void checkPointPost(const std::string& dir, std::ostream& os) override;
+
   void set_state_in_checkpoint(amrex::Vector<int>& state_in_checkpoint) override;
 
   // -------------------------------------------------------------------------
@@ -125,6 +109,12 @@ class CNS : public amrex::AmrLevel {
 
 #ifdef AMREX_USE_GPIBM
   void rebuildIBM(bool rebuild_surface = true);
+
+  // Default-off, read-only context retained across the first advance after a
+  // regrid.  It identifies fine valid cells initialized from the coarse level
+  // and preserves the exact coarse source stencil used at the regrid time.
+  void captureRegridProlongationContext(const CNS* old_level,
+                                        amrex::Real time);
 #endif
 
   // Error estimation for regridding.
@@ -147,6 +137,7 @@ class CNS : public amrex::AmrLevel {
                                  amrex::MultiFab const& ghost) const;
   void compute_nscbc_ghost_rhs(amrex::MultiFab& state,
                                amrex::MultiFab& ghost_rhs) const;
+  void fill_nscbc_gc_ghosts(amrex::MultiFab& state) const;
 
   static AMREX_FORCE_INLINE void rz_sanity_check(amrex::Geometry const& geom)
   {
@@ -162,13 +153,25 @@ class CNS : public amrex::AmrLevel {
       }
 
       const amrex::Real rlo = geom.ProbLo(0);
-      if (amrex::Math::abs(rlo) > amrex::Real(1.e-14)) {
+      // Zero is exactly representable.  Requiring it here keeps every RZ
+      // axis branch consistent and prevents division by a roundoff-sized
+      // positive lower radius in face-flux assembly.
+      if (rlo != amrex::Real(0.0)) {
         amrex::Abort("RZ requires geometry.prob_lo[0]=0 (axis at r=0)");
       }
     }
   }
 
   void avgDown();
+
+#ifdef AMREX_USE_GPIBM
+  // Re-publish the unique shared ghost-point state after AMR synchronization.
+  // Reflux/average-down operate on the accepted conservative MultiFab after
+  // the end-of-stage GP reconstruction, so solid-side GP cells must be
+  // reconstructed again before they can serve as a coarse FillPatch source.
+  // This routine writes GP cells only; active fluid cells are untouched.
+  void refreshAcceptedSharedGPState(amrex::Real time);
+#endif
 
   void printTotal() const;
 
@@ -179,7 +182,8 @@ class CNS : public amrex::AmrLevel {
                                  std::ostream& os) override;
 
 #if AMREX_USE_GPIBM
-  virtual void writeSurfFile(bool force_compute = false);
+  virtual void writeSurfFile(bool force_compute = false,
+                             bool force_output = false);
 #endif
 
   // diagnostics
@@ -196,6 +200,13 @@ class CNS : public amrex::AmrLevel {
   static int num_state_data_types;
   std::unique_ptr<amrex::FluxRegister> flux_reg;
   static int do_reflux;
+  // Spatial interpolation used for state data at AMR coarse-fine interfaces.
+  // 0: AMReX limited conservative linear prolongation.
+  // 1: AMReX conservative quartic prolongation for smooth-flow verification.
+  // This transfer choice does not change the point-sample finite-difference
+  // semantics of the evolved CERISSE state. The default remains linear.
+  static int amr_state_interp;
+  static bool regrid_prolongation_diagnostics;
 
   static bool verbose;
   // static amrex::IntVect hydro_tile_size;
@@ -207,6 +218,7 @@ class CNS : public amrex::AmrLevel {
   // Statistics
   static amrex::Real time_stats;
   static amrex::Real time_stat_level[10];
+  static amrex::Real stats_start_time;
   static bool compute_stats, record_stats;
   static int INDEX_THERM;
   void setupStats();
@@ -218,19 +230,21 @@ class CNS : public amrex::AmrLevel {
   static amrex::Real dt_constant;
   static bool dt_dynamic;
   static amrex::Real dt_max;        // optional absolute cap on dt (cns.dt_max)
+  // Default-off exception for segmented checkpoint continuations.  Only the
+  // first normal computeNewDt after a restart may bypass the legacy 1.1x
+  // old-dt growth cap; CFL, dt_max, stop_time, and post-regrid caps remain.
+  static bool restart_first_dt_from_cfl;
+  cerisse::time_step::RestartFirstDtFromCflControl
+      restart_first_dt_from_cfl_control;
   static int nstep_screen_output;
   static int dist_linear;
   static int order_rk;
   static int stages_rk;
 
-  // cns.overlap_comm (default 0): overlap same-level ghost exchange with
-  // interior RHS computation in the SSP-RK(3,3) advance. 0 = exactly the
-  // legacy FillPatch + compute_rhs path.
-  static int overlap_comm;
-
   // cns.nscbc_{lo,hi}: 0=off, 1=relaxed inflow, 2=pure outflow,
-  // 3=pressure-relaxed outflow.  These flags activate the time-evolved
-  // persistent ghost-cell NSCBC independently of the ordinary AMReX BC code.
+  // 3=pressure-relaxed outflow.  The default implementation time-integrates
+  // persistent ghost states; the opt-in GC implementation reconstructs them
+  // from the current RK-stage interior state.
   static bool use_nscbc;
   static amrex::GpuArray<int, AMREX_SPACEDIM> nscbc_lo;
   static amrex::GpuArray<int, AMREX_SPACEDIM> nscbc_hi;
@@ -244,6 +258,29 @@ class CNS : public amrex::AmrLevel {
   // "already non-positive". Catches silent clipping in cons2prims that
   // would otherwise mask a numerical breakdown.
   static bool strict_positivity;
+
+  // Opt-in conservative shared-face positivity limiter for the frozen
+  // ideal-gas Euler-slip GP path. Cartesian 2-D/3-D stages blend one
+  // face-flux family; paired R-Z stages blend the complete flux and pressure
+  // companion with the same theta. Every SSPRK(4,3) Forward-Euler bracket is
+  // checked independently. The default is false.
+  static bool ibm_positivity_flux_limiter;
+  static bool ibm_positivity_flux_limiter_verbose;
+  // Reserved fail-closed switch for a future pure full-cell SSPRK retry path.
+  // The current certified limiter performs local, global-theta, and all-low
+  // fallback within each Forward-Euler bracket; whole-step retry is disabled.
+  static bool ibm_positivity_retry;
+  static int ibm_positivity_max_step_halvings;
+
+#ifdef AMREX_USE_GPIBM
+  // One means that this valid fine cell had no old-fine overlap and was
+  // initialized through coarse-to-fine prolongation.  The coarse state uses
+  // the coarsened fine BoxArray and the same DistributionMapping so every
+  // bad child and its parent source are local to the same MPI rank.
+  std::unique_ptr<amrex::iMultiFab> regrid_new_from_coarse_mask;
+  std::unique_ptr<amrex::MultiFab> regrid_coarse_source_state;
+#endif
+
 
   // When true, the end-of-step IBM check clips bad fluid cells (rho<=0
   // or E<=0) to (rho_floor, rho*ei_floor + KE) and continues, instead

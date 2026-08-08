@@ -2,6 +2,7 @@
 #define Riemann_H_
 
 #include <AMReX_FArrayBox.H>
+#include <AMReX_ParmParse.H>
 #include <CNS.h>
 
 ///
@@ -9,7 +10,6 @@
 template <bool iOption, typename cls_t>
 class riemann_t {
  public:
-  static constexpr bool rz_pressure_split_capable = false;  // RZ pressure-split is WENO-only
   AMREX_GPU_HOST_DEVICE
   riemann_t() {}
 
@@ -18,16 +18,31 @@ class riemann_t {
 
 #if (AMREX_USE_GPIBM || CNS_USE_EB )  
  void inline eflux_ibm(const Geometry& geom, const MFIter& mfi,
-                    const Array4<Real>& prims, std::array<FArrayBox*, AMREX_SPACEDIM> const &flxt,
+                    const Array4<const Real>& prims, std::array<FArrayBox*, AMREX_SPACEDIM> const &flxt,
                     const Array4<Real>& rhs, const cls_t* cls,const Array4<uint8_t>& ibMarkers) {
 
 #else
   void inline eflux(const Geometry& geom, const MFIter& mfi,
-                    const Array4<Real>& prims, std::array<FArrayBox*, AMREX_SPACEDIM> const &flxt,
+                    const Array4<const Real>& prims, std::array<FArrayBox*, AMREX_SPACEDIM> const &flxt,
                     const Array4<Real>& rhs, const cls_t* cls) {
 #endif
   
     const Box& bx  = mfi.tilebox();
+#ifdef CERISSE_ENABLE_FACE_TRACE
+    int muscl_face_trace = 0;
+    int muscl_face_trace_i = 0;
+    int muscl_face_trace_j = 0;
+    int muscl_face_trace_k = 0;
+    int muscl_face_trace_dir = 0;
+    {
+      amrex::ParmParse pp("cns");
+      pp.query("muscl_face_trace", muscl_face_trace);
+      pp.query("muscl_face_trace_i", muscl_face_trace_i);
+      pp.query("muscl_face_trace_j", muscl_face_trace_j);
+      pp.query("muscl_face_trace_k", muscl_face_trace_k);
+      pp.query("muscl_face_trace_dir", muscl_face_trace_dir);
+    }
+#endif
     // const Box& bxg = mfi.growntilebox(cls_t::NGHOST);
     const Box& bxg1 = amrex::grow(bx, 1);
         
@@ -80,9 +95,22 @@ class riemann_t {
         yflxbx, [=, *this] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
 #if (AMREX_USE_GPIBM || CNS_USE_EB )            
           const bool wallflx= ibMarkers(i,j,k,0) && ibMarkers(i,j-1,k,0); 
-          if (!wallflx)         
+          if (!wallflx) {
 #endif          
-          this->cns_riemann_y(i, j, k, flx2, slope, prims, *cls);                    
+          const bool trace_this_face =
+#ifdef CERISSE_ENABLE_FACE_TRACE
+              muscl_face_trace != 0 && muscl_face_trace_dir == 1 &&
+              i == muscl_face_trace_i && j == muscl_face_trace_j &&
+              k == muscl_face_trace_k;
+#else
+              false;
+#endif
+          this->cns_riemann_y(
+              i, j, k, flx2, slope, prims, *cls,
+              trace_this_face);
+#if (AMREX_USE_GPIBM || CNS_USE_EB )
+          }
+#endif
         });
 #endif
 
@@ -125,82 +153,13 @@ class riemann_t {
     return dsgn * min(dlim, Math::abs(dcen));
   }
 
-#if AMREX_USE_GPIBM
-  AMREX_GPU_DEVICE AMREX_FORCE_INLINE void one_sided_gp_slope(
-      const IntVect& iv, const int dir, const int side,
-      const Array4<Real>& dq, const Array4<Real>& q,
-      const cls_t& cls) const {
-    const IntVect ivd = IntVect::TheDimensionVector(dir);
-    const IntVect nb = iv + side * ivd;
-    const Real rho = q(iv, cls.QRHO);
-    const Real cspeed = q(iv, cls.QC) + Real(1.0e-40);
-    const Real drho = side * (q(nb, cls.QRHO) - q(iv, cls.QRHO));
-    const Real dp = side * (q(nb, cls.QPRES) - q(iv, cls.QPRES));
-    const Real dun =
-        side * (q(nb, cls.QU + dir) - q(iv, cls.QU + dir));
-    const int t1 = dir == 0 ? 1 : 0;
-    const int t2 = dir == 2 ? 1 : 2;
-
-    // Same characteristic increments used by the centred MUSCL path.  With
-    // a single fluid neighbour these reconstruct the arithmetic midpoint,
-    // so the GP side of the interface remains second-order in smooth flow.
-    dq(iv, 0) = Real(0.5) * dp / cspeed - Real(0.5) * rho * dun;
-    dq(iv, 1) = drho - dp / (cspeed * cspeed);
-    dq(iv, 2) = Real(0.5) * dp / cspeed + Real(0.5) * rho * dun;
-    dq(iv, 3) = side * (q(nb, cls.QU + t1) - q(iv, cls.QU + t1));
-    dq(iv, 4) = side * (q(nb, cls.QU + t2) - q(iv, cls.QU + t2));
-    for (int n = 0; n < NUM_SPECIES; ++n) {
-      dq(iv, 5 + n) =
-          side * (q(nb, cls.QFS + n) - q(iv, cls.QFS + n));
-    }
-  }
-
-  AMREX_GPU_DEVICE AMREX_FORCE_INLINE bool handle_ibm_gp_slope(
-      const IntVect& iv, const int dir, const Array4<Real>& dq,
-      const Array4<Real>& q, const cls_t& cls,
-      const Array4<uint8_t>& marker) const {
-    if (marker(iv, 0) == 0) return false;
-
-    const IntVect ivd = IntVect::TheDimensionVector(dir);
-    const bool reconstructed_gp = marker(iv, 1) != 0;
-    const bool fluid_left = marker(iv - ivd, 0) == 0;
-    const bool fluid_right = marker(iv + ivd, 0) == 0;
-    if (reconstructed_gp && (fluid_left != fluid_right)) {
-      one_sided_gp_slope(iv, dir, fluid_right ? 1 : -1, dq, q, cls);
-      return true;
-    }
-    if (reconstructed_gp && fluid_left && fluid_right) {
-      return false;  // both neighbours are valid: use the centred limiter
-    }
-    for (int n = 0; n < cls.NSLOPE; ++n) dq(iv, n) = Real(0.0);
-    return true;
-  }
-#endif
-
-  // \brief Positivity-preserving order-reduction sensor for one axis.
-  // In a strong rarefaction the characteristic MUSCL reconstruction is amplified
-  // by 1/c (the acoustic slopes carry dp/c, and the low sound speed of a
-  // near-vacuum pocket inflates them); the reconstructed face states collapse to
-  // near-vacuum and the HLLC update can then drive the cell-centred density
-  // negative (observed in the SRP under-expanded jet near-field). A deep local
-  // minimum in density OR pressure — the cell value far below BOTH axial
-  // neighbours — flags such a rarefaction/near-vacuum pocket. A shock is a
-  // monotone jump, never a local minimum, so this sensor is shock-safe (it does
-  // not smear the bow shock). When flagged, the caller drops the cell to first
-  // order (donor cell), which is positivity-robust under the usual CFL.
-  AMREX_GPU_DEVICE AMREX_FORCE_INLINE bool rarefaction_pocket(
-      Real qc, Real qm, Real qp, Real pc, Real pm, Real pp) const {
-    constexpr Real RAREFY_RATIO = Real(0.1);  // cell < 10% of larger neighbour
-    return (qc < RAREFY_RATIO * amrex::max(qm, qp)) ||
-           (pc < RAREFY_RATIO * amrex::max(pm, pp));
-  }
-
   AMREX_GPU_DEVICE AMREX_FORCE_INLINE void hllc(
       const Real rl, const Real ul, const Real pl, const Real ut1l,
       const Real ut2l, const Real el, const Real yl[NUM_SPECIES], const Real cl, 
       const Real rr, const Real ur, const Real pr, const Real ut1r, 
       const Real ut2r, const Real er, const Real yr[NUM_SPECIES], const Real cr, 
-      Real& flxu, Real& flxut, Real& flxutt, Real& flxrhoe, Real flxrhoy[NUM_SPECIES]) const {
+      Real& flxu, Real& flxut, Real& flxutt, Real& flxrhoe,
+      Real flxrhoy[NUM_SPECIES], Real* numerical_pressure = nullptr) const {
 
     // HLLC borrowed from multispecies branch
 
@@ -216,8 +175,9 @@ class riemann_t {
     sr = amrex::max(sr, uroe + croe);
 
     Real frac = 0.0;
+    Real pressure_face = Real(0.0);
 
-    if (sl > 0) {
+    if (sl >= Real(0.0)) {
       // flx_l
       flxu = rl * ul * ul + pl;
       flxut = rl * ul * ut1l;
@@ -226,8 +186,9 @@ class riemann_t {
       for (int n = 0; n < NUM_SPECIES; ++n) {
         flxrhoy[n] = rl * ul * yl[n];
       }
+      pressure_face = pl;
 
-    } else if (sr < 0) {
+    } else if (sr <= Real(0.0)) {
       // flx_r
       flxu = rr * ur * ur + pr;
       flxut = rr * ur * ut1r;
@@ -236,6 +197,7 @@ class riemann_t {
       for (int n = 0; n < NUM_SPECIES; ++n) {
         flxrhoy[n] = rr * ur * yr[n];
       }
+      pressure_face = pr;
 
     } else {
       Real sstar = (pr - pl + rl * ul * (sl - ul) - rr * ur * (sr - ur)) /
@@ -244,28 +206,38 @@ class riemann_t {
       if (sstar >= 0) {
         // flx_l* = flx_l + sl * (q_l* - q_l)
         frac = (sl - ul) / (sl - sstar) - 1.;
+        // rho_star_ratio multiplies every component of the HLLC star state.
+        const Real rho_star_ratio = frac + Real(1.0);
 
-        flxu = rl * ul * ul + pl + sl * rl * ((frac + 1.) * sstar - ul);
+        flxu = rl * ul * ul + pl + sl * rl * (rho_star_ratio * sstar - ul);
         flxut = rl * ul * ut1l + sl * rl * frac * ut1l;
         flxutt = rl * ul * ut2l + sl * rl * frac * ut2l;
         flxrhoe = ul * (rl * el + pl) +
-                  sl * rl * (frac * el + (sstar - ul) * (sstar + pl / rl / (sl - ul)));
+                  sl * rl *
+                      (frac * el + rho_star_ratio * (sstar - ul) *
+                                       (sstar + pl / rl / (sl - ul)));
         for (int n = 0; n < NUM_SPECIES; ++n) {
           flxrhoy[n] = rl * ul * yl[n] + sl * rl * frac * yl[n];
         }
+        pressure_face = pl + rl * (sl - ul) * (sstar - ul);
 
       } else {
         // flx_r* = flx_r + sr * (q_r* - q_r)
         frac = (sr - ur) / (sr - sstar) - 1.;
+        // rho_star_ratio multiplies every component of the HLLC star state.
+        const Real rho_star_ratio = frac + Real(1.0);
 
-        flxu = rr * ur * ur + pr + sr * rr * ((frac + 1.) * sstar - ur);
+        flxu = rr * ur * ur + pr + sr * rr * (rho_star_ratio * sstar - ur);
         flxut = rr * ur * ut1r + sr * rr * frac * ut1r;
         flxutt = rr * ur * ut2r + sr * rr * frac * ut2r;
         flxrhoe = ur * (rr * er + pr) +
-                  sr * rr * (frac * er + (sstar - ur) * (sstar + pr / rr / (sr - ur)));
+                  sr * rr *
+                      (frac * er + rho_star_ratio * (sstar - ur) *
+                                       (sstar + pr / rr / (sr - ur)));
         for (int n = 0; n < NUM_SPECIES; ++n) {
           flxrhoy[n] = rr * ur * yr[n] + sr * rr * frac * yr[n];
         }
+        pressure_face = pr + rr * (sr - ur) * (sstar - ur);
       }
 
       // if (amrex::isnan(flxrhoy[0]))
@@ -282,39 +254,34 @@ class riemann_t {
       // }
 
     }
+    if (numerical_pressure != nullptr) {
+      *numerical_pressure = pressure_face;
+    }
   }
 
   // \brief: function that computes slope in a cell(i) based on
   // characteristci variables (in x-diretion)
 #if (AMREX_USE_GPIBM || CNS_USE_EB )
   AMREX_GPU_DEVICE AMREX_FORCE_INLINE void cns_slope_x(
-      int i, int j, int k, const Array4<Real>& dq, const Array4<Real>& q,
+      int i, int j, int k, const Array4<Real>& dq, const Array4<const Real>& q,
       const cls_t& cls, const Array4<uint8_t>& marker) const {
 #else
   AMREX_GPU_DEVICE AMREX_FORCE_INLINE void cns_slope_x(
-      int i, int j, int k, const Array4<Real>& dq, const Array4<Real>& q,
+      int i, int j, int k, const Array4<Real>& dq, const Array4<const Real>& q,
       const cls_t& cls) const {
 #endif
 
-#if AMREX_USE_GPIBM
-    if (handle_ibm_gp_slope(IntVect(AMREX_D_DECL(i, j, k)), 0, dq, q,
-                            cls, marker)) {
-      return;
-    }
-#elif CNS_USE_EB
-    if (marker(i,j,k,1) || marker(i,j,k,0)) {
-      for (int n = 0; n < cls.NSLOPE; ++n) { dq(i,j,k,n) = 0.0;}
+#if (AMREX_USE_GPIBM || CNS_USE_EB)
+    // A GP stores the wall-constrained cell-centred state.  Reconstructing a
+    // one-sided slope from that state toward the adjacent fluid cell moves the
+    // GP face value back toward the fluid state and weakens the reflected
+    // normal velocity seen by HLLC.  Keep the historical piecewise-constant
+    // reconstruction in every solid/GP cell.
+    if (marker(i, j, k, 1) || marker(i, j, k, 0)) {
+      for (int n = 0; n < cls.NSLOPE; ++n) dq(i, j, k, n) = Real(0.0);
       return;
     }
 #endif
-
-    // positivity: reduce to first order in a rarefaction/near-vacuum pocket
-    if (rarefaction_pocket(q(i, j, k, cls.QRHO), q(i - 1, j, k, cls.QRHO),
-                           q(i + 1, j, k, cls.QRHO), q(i, j, k, cls.QPRES),
-                           q(i - 1, j, k, cls.QPRES), q(i + 1, j, k, cls.QPRES))) {
-      for (int n = 0; n < cls.NSLOPE; ++n) { dq(i, j, k, n) = 0.0; }
-      return;
-    }
 
     Real cspeed = q(i, j, k, cls.QC) + 1.e-40;
 
@@ -373,33 +340,20 @@ class riemann_t {
  
 #if (AMREX_USE_GPIBM || CNS_USE_EB )
   AMREX_GPU_DEVICE AMREX_FORCE_INLINE void cns_slope_y(
-      int i, int j, int k, const Array4<Real>& dq, const Array4<Real>& q,
+      int i, int j, int k, const Array4<Real>& dq, const Array4<const Real>& q,
       const cls_t& cls, const Array4<uint8_t>& marker) const {
 #else
   AMREX_GPU_DEVICE AMREX_FORCE_INLINE void cns_slope_y(
-      int i, int j, int k, const Array4<Real>& dq, const Array4<Real>& q,
+      int i, int j, int k, const Array4<Real>& dq, const Array4<const Real>& q,
       const cls_t& cls) const {
 #endif
 
-#if AMREX_USE_GPIBM
-    if (handle_ibm_gp_slope(IntVect(AMREX_D_DECL(i, j, k)), 1, dq, q,
-                            cls, marker)) {
+#if (AMREX_USE_GPIBM || CNS_USE_EB)
+    if (marker(i, j, k, 1) || marker(i, j, k, 0)) {
+      for (int n = 0; n < cls.NSLOPE; ++n) dq(i, j, k, n) = Real(0.0);
       return;
     }
-#elif CNS_USE_EB
-    if (marker(i,j,k,1) || marker(i,j,k,0)) {
-      for (int n = 0; n < cls.NSLOPE; ++n) { dq(i,j,k,n) = 0.0;}
-      return;
-   }
 #endif
-
-    // positivity: reduce to first order in a rarefaction/near-vacuum pocket
-    if (rarefaction_pocket(q(i, j, k, cls.QRHO), q(i, j - 1, k, cls.QRHO),
-                           q(i, j + 1, k, cls.QRHO), q(i, j, k, cls.QPRES),
-                           q(i, j - 1, k, cls.QPRES), q(i, j + 1, k, cls.QPRES))) {
-      for (int n = 0; n < cls.NSLOPE; ++n) { dq(i, j, k, n) = 0.0; }
-      return;
-    }
 
     Real cspeed = q(i, j, k, cls.QC) + 1.e-40;
     Real dlft = Real(0.5) *
@@ -454,33 +408,20 @@ class riemann_t {
 
 #if (AMREX_USE_GPIBM || CNS_USE_EB )
   AMREX_GPU_DEVICE AMREX_FORCE_INLINE void cns_slope_z(
-      int i, int j, int k, const Array4<Real>& dq, const Array4<Real>& q,
+      int i, int j, int k, const Array4<Real>& dq, const Array4<const Real>& q,
       const cls_t& cls, const Array4<uint8_t>& marker) const {
 #else
   AMREX_GPU_DEVICE AMREX_FORCE_INLINE void cns_slope_z(
-      int i, int j, int k, const Array4<Real>& dq, const Array4<Real>& q,
+      int i, int j, int k, const Array4<Real>& dq, const Array4<const Real>& q,
       const cls_t& cls) const {
 #endif
   
-#if AMREX_USE_GPIBM
-    if (handle_ibm_gp_slope(IntVect(AMREX_D_DECL(i, j, k)), 2, dq, q,
-                            cls, marker)) {
-      return;
-    }
-#elif CNS_USE_EB
-    if (marker(i,j,k,1) || marker(i,j,k,0)) {
-      for (int n = 0; n < cls.NSLOPE; ++n) { dq(i,j,k,n) = 0.0;}
+#if (AMREX_USE_GPIBM || CNS_USE_EB)
+    if (marker(i, j, k, 1) || marker(i, j, k, 0)) {
+      for (int n = 0; n < cls.NSLOPE; ++n) dq(i, j, k, n) = Real(0.0);
       return;
     }
 #endif
-
-    // positivity: reduce to first order in a rarefaction/near-vacuum pocket
-    if (rarefaction_pocket(q(i, j, k, cls.QRHO), q(i, j, k - 1, cls.QRHO),
-                           q(i, j, k + 1, cls.QRHO), q(i, j, k, cls.QPRES),
-                           q(i, j, k - 1, cls.QPRES), q(i, j, k + 1, cls.QPRES))) {
-      for (int n = 0; n < cls.NSLOPE; ++n) { dq(i, j, k, n) = 0.0; }
-      return;
-    }
 
     Real cspeed = q(i, j, k, cls.QC) + 1.e-40;
     Real dlft = Real(0.5) *
@@ -544,8 +485,8 @@ class riemann_t {
   // UL = q(i-1) + f(dq(i-1))
   // UR = q(i)   + d(dq(i))
   AMREX_GPU_DEVICE AMREX_FORCE_INLINE void cns_riemann_x(
-      int i, int j, int k, Array4<Real> const& fx, Array4<Real> const& dq,
-      Array4<Real> const& q, cls_t const& cls) const {
+      int i, int j, int k, Array4<Real> const& fx, Array4<Real const> const& dq,
+      Array4<Real const> const& q, cls_t const& cls) const {
     Real cspeed = q(i - 1, j, k, cls.QC) + 1.e-40;
     Real rl = q(i - 1, j, k, cls.QRHO) +
               Real(0.5) * ((dq(i - 1, j, k, 0) + dq(i - 1, j, k, 2)) / cspeed +
@@ -628,7 +569,8 @@ class riemann_t {
 
   AMREX_GPU_DEVICE AMREX_FORCE_INLINE void cns_riemann_y(
       int i, int j, int k, Array4<Real> const& fy, Array4<Real const> const& dq,
-      Array4<Real const> const& q, cls_t const& cls) const {
+      Array4<Real const> const& q, cls_t const& cls,
+      const bool trace_this_face) const {
     Real cspeed = q(i, j - 1, k, cls.QC) + 1.e-40;
     Real rl = q(i, j - 1, k, cls.QRHO) +
               Real(0.5) * ((dq(i, j - 1, k, 0) + dq(i, j - 1, k, 2)) / cspeed +
@@ -677,6 +619,40 @@ class riemann_t {
       rr, ur, pr, ut1r, ut2r, er, Yr, q(i, j, k, cls.QC), 
       fy(i, j, k, cls.UMY), fy(i, j, k, cls.UMX),
       fy(i, j, k, cls.UMZ), fy(i, j, k, cls.UET), flxrY);
+
+    if (trace_this_face) {
+      const Real cl = q(i, j - 1, k, cls.QC);
+      const Real cr = q(i, j, k, cls.QC);
+      Real sl = amrex::min(ul - cl, ur - cr);
+      Real sr = amrex::max(ul + cl, ur + cr);
+      const Real rp = std::sqrt(rr / rl);
+      const Real uroe = (ul + ur * rp) / (Real(1.0) + rp);
+      const Real croe = (cl + cr * rp) / (Real(1.0) + rp);
+      sl = amrex::min(sl, uroe - croe);
+      sr = amrex::max(sr, uroe + croe);
+      const Real sstar_denom = rl * (sl - ul) - rr * (sr - ur);
+      const Real sstar_numer =
+          pr - pl + rl * ul * (sl - ul) - rr * ur * (sr - ur);
+      const Real sstar = sstar_numer / sstar_denom;
+      printf("[MUSCL-FACE-TRACE] face=(%d,%d,%d) dir=1 "
+             "left=(rho=%.17g,un=%.17g,ut1=%.17g,ut2=%.17g,p=%.17g,c=%.17g,EperMass=%.17g)\n",
+             i, j, k, double(rl), double(ul), double(ut1l), double(ut2l),
+             double(pl), double(cl), double(el));
+      printf("[MUSCL-FACE-TRACE] right="
+             "(rho=%.17g,un=%.17g,ut1=%.17g,ut2=%.17g,p=%.17g,c=%.17g,EperMass=%.17g)\n",
+             double(rr), double(ur), double(ut1r), double(ut2r), double(pr),
+             double(cr), double(er));
+      printf("[MUSCL-FACE-TRACE] hllc_speeds="
+             "(sl=%.17g,sr=%.17g,sstar_numer=%.17g,sstar_denom=%.17g,sstar=%.17g)\n",
+             double(sl), double(sr), double(sstar_numer),
+             double(sstar_denom), double(sstar));
+      printf("[MUSCL-FACE-TRACE] hllc_flux="
+             "(rho=%.17g,mn=%.17g,mt1=%.17g,mt2=%.17g,E=%.17g)\n",
+             double(flxrY[0]), double(fy(i, j, k, cls.UMY)),
+             double(fy(i, j, k, cls.UMX)),
+             double(fy(i, j, k, cls.UMZ)),
+             double(fy(i, j, k, cls.UET)));
+    }
 
     for (int n = 0; n < NUM_SPECIES; ++n) {
       fy(i, j, k, cls.UFS + n) = flxrY[n];

@@ -1,0 +1,39 @@
+U_e = 315.49 m/s   T_e = 247.625 K   D_e = 25.4 mm   dx_lip = 24.8 um
+
+EXISTING FOUR (x_fc measured in 3D)
+case                    a[um]  dw[um]    th_i    d*_i    th_c    d*_c     C_d  Deff/D  cells
+Baseline      (3D+2D)   254.0   508.0   126.7   762.3   112.1   796.3  0.8789  0.9375   20.5
+Thin shifted  (3D)      100.0   200.0    49.9   300.1    44.1   313.5  0.9513  0.9753    8.1
+Wall tanh     (3D)      200.0   200.0    61.4   138.6    55.5   156.9  0.9755  0.9877    8.1
+Top hat       (3D)        0.0     0.0     0.0     0.0     0.0     0.0  1.0000  1.0000    0.0
+
+PREDICTOR RANKING on the existing four (x_fc vs P, linear, n=4)
+   d*_c  (compressible)   slope=  -1.9461  intercept=0.9443  R2=0.9958
+   d*_i                   slope=  -2.0195  intercept=0.9439  R2=0.9936
+   th_c  (compressible)   slope= -13.9347  intercept=0.9490  R2=0.9165
+   th_i                   slope= -12.3845  intercept=0.9490  R2=0.9235
+   delta_w                slope=  -3.1562  intercept=0.9482  R2=0.9711
+   C_d                    slope=  +0.5045  intercept=0.4400  R2=0.9955
+   C_J                    slope=  +0.4502  intercept=0.4953  R2=0.9985
+   D_eff/D                slope=  +0.9758  intercept=-0.0315  R2=0.9957
+   through-origin  x_fc = 0.9434 (D_eff/D)   spread 0.0037
+
+   working law used below:  x_fc = 0.9443 -1.9461 (d*_c/D_e)
+
+ARM A - shifted tanh ladder (form fixed, a is the only variable)
+case                    a[um]  dw[um]    th_i    d*_i    th_c    d*_c     C_d  Deff/D  cells   x_fc_pred
+A: shifted a=0            0.0     0.0     0.0     0.0     0.0     0.0  1.0000  1.0000    0.0   0.944
+A: shifted a=100        100.0   200.0    49.9   300.1    44.1   313.5  0.9513  0.9753    8.1   0.920
+A: shifted a=170        170.0   340.0    84.8   510.2    75.0   533.0  0.9180  0.9581   13.7   0.903
+A: shifted a=254        254.0   508.0   126.7   762.3   112.1   796.3  0.8789  0.9375   20.5   0.883
+A: shifted a=340        340.0   680.0   169.6  1020.4   150.1  1065.9  0.8398  0.9164   27.4   0.863
+A: shifted a=425        425.0   850.0   212.0  1275.5   187.6  1332.4  0.8021  0.8956   34.3   0.842
+
+ARM B - wall tanh matched to the ARM A anchor a=170 um, one scalar at a time
+case                    a[um]  dw[um]    th_i    d*_i    th_c    d*_c     C_d  Deff/D  cells   x_fc_pred
+B: wall d*-matched      679.5   679.5   208.5   471.0   188.6   533.0  0.9190  0.9586   27.4   0.903
+B: wall dw-matched      340.0   340.0   104.3   235.7    94.4   266.7  0.9587  0.9791   13.7   0.924
+B: wall th-matched      270.4   270.4    83.0   187.4    75.0   212.0  0.9671  0.9834   10.9   0.928
+
+ARM C - 2D twin of the remaining 3D variant
+C: wall a=200           200.0   200.0    61.4   138.6    55.5   156.9  0.9755  0.9877    8.1   0.932

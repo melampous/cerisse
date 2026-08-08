@@ -1,0 +1,6 @@
+Backtrace.*
+main*.ex
+tmp_build_dir/
+results/
+smoke_*/
+__pycache__/

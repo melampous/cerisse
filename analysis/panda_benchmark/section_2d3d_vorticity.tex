@@ -1,0 +1,278 @@
+\section{Vorticity-based interpretation of dimensional effects}
+\label{sec:uej-vorticity-dynamics}
+
+The preceding comparisons show that the axisymmetric cylindrical and
+three-dimensional Cartesian formulations give similar mean wave structures
+over approximately the first two shock cells, but different downstream
+behaviour. The mean-density modulation in the axisymmetric calculation weakens
+rapidly after the second cell, while its centreline density subsequently
+approaches the ambient value too slowly. The Cartesian calculation retains
+distinct compression and expansion regions farther downstream and eventually
+approaches the ambient state more closely. This section examines whether these
+differences are consistent with the vorticity dynamics permitted by the two
+formulations. The diagnostics are based on selected instantaneous fields and
+are used to develop a physical interpretation rather than a closed or
+statistically converged vorticity budget.
+
+\paragraph{Compressible vorticity transport.}
+In the absence of non-conservative body forces, the vorticity
+\(\boldsymbol{\omega}=\nabla\times\boldsymbol{u}\) satisfies
+\begin{equation}
+    \frac{D\boldsymbol{\omega}}{Dt}
+    =
+    \underbrace{(\boldsymbol{\omega}\cdot\nabla)\boldsymbol{u}}
+        _{\boldsymbol{T}_s}
+    -\underbrace{\boldsymbol{\omega}\,\nabla\cdot\boldsymbol{u}}
+        _{\boldsymbol{T}_d}
+    +\underbrace{\frac{\nabla\rho\times\nabla p}{\rho^2}}
+        _{\boldsymbol{T}_b}
+    +\underbrace{\nabla\times\!\left[
+        \frac{1}{\rho}\nabla\cdot\boldsymbol{\tau}\right]}
+        _{\boldsymbol{T}_v}.
+    \label{eq:uej-vorticity-transport}
+\end{equation}
+The terms on the right represent stretching and tilting, dilatation,
+baroclinic torque, and viscous transport, respectively. Comparable
+decompositions have been used to examine vorticity transport in supersonic
+jets \citep{Li2016,BhideCuppoletti2024}. The stretching term changes the
+magnitude and direction of existing vorticity. The dilatation term amplifies
+vorticity in compression and weakens it in expansion. The baroclinic term is
+the inviscid volumetric source that can generate vorticity from an initially
+irrotational state when the pressure and density gradients are not aligned.
+It vanishes across an ideal locally one-dimensional shock for which these
+gradients are parallel, but it can be important where a shock intersects a
+shear layer or another non-uniform region. The viscous term can also generate,
+redistribute, and dissipate vorticity. Its constant-property reduction to
+\(\nu\nabla^2\boldsymbol{\omega}\) is not applicable here because density and
+the temperature-dependent transport properties vary through the flow.
+
+For a captured shock, the physical shock thickness is smaller than the grid
+spacing. Derivatives evaluated inside the numerical shock therefore depend on
+the discrete shock structure. The following comparison emphasises spatial
+distributions and radially integrated diagnostics rather than isolated local
+maxima within a shock.
+
+\paragraph{Axisymmetric restriction.}
+For an axisymmetric flow without swirl,
+\(\partial/\partial\theta=0\), \(u_\theta=0\), and the vorticity contains only
+the azimuthal component,
+\[
+    \boldsymbol{\omega}=\omega_\theta\boldsymbol{e}_\theta,
+    \qquad
+    \omega_\theta
+    =\frac{\partial u_r}{\partial x}
+    -\frac{\partial u_x}{\partial r}.
+\]
+Its transport equation is
+\begin{equation}
+    \frac{D\omega_\theta}{Dt}
+    =
+    \frac{u_r}{r}\omega_\theta
+    -\omega_\theta\left(
+        \frac{\partial u_x}{\partial x}
+        +\frac{\partial u_r}{\partial r}
+        +\frac{u_r}{r}\right)
+    +\frac{1}{\rho^2}\left(
+        \frac{\partial\rho}{\partial x}\frac{\partial p}{\partial r}
+        -\frac{\partial\rho}{\partial r}\frac{\partial p}{\partial x}
+      \right)
+    +T_{v,\theta}.
+    \label{eq:uej-axisymmetric-vorticity}
+\end{equation}
+The first term in Equation~\eqref{eq:uej-axisymmetric-vorticity} is the
+geometric stretching of a vortex ring as its radius changes. Axisymmetry does
+not therefore remove vortex stretching altogether. It does, however, exclude
+azimuthal deformation and the tilting of circumferential vorticity into axial
+and radial components. Axisymmetric vortex rings can roll up, pair, and move
+radially, but they cannot access the full component redistribution available
+to the Cartesian flow.
+
+\paragraph{Enstrophy production and comparison protocol.}
+Projecting Equation~\eqref{eq:uej-vorticity-transport} onto
+\(\boldsymbol{\omega}\) gives
+\begin{equation}
+    \frac{D\mathcal{E}_\omega}{Dt}
+    =P_s+P_d+P_b+P_v,
+    \qquad
+    \mathcal{E}_\omega=\frac{1}{2}|\boldsymbol{\omega}|^2,
+    \label{eq:uej-enstrophy-transport}
+\end{equation}
+where
+\begin{equation}
+\begin{aligned}
+    P_s&=\boldsymbol{\omega}\cdot
+        (\boldsymbol{\omega}\cdot\nabla)\boldsymbol{u},\\
+    P_d&=-|\boldsymbol{\omega}|^2\nabla\cdot\boldsymbol{u},\\
+    P_b&=\frac{\boldsymbol{\omega}\cdot
+        (\nabla\rho\times\nabla p)}{\rho^2},\\
+    P_v&=\boldsymbol{\omega}\cdot\boldsymbol{T}_v.
+\end{aligned}
+    \label{eq:uej-enstrophy-terms}
+\end{equation}
+The signed inviscid contributions are normalised as
+\(P_k^*=P_kD_e^3/U_j^3\), with \(k\in\{s,d,b\}\). In the axisymmetric
+formulation,
+\(P_s=(u_r/r)\omega_\theta^2\),
+\(P_d=-\omega_\theta^2\nabla\cdot\boldsymbol{u}\), and
+\(P_b=\omega_\theta(\nabla\rho\times\nabla p)_\theta/\rho^2\).
+The viscous contribution requires second derivatives and is more sensitive to
+AMR interfaces; it is not included in the present diagnostic comparison.
+
+The axisymmetric Level~4 and Cartesian Level~5 calculations have the same
+nominal finest spacing, \(D_e/256\), but their refinement footprints are not
+identical. As shown in Table~\ref{tab:uej-refinement-criteria}, the finest
+Cartesian region is concentrated near the nozzle lip, whereas the
+axisymmetric Level~4 region covers a larger part of the near-field core. The
+comparison is therefore not locally resolution matched throughout the plotted
+window. The fields are evaluated at \(t=8.0\)~ms for the axisymmetric case and
+\(t=10.16\)~ms for the Cartesian case, after the initial transient in each
+calculation. Derivatives are evaluated separately on the native AMR levels and
+assembled into a finest-owned composite without differentiating across a
+coarse--fine interface. The Cartesian diagnostics are evaluated on the
+\(z=0\) plane. The two snapshots do not represent a phase-matched pair, so the
+comparison is treated as an exploratory instantaneous assessment.
+
+\paragraph{Vorticity components.}
+Figure~\ref{fig:uej-dim-vortcomp} compares numerical schlieren, the signed
+azimuthal vorticity, and the magnitude of the axial and radial components. The
+axisymmetric snapshot retains large coherent toroidal structures, whereas the
+Cartesian shear layer contains smaller and less circumferentially coherent
+structures downstream. Axial and radial vorticity, which vanish identically in
+the axisymmetric formulation, become visible in the Cartesian shear layer from
+approximately \(x/D_e=0.6\). Over the plotted Cartesian field, the spatial
+99th percentiles of
+\(\sqrt{\omega_x^2+\omega_r^2}\) and \(|\omega_\theta|\) are approximately
+\(19U_j/D_e\) and \(17U_j/D_e\), respectively. The substantial
+non-azimuthal content is consistent with redistribution among vorticity
+components, but does not by itself distinguish tilting from baroclinic
+generation.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=\textwidth]{paperfig_dim_vortcomp.pdf}
+    \caption{Instantaneous vorticity structure in the axisymmetric
+    cylindrical Level~4 calculation (upper row) and on the \(z=0\) plane of
+    the three-dimensional Cartesian Level~5 calculation (lower row):
+    numerical schlieren (left), signed azimuthal vorticity (centre), and the
+    magnitude of the axial and radial vorticity components (right). The
+    axisymmetric field is reflected about the axis. The two hierarchies have
+    the same nominal finest spacing, \(D_e/256\), but different spatial
+    refinement footprints.}
+    \label{fig:uej-dim-vortcomp}
+\end{figure}
+
+\paragraph{Production terms.}
+Figure~\ref{fig:uej-dim-production} shows the three signed inviscid enstrophy
+terms on the same symmetric logarithmic scale. The largest difference is in
+\(P_s^*\). Its spatial 99th-percentile magnitude is approximately
+\(1.42\times10^3\) in the Cartesian snapshot and 81 in the axisymmetric
+snapshot. The Cartesian stretching field becomes distributed across the
+developing shear layer, while the axisymmetric geometric contribution changes
+sign between neighbouring radial structures. By comparison, the
+99th-percentile magnitudes of \(P_d^*\) are approximately 308 and 280 in the
+Cartesian and axisymmetric snapshots, and those of \(P_b^*\) are approximately
+79 and 91. Dilatation and baroclinic activity therefore have comparable
+instantaneous orders of magnitude in the two selected fields, while the
+stretching contribution differs much more strongly. For highly underexpanded
+jets, \citet{Li2016} also identified stretching as an important mechanism in
+the distortion of vortex rings. The present result applies only to the
+moderately underexpanded condition \(\eta_0=3.2735\)
+\((\eta_e\simeq1.73)\) and to the selected snapshots.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=\textwidth]{paperfig_dim_production.pdf}
+    \caption[Instantaneous inviscid enstrophy contributions in the
+    axisymmetric and Cartesian calculations.]{Instantaneous normalised
+    enstrophy contributions in the
+    axisymmetric cylindrical Level~4 calculation (upper row) and on the
+    \(z=0\) plane of the three-dimensional Cartesian Level~5 calculation
+    (lower row): stretching \(P_s^*\) (left), dilatation \(P_d^*\) (centre),
+    and baroclinic contribution \(P_b^*\) (right). All panels use the same
+    symmetric logarithmic colour scale.}
+    \label{fig:uej-dim-production}
+\end{figure}
+
+\paragraph{Plane-based radial estimates.}
+For each contribution, the dimensionless net and activity measures are
+defined as
+\begin{equation}
+\begin{aligned}
+    \Pi_k^{\mathrm{net}}(x)
+        &=\frac{D_e}{U_j^3}
+          \int_0^{r_{\max}}P_k^{(p)}(x,r)\,2\pi r\,\mathrm{d}r,\\
+    \Pi_k^{\mathrm{act}}(x)
+        &=\frac{D_e}{U_j^3}
+          \int_0^{r_{\max}}|P_k^{(p)}(x,r)|\,2\pi r\,\mathrm{d}r.
+\end{aligned}
+    \label{eq:uej-plane-production-measures}
+\end{equation}
+For the axisymmetric calculation, \(P_k^{(p)}\) is the computed radial field
+and the ring weighting is exact. For the Cartesian calculation, it is the
+average of the positive and negative \(y\) traces on the \(z=0\) plane. The
+Cartesian result is therefore an azimuthally reconstructed plane-based
+estimate, not a full three-dimensional cross-sectional integral. The plotted
+curves are smoothed over \(0.1D_e\) in the axial direction for display.
+
+Figure~\ref{fig:uej-dim-integrals}(a) shows a predominantly positive
+Cartesian stretching estimate between approximately \(x/D_e=1\) and 4,
+whereas the corresponding axisymmetric net value remains much smaller because
+positive and negative contributions cancel across the sampled radial
+cross-section. The activity measure in panel (b) confirms that the small net
+axisymmetric value does not imply that the local terms vanish. At
+\(x/D_e=2\), the Cartesian stretching activity in this snapshot is
+approximately 50 times the axisymmetric value. This factor describes the
+selected instantaneous plane estimates and is not interpreted as a
+time-averaged production ratio.
+
+The redistribution of vorticity components is summarised by
+\begin{equation}
+    F_{\mathrm{3D}}(x)
+    =\frac{
+       \displaystyle\int_0^{r_{\max}}
+       \left(\omega_x^2+\omega_r^2\right)^{(p)}2\pi r\,\mathrm{d}r}
+      {
+       \displaystyle\int_0^{r_{\max}}
+       \left(|\boldsymbol{\omega}|^2\right)^{(p)}2\pi r\,\mathrm{d}r}.
+    \label{eq:uej-three-dimensional-vorticity-fraction}
+\end{equation}
+The quantity is identically zero in the axisymmetric formulation. In the
+Cartesian plane estimate it exceeds one half near \(x/D_e=1.1\), reaches
+approximately 0.77 near \(x/D_e=2\), and subsequently fluctuates around values
+close to two thirds. Two thirds is the component-equipartition reference for
+locally isotropic vorticity. Proximity to this reference shows that
+non-azimuthal components have become substantial, but does not by itself
+establish local isotropy.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=\textwidth]{paperfig_dim_integrals.pdf}
+    \caption{Plane-based radial estimates of the instantaneous enstrophy
+    terms: (a) signed net contribution, (b) activity obtained by integrating
+    the absolute value, and (c) the fraction of axial and radial vorticity in
+    the Cartesian calculation. Solid lines denote the Cartesian Level~5
+    snapshot and dashed lines the axisymmetric Level~4 snapshot. The Cartesian
+    curves use the average of the two radial traces on the \(z=0\) plane with
+    an axisymmetric ring weight and are not full cross-sectional integrals.
+    Curves in panels (a) and (b) are smoothed over \(0.1D_e\) for display. The
+    dotted line in panel (c) marks the component-equipartition reference of
+    two thirds.}
+    \label{fig:uej-dim-integrals}
+\end{figure}
+
+Taken together, the three diagnostics are consistent with the interpretation
+that the additional vorticity-component pathways available in the Cartesian
+formulation promote the loss of circumferential coherence and alter the
+subsequent mixing of the jet. This interpretation is also consistent with the
+different downstream mean-density behaviour reported in
+Sections~\ref{subsec:uej-panda-centreline}
+and~\ref{subsec:uej-panda-radial}. The comparison does not, however, isolate
+dimensionality as the sole cause: the two diagnostics use different
+instantaneous states and non-identical AMR footprints, and the viscous
+contribution is not included. It therefore supports a vorticity-based
+interpretation of the dimensional difference rather than a closed causal
+proof. The similar mean wave structure over approximately the first two shock
+cells remains the appropriate range in which the axisymmetric formulation is
+used as a lower-cost reference.
+
+\FloatBarrier

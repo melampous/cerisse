@@ -58,9 +58,17 @@ equal_within_abs(T x, T y, T abs) {
 
 #include "Index.h"
 #include "Thermodynamics.h"
+#include "Thermodynamics2.h"
 
 calorifically_perfect_gas_t<indicies_t> perfect_gas_eos;
-multispecies_gas_t<indicies_t> gamma_law_eos;
+multispecies_pele_gas_t<indicies_t> gamma_law_eos;
+
+struct configurable_gas_param {
+  static constexpr amrex::Real gamma = 1.4;
+  static constexpr amrex::Real molecular_weight = 28.96e-3;
+};
+
+perfect_gas_t<configurable_gas_param, indicies_t> configurable_gas_eos;
 
 const amrex::Real R = 1.225;
 const amrex::Real P = 101325;
@@ -96,10 +104,10 @@ TEST_CASE("Test RYE2Cs()") {
 }
 
 TEST_CASE("Test RYE2TPCs()") {
-  amrex::Real t1, t2, t3, p1, p2, p3, cs1, cs2, cs3;
+  amrex::Real t1, t2, t3, p1, p2, p3, cs1, cs2, cs3, gamma2;
   perfect_gas_eos.RYE2TP(R, nullptr, E, t1, p1);
   perfect_gas_eos.RYE2Cs(R, nullptr, E, cs1);
-  gamma_law_eos.RYE2TPCs(R, Y, E, t2, p2, cs2);
+  gamma_law_eos.RYE2TPCsG(R, Y, E, t2, p2, cs2, gamma2);
   gamma_law_eos.RYE2TP(R, Y, E, t3, p3);
   gamma_law_eos.RYE2Cs(R, Y, E, cs3);
 
@@ -109,4 +117,33 @@ TEST_CASE("Test RYE2TPCs()") {
   REQUIRE(equal_within_ulps(t2, t3));
   REQUIRE(equal_within_ulps(p2, p3));
   REQUIRE(equal_within_ulps(cs2, cs3));
+}
+
+TEST_CASE("Internal-energy floors preserve their configured physical bound") {
+  const amrex::Real densities[] = {1.0e-15, 1.0e-2, 1.0, 1.0e2};
+
+  const auto check_floor = [&](const auto& eos) {
+    for (const amrex::Real rho : densities) {
+      const amrex::Real ei_floor = eos.get_ei_min(rho);
+      const amrex::Real rhoe_floor = eos.get_rhoe_min(rho);
+      const amrex::Real scale =
+          std::max(amrex::Real(1.0), std::abs(rhoe_floor));
+      REQUIRE(std::abs(rho * ei_floor - rhoe_floor) <=
+              32.0 * std::numeric_limits<amrex::Real>::epsilon() * scale);
+#if CLIP_TEMPERATURE_MIN
+      const amrex::Real temperature = ei_floor / eos.cv;
+      const amrex::Real pressure = eos.gamma_m1 * rhoe_floor;
+      REQUIRE(temperature >= CNSConstants::min_temp());
+      REQUIRE(pressure >= CNSConstants::min_press());
+#else
+      const amrex::Real pressure = eos.gamma_m1 * rhoe_floor;
+      REQUIRE(std::abs(pressure - CNSConstants::min_press()) <=
+              32.0 * std::numeric_limits<amrex::Real>::epsilon() *
+                  CNSConstants::min_press());
+#endif
+    }
+  };
+
+  check_floor(perfect_gas_eos);
+  check_floor(configurable_gas_eos);
 }

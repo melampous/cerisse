@@ -1,0 +1,112 @@
+{
+  "status": "PASS",
+  "models": {
+    "test1853_four_peripheral_ring90": {
+      "step": {
+        "sha256": "5dfaba826c318d85b600aee690a8b372edbbd1df98a794448cc56743e5af81bd",
+        "bytes": 210240,
+        "solid_count": 1,
+        "surface_count": 13,
+        "volume_mm3": 3197673.8794711083,
+        "bounds_mm": [
+          [
+            1.630115420888,
+            -63.5,
+            -63.5
+          ],
+          [
+            268.13764,
+            63.5,
+            63.5
+          ]
+        ],
+        "max_bounds_error_mm": 1.7053025658242404e-13
+      },
+      "brep": {
+        "sha256": "90404e34c852e634fb1e93c15d15a14c5ea90e5a97856af4a88daf4d391925ec",
+        "bytes": 1286285,
+        "solid_count": 1,
+        "surface_count": 13,
+        "volume_mm3": 3197673.8799535795,
+        "bounds_mm": [
+          [
+            1.63011542088817,
+            -63.5,
+            -63.5
+          ],
+          [
+            268.13764,
+            63.5,
+            63.5
+          ]
+        ],
+        "max_bounds_error_mm": 4.440892098500626e-16
+      },
+      "stl": {
+        "sha256": "11171e362b0c495353f435f79f071edd12b267147ec0719a71df5cb83f43fa9a",
+        "bytes": 18250484,
+        "raw_triangles": 365008,
+        "processed_vertices": 182506,
+        "watertight": true,
+        "winding_consistent": true,
+        "is_volume": true,
+        "body_count": 1,
+        "volume_mm3": 3197327.1364905927,
+        "bounds_mm": [
+          [
+            1.6301153898239136,
+            -63.5,
+            -63.5
+          ],
+          [
+            268.13763427734375,
+            63.5,
+            63.5
+          ]
+        ],
+        "max_bounds_error_mm": 5.7226562262258085e-06,
+        "degenerate_triangles_area_le_1e-12": 0,
+        "duplicate_triangles": 0
+      },
+      "patches": {
+        "body_wall": {
+          "watertight_expected_false": true,
+          "winding_consistent": true,
+          "triangles": 363076
+        },
+        "throat_caps": {
+          "1": {
+            "triangles": 484,
+            "mesh_area_mm2": 31.58593191011721,
+            "expected_area_mm2": 31.669217443593606,
+            "relative_error": 0.002629857640932756
+          },
+          "2": {
+            "triangles": 480,
+            "mesh_area_mm2": 31.58593258009978,
+            "expected_area_mm2": 31.669217443593606,
+            "relative_error": 0.002629836485292577
+          },
+          "3": {
+            "triangles": 486,
+            "mesh_area_mm2": 31.58593191011721,
+            "expected_area_mm2": 31.669217443593606,
+            "relative_error": 0.002629857640932756
+          },
+          "4": {
+            "triangles": 482,
+            "mesh_area_mm2": 31.58593258009978,
+            "expected_area_mm2": 31.669217443593606,
+            "relative_error": 0.002629836485292577
+          }
+        }
+      },
+      "gts": {
+        "return_code": 0,
+        "passed": true,
+        "diagnostic": "# vertices: 182506 edges: 547512 faces: 365008\n# Connectivity statistics\n#   incompatible faces: 0\n#   duplicate faces: 0\n#   boundary edges: 0\n#   duplicate edges: 0\n#   non-manifold edges: 0\n#   edges per vertex: min: 4 mean: 5.99993 | 0.236616 max: 8\n#   faces per edge: min: 2 mean: 2 | 0 max: 2\n# Geometric statistics\n#   face quality: min: 0.839152 mean: 0.997447 | 0.00821081 max: 1\n#   face area  : min: 0.0309667 mean: 0.341839 | 0.598386 max: 2.84492\n#   edge length : min: 0.248876 mean: 0.673861 | 0.582316 max: 2.86365",
+        "meaning": "0=valid orientable manifold without self-intersection; 2=topology failure; 3=self-intersection"
+      }
+    }
+  }
+}

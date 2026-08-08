@@ -1,0 +1,62 @@
+# Dynamic all-fluid R-Z constant-pressure contact gate.
+#
+# With p=const and u=0, both the cylindrical radial density contact and the
+# planar axial density contact are exact stationary Euler solutions.  Density
+# may diffuse under LLF, but pressure and radial velocity must remain at
+# roundoff.  The radial mode directly exercises the paired metric advection /
+# ordinary pressure-gradient reconstruction at the first few axis rings.
+max_step = 100
+# Required by the driver even when max_step is the active stopping condition.
+stop_time = 1.0
+cfl = 0.20
+
+cns.order_rk = 3
+cns.stages_rk = 4
+cns.check_state = 1
+cns.soft_positivity = 0
+cns.do_reflux = 0
+cns.lo_bc = 3 0
+cns.hi_bc = 2 0
+cns.nstep_screen_output = 10
+cns.verbose = 0
+
+geometry.is_periodic = 0 1
+geometry.coord_sys = 1
+geometry.prob_lo = 0.0 0.0
+geometry.prob_hi = 1.0 1.0
+amr.n_cell = 64 64
+amr.max_level = 0
+amr.max_grid_size = 256
+amr.blocking_factor = 8
+
+# Constant pressure and zero velocity everywhere.
+prob.profile = 0
+prob.cell_average = 0
+prob.gamma = 1.4
+prob.p0 = 2.0
+prob.amplitude = 0.0
+prob.quartic = 0.0
+
+# 0: cylindrical contact normal to r; 1: planar contact normal to z.
+prob.density_contact = 1
+prob.contact_orientation = 0
+prob.rho_inner = 4.0
+prob.rho_outer = 1.0
+# Default is four radial cells from the axis on a 64-cell radial mesh.
+# Override with 0.015625 to put the jump on the first interior radial face.
+prob.contact_location = 0.0625
+
+# Preserve the current all-fluid POINT semantics.  The paired characteristic
+# LLF WENO/TENO radial pressure operator is automatic; the incompatible
+# annular paths stay disabled.
+cns.rz_euler_annular_pressure_consistency = 0
+cns.rz_euler_cell_average_deconvolution = 0
+
+amr.plot_files_output = 1
+amr.plot_file = contact_output/plt
+amr.plot_int = 100
+amr.derive_plot_vars = density pressure velocity
+amr.checkpoint_files_output = 0
+amr.v = 0
+
+amrex.the_arena_is_managed = 0

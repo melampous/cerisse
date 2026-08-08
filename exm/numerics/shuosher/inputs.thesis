@@ -1,0 +1,47 @@
+# Canonical one-dimensional Shu--Osher shock--entropy-wave interaction.
+# The spatial method is selected at build time.  The shock-LLF A/B study uses
+# AFD--HLLC--WENO-Z5.  Time integration is SSPRK(3,3).
+
+amrex.fpe_trap_invalid = 1
+
+max_step  = 1000000
+stop_time = 1.8
+cfl       = 0.30
+
+cns.order_rk            = 3
+cns.stages_rk           = 3
+cns.check_state         = 1
+cns.soft_positivity     = 0
+cns.lo_bc               = 1  # prescribed uniform post-shock inflow
+cns.hi_bc               = 6  # analytic continuation of the entropy wave
+cns.nstep_screen_output = 200
+cns.verbose             = 0
+
+prob.shock_x           = -4.0
+prob.rho_left          = 3.857142857142857
+prob.u_left            = 2.629369
+prob.p_left            = 10.333333333333333
+prob.rho_wave_amplitude = 0.2
+prob.wave_number        = 5.0
+prob.p_right            = 1.0
+
+geometry.is_periodic = 0
+geometry.coord_sys   = 0
+geometry.prob_lo     = -5.0
+geometry.prob_hi     =  5.0
+
+# Base thesis grid.  N=200 places x_s=-4 exactly on a grid face.  Its doubled
+# grids retain that alignment, avoiding a grid-dependent initial shock shift.
+amr.n_cell         = 200
+amr.max_level      = 0
+amr.blocking_factor = 8
+amr.max_grid_size  = 8192
+amr.n_error_buf    = 0
+amr.grid_eff       = 0.9
+amr.v              = 0
+
+amr.checkpoint_files_output = 0
+amr.plot_files_output       = 1
+amr.plot_file               = ./plot_thesis/plt
+amr.plot_int                = -1
+amr.derive_plot_vars        = pressure velocity temperature

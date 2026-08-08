@@ -52,6 +52,9 @@ VPATH_LOCATIONS   += $(Plocs)
 DEFINES += -DUSE_PELEPHYSICS
 DEFINES += -DUSE_GAMMALAW_EOS
 DEFINES += -DUSE_CONSTANT_TRANSPORT
+ifeq ($(CLIP_MINTEMP), TRUE)
+  DEFINES += -DCLIP_TEMPERATURE_MIN=1
+endif
 
 include $(AMREX_HOME)/Src/Base/Make.package
 # include $(AMREX_HOME)/Src/Boundary/Make.package

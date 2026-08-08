@@ -1,0 +1,44 @@
+# Radially uniform stationary normal shock embedded in a 2-D R-Z mesh.
+max_step = 80
+stop_time = 2.0e-2
+cfl = 0.25
+
+cns.order_rk = -2
+cns.stages_rk = 2
+cns.lo_bc = 3 1
+cns.hi_bc = 2 1
+cns.nstep_screen_output = 20
+cns.verbose = 0
+
+geometry.is_periodic = 0 0
+geometry.coord_sys = 1
+geometry.prob_lo = 0.0 0.0
+geometry.prob_hi = 0.25 1.0
+amr.n_cell = 16 64
+
+amr.max_level = 0
+amr.ref_ratio = 2
+amr.regrid_int = 2
+amr.blocking_factor = 8
+amr.max_grid_size = 64
+amr.n_error_buf = 2
+amr.grid_eff = 0.8
+
+# 0: nested near-axis boxes (radial coarse-fine interfaces cross the shock)
+# 1: refine the shock strip across the full radius (control case)
+prob.amr_full_radial = 0
+prob.flow_sign = 1
+
+cns.do_reflux = 0
+cns.rz_euler_point_flux = 0
+cns.rz_euler_annular_pressure_consistency = 0
+cns.rz_euler_cell_average_deconvolution = 0
+
+amr.plot_files_output = 1
+amr.plot_file = output/plt
+amr.plot_int = 20
+amr.derive_plot_vars = density pressure velocity magvort
+amr.checkpoint_files_output = 0
+amr.v = 0
+
+amrex.the_arena_is_managed = 0

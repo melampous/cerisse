@@ -30,12 +30,29 @@ class calorifically_perfect_gas_t {
   Real Rspec = Ru / mw;
 
 
-  AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE Real get_ei_min() const {
+  // Return the admissible internal-energy-density floor, rho*e [J/m^3].
+  // A temperature floor scales with density, whereas a pressure floor does
+  // not: p=(gamma-1)*rho*e.
+  AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE Real
+  get_rhoe_min(const Real rho) const {
 #if CLIP_TEMPERATURE_MIN
-    return Rspec * min_temp() * o_gamma_m1;
+    const Real rho_safe = amrex::max(rho, small_rho());
+    const Real temperature_floor =
+        rho_safe * Rspec * min_temp() * o_gamma_m1;
+    const Real pressure_floor = min_press() * o_gamma_m1;
+    return amrex::max(temperature_floor, pressure_floor);
 #else
+    static_cast<void>(rho);
     return min_press() * o_gamma_m1;
 #endif
+  }
+
+  // Return the corresponding specific-internal-energy floor, e [J/kg].
+  // Density is required when the configured bound is a pressure bound.
+  AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE Real
+  get_ei_min(const Real rho) const {
+    const Real rho_safe = amrex::max(rho, small_rho());
+    return get_rhoe_min(rho_safe) / rho_safe;
   }
 
   AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE void RYP2E(const Real R,
@@ -124,7 +141,7 @@ class calorifically_perfect_gas_t {
                            vel[0] * vel[0] + vel[1] * vel[1] + vel[2] * vel[2]);
     ke = Real(0.5) * rho * ke;
     Real eint = (cons(i, j, k, idx_t::UET) - ke) / rho;
-    eint = max(eint, get_ei_min() ); //clip energy
+    eint = max(eint, get_ei_min(rho)); //clip energy
     Real T = eint / cv;
 
     Real cs = std::sqrt(gamma * Rspec * T);
@@ -164,18 +181,11 @@ class calorifically_perfect_gas_t {
     cons2prims(mfi.growntilebox(idx_t::NGHOST), cons, prims);
   }
 
-  // Box-parameterized overload (used by the comm/comp-overlap RHS path to
-  // convert only a sub-region, e.g. valid cells first and the ghost ring
-  // later). Cells inside the optional 'skip' box are left untouched (used
-  // to convert only the ghost ring in one launch). Per-cell math is
-  // identical to the MFIter version.
+  // Box-parameterized overload: convert an arbitrary sub-region. Per-cell
+  // math is identical to the MFIter version.
   void inline cons2prims(const Box& bxg, const Array4<Real>& cons,
-                         const Array4<Real>& prims,
-                         const Box& skip = Box()) const {
-    const Box skipbox = skip;
-    const bool do_skip = skip.ok();
+                         const Array4<Real>& prims) const {
     amrex::ParallelFor(bxg, [=, *this] AMREX_GPU_DEVICE(int i, int j, int k) {
-      if (do_skip && skipbox.contains(i, j, k)) { return; }
       Real rho = cons(i, j, k, idx_t::URHO);
       rho = max(small_rho(), rho);
       Real rhoinv = Real(1.0) / rho;
@@ -184,7 +194,7 @@ class calorifically_perfect_gas_t {
       Real uz = cons(i, j, k, idx_t::UMZ) * rhoinv;
       Real rhoke = Real(0.5) * rho * (ux * ux + uy * uy + uz * uz);
       Real rhoei = cons(i, j, k, idx_t::UET) - rhoke ;
-      rhoei = max(rhoei,rho*(this->get_ei_min() )); //clip energy
+      rhoei = max(rhoei, this->get_rhoe_min(rho)); //clip energy
       Real p = (this->gamma_m1) * rhoei;
 
       prims(i, j, k, idx_t::QRHO) = rho;
@@ -209,7 +219,8 @@ class calorifically_perfect_gas_t {
     cons[idx_t::UMX] = prims(iv, idx_t::QRHO) * prims(iv, idx_t::QU);
     cons[idx_t::UMY] = prims(iv, idx_t::QRHO) * prims(iv, idx_t::QV);
     cons[idx_t::UMZ] = prims(iv, idx_t::QRHO) * prims(iv, idx_t::QW);
-    const Real E = max(prims(iv, idx_t::QEINT),get_ei_min()) +
+    const Real E = max(prims(iv, idx_t::QEINT),
+                       get_ei_min(prims(iv, idx_t::QRHO))) +
                    Real(0.5) * (prims(iv, idx_t::QU) * prims(iv, idx_t::QU) +
                                 prims(iv, idx_t::QV) * prims(iv, idx_t::QV) +
                                 prims(iv, idx_t::QW) * prims(iv, idx_t::QW));
@@ -289,17 +300,19 @@ class calorifically_perfect_gas_t {
     r.q2 = r.u * r.u + r.v * r.v + r.w * r.w;
     const Real pl = amrex::max(prims(ivm, idx_t::QPRES), min_press());
     const Real pr = amrex::max(prims(iv, idx_t::QPRES), min_press());
-    const Real El = amrex::max(prims(ivm, idx_t::QEINT), get_ei_min()) +
+    const Real El = amrex::max(prims(ivm, idx_t::QEINT), get_ei_min(rl)) +
                     Real(0.5) * (prims(ivm, idx_t::QU) * prims(ivm, idx_t::QU) +
                                  prims(ivm, idx_t::QV) * prims(ivm, idx_t::QV) +
                                  prims(ivm, idx_t::QW) * prims(ivm, idx_t::QW));
-    const Real Er = amrex::max(prims(iv, idx_t::QEINT), get_ei_min()) +
+    const Real Er = amrex::max(prims(iv, idx_t::QEINT), get_ei_min(rr)) +
                     Real(0.5) * (prims(iv, idx_t::QU) * prims(iv, idx_t::QU) +
                                  prims(iv, idx_t::QV) * prims(iv, idx_t::QV) +
                                  prims(iv, idx_t::QW) * prims(iv, idx_t::QW));
     r.H = (El + pl / rl) * rratio +
           (Er + pr / rr) * (1.0 - rratio);
-    r.h = amrex::max(r.H - 0.5 * r.q2, this->gamma * get_ei_min());
+    const Real h_floor = this->gamma *
+        (get_ei_min(rl) * rratio + get_ei_min(rr) * (Real(1.0) - rratio));
+    r.h = amrex::max(r.H - 0.5 * r.q2, h_floor);
     r.c = std::sqrt((this->gamma - 1) * r.h);
 
     return r;
@@ -365,7 +378,7 @@ class calorifically_perfect_gas_t {
     // T and P
     Real rhoke = Real(0.5) * rho * (ux * ux+ uy* uy + uz * uz);
     Real rhoei = U[idx_t::UET] - rhoke;
-    rhoei = max(rhoei,rho*(this->get_ei_min() )); //clip energy
+    rhoei = max(rhoei, this->get_rhoe_min(rho)); //clip energy
     Real p = (this->gamma_m1) * rhoei;
     Real T = p / (rho * this->Rspec);
     Q[idx_t::QT] = T;
@@ -684,16 +697,11 @@ class multispecies_pele_gas_t {
     cons2prims(mfi.growntilebox(idx_t::NGHOST), cons, prims);
   }
 
-  // Box-parameterized overload (used by the comm/comp-overlap RHS path to
-  // convert only a sub-region). Cells inside the optional 'skip' box are
-  // left untouched. Per-cell math identical to the MFIter version.
+  // Box-parameterized overload: convert an arbitrary sub-region. Per-cell
+  // math identical to the MFIter version.
   void inline cons2prims(const Box& bxg, const Array4<Real>& cons,
-                         const Array4<Real>& prims,
-                         const Box& skip = Box()) const {
-    const Box skipbox = skip;
-    const bool do_skip = skip.ok();
+                         const Array4<Real>& prims) const {
     amrex::ParallelFor(bxg, [=, *this] AMREX_GPU_DEVICE(int i, int j, int k) {
-      if (do_skip && skipbox.contains(i, j, k)) { return; }
       Real rho = 0.0;
       for (int n = 0; n < NUM_SPECIES; ++n) {
         rho += cons(i, j, k, idx.UFS + n);

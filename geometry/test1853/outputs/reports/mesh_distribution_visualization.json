@@ -1,0 +1,263 @@
+{
+  "status": "PASS",
+  "model": "test1853_run262_263_tri_n3at120",
+  "triangles": 360834,
+  "vertices": 180419,
+  "provenance": {
+    "source_stl": "outputs/stl/test1853_run262_263_tri_n3at120.stl",
+    "source_stl_sha256": "3c29d3706ab5488ca2740649c22e74ff02c760eca8ab439146928b2c6a8b0999",
+    "generator": "visualize_test1853_mesh_distribution.py",
+    "generator_sha256": "cfa007ae284a0a8cff67952fcad30aac672e3199a61db3bee3131f2a24c6d1a1",
+    "interactive_vtp_sha256": "229098d1d2520bf3f197364d88d7b1fb669306351f2514718e05a080097143d0",
+    "numpy_version": "2.4.2",
+    "pyvista_version": "0.47.1",
+    "matplotlib_version": "3.10.8"
+  },
+  "surface_metric": {
+    "name": "h_STL",
+    "definition": "maximum of the three edge lengths of each STL triangle",
+    "units": "mm",
+    "regions": {
+      "active nozzles": {
+        "zone_id": 0,
+        "faces": 17828,
+        "fraction_of_faces": 0.049407760909448664,
+        "surface_area_mm2": 1211.2024459969905,
+        "face_max_edge_mm": {
+          "minimum": 0.30542863511985047,
+          "p50": 0.40026569033391696,
+          "p90": 0.4235791633624074,
+          "p95": 0.4466925766863079,
+          "p99": 0.49035812536199025,
+          "maximum": 0.5455328462198842
+        },
+        "all_face_edges_mm": {
+          "minimum": 0.25443401125312165,
+          "p50": 0.3999995949064096,
+          "p90": 0.40444252619275023,
+          "p95": 0.420898060617519,
+          "p99": 0.4655344381453303,
+          "maximum": 0.5455328462198842
+        }
+      },
+      "forebody": {
+        "zone_id": 1,
+        "faces": 179054,
+        "fraction_of_faces": 0.4962226397734138,
+        "surface_area_mm2": 12348.831421840754,
+        "face_max_edge_mm": {
+          "minimum": 0.2865424978354303,
+          "p50": 0.40001786725173744,
+          "p90": 0.4022233065314851,
+          "p95": 0.4070406126480495,
+          "p99": 0.4621192293296577,
+          "maximum": 0.6870502823711985
+        },
+        "all_face_edges_mm": {
+          "minimum": 0.240679376283422,
+          "p50": 0.3999999464434574,
+          "p90": 0.400867955970342,
+          "p95": 0.4020529006845819,
+          "p99": 0.4297947978996576,
+          "maximum": 0.6870502823711985
+        }
+      },
+      "R2.54 shoulder": {
+        "zone_id": 2,
+        "faces": 18520,
+        "fraction_of_faces": 0.05132554027613806,
+        "surface_area_mm2": 1225.7141293135176,
+        "face_max_edge_mm": {
+          "minimum": 0.2727908987380197,
+          "p50": 0.4017153092713712,
+          "p90": 0.45980492109258675,
+          "p95": 0.48508360741722406,
+          "p99": 0.5230751202831904,
+          "maximum": 0.6131269300952183
+        },
+        "all_face_edges_mm": {
+          "minimum": 0.2507784709981161,
+          "p50": 0.3996734349209605,
+          "p90": 0.4258303313824355,
+          "p95": 0.4516281743441615,
+          "p99": 0.5020194946008475,
+          "maximum": 0.6131269300952183
+        }
+      },
+      "forward cylinder": {
+        "zone_id": 3,
+        "faces": 59514,
+        "fraction_of_faces": 0.16493456825022032,
+        "surface_area_mm2": 4033.0032943230403,
+        "face_max_edge_mm": {
+          "minimum": 0.2984847493494997,
+          "p50": 0.4000018042672544,
+          "p90": 0.43080295531713403,
+          "p95": 0.45675442160440444,
+          "p99": 0.5054076196649808,
+          "maximum": 0.6130873072259113
+        },
+        "all_face_edges_mm": {
+          "minimum": 0.25030155565766904,
+          "p50": 0.3999997409200787,
+          "p90": 0.4069884891302212,
+          "p95": 0.4262546731254224,
+          "p99": 0.4778202620310296,
+          "maximum": 0.6130873072259113
+        }
+      },
+      "35-60 mm size transition": {
+        "zone_id": 4,
+        "faces": 30278,
+        "fraction_of_faces": 0.08391116136505983,
+        "surface_area_mm2": 9970.40502687652,
+        "face_max_edge_mm": {
+          "minimum": 0.3012651844750536,
+          "p50": 0.698239683534677,
+          "p90": 1.4970805974489736,
+          "p95": 1.7428802687567515,
+          "p99": 2.0570302074198548,
+          "maximum": 2.5166363103616343
+        },
+        "all_face_edges_mm": {
+          "minimum": 0.24936460278438347,
+          "p50": 0.6556360740689369,
+          "p90": 1.4044015811981767,
+          "p95": 1.6372444847401582,
+          "p99": 1.9550517726407906,
+          "maximum": 2.5166363103616343
+        }
+      },
+      "aft cylinder": {
+        "zone_id": 5,
+        "faces": 48244,
+        "fraction_of_faces": 0.13370136960485984,
+        "surface_area_mm2": 83045.1357185083,
+        "face_max_edge_mm": {
+          "minimum": 1.4963144605986938,
+          "p50": 2.0000061797304647,
+          "p90": 2.001760940657093,
+          "p95": 2.0655763348960945,
+          "p99": 2.3708113546108196,
+          "maximum": 2.8636512099252984
+        },
+        "all_face_edges_mm": {
+          "minimum": 1.276818883741472,
+          "p50": 2.000000312142195,
+          "p90": 2.000021637395829,
+          "p95": 2.0025839733815567,
+          "p99": 2.205116346320781,
+          "maximum": 2.8636512099252984
+        }
+      },
+      "artificial aft cap": {
+        "zone_id": 6,
+        "faces": 7396,
+        "fraction_of_faces": 0.020496959820859452,
+        "surface_area_mm2": 12665.603348851639,
+        "face_max_edge_mm": {
+          "minimum": 1.653895797010211,
+          "p50": 2.000001177537905,
+          "p90": 2.0257960603384912,
+          "p95": 2.1484706452438247,
+          "p99": 2.328861979551698,
+          "maximum": 2.7262327193718727
+        },
+        "all_face_edges_mm": {
+          "minimum": 1.3772752322647164,
+          "p50": 2.000000026854778,
+          "p90": 2.0000012582236786,
+          "p95": 2.027336394884047,
+          "p99": 2.237801480171676,
+          "maximum": 2.7262327193718727
+        }
+      }
+    },
+    "hmax_classes": [
+      {
+        "lower_mm_inclusive": 0.0,
+        "upper_mm_exclusive": 0.5,
+        "faces": 279114,
+        "fraction": 0.7735246678528077
+      },
+      {
+        "lower_mm_inclusive": 0.5,
+        "upper_mm_exclusive": 0.75,
+        "faces": 12403,
+        "fraction": 0.0343731466546944
+      },
+      {
+        "lower_mm_inclusive": 0.75,
+        "upper_mm_exclusive": 1.0,
+        "faces": 5420,
+        "fraction": 0.015020757467422693
+      },
+      {
+        "lower_mm_inclusive": 1.0,
+        "upper_mm_exclusive": 1.5,
+        "faces": 5254,
+        "fraction": 0.014560712128014543
+      },
+      {
+        "lower_mm_inclusive": 1.5,
+        "upper_mm_exclusive": 2.25,
+        "faces": 57439,
+        "fraction": 0.15918400150761847
+      },
+      {
+        "lower_mm_inclusive": 2.25,
+        "upper_mm_exclusive": 3.0,
+        "faces": 1204,
+        "fraction": 0.0033367143894422364
+      },
+      {
+        "lower_mm_inclusive": 3.0,
+        "upper_mm_exclusive": null,
+        "faces": 0,
+        "fraction": 0.0
+      }
+    ]
+  },
+  "proposed_ibm_amr": {
+    "status": "DESIGN PROPOSAL, NOT A COMPUTED AMR HIERARCHY",
+    "coordinate": "body-frame x measured from TSP; length in mm",
+    "levels": {
+      "L3_nozzle_forebody_shoulder_x_le_40_mm": {
+        "level": 3,
+        "dx_mm": 0.20833333333333334,
+        "relative_volume_cell_density": 1.0
+      },
+      "L2_forward_cylinder_40_to_70_mm": {
+        "level": 2,
+        "dx_mm": 0.4166666666666667,
+        "relative_volume_cell_density": 0.125
+      },
+      "L1_mid_cylinder_70_to_130_mm": {
+        "level": 1,
+        "dx_mm": 0.8333333333333334,
+        "relative_volume_cell_density": 0.015625
+      },
+      "L0_aft_cylinder_and_cap_x_gt_130_mm": {
+        "level": 0,
+        "dx_mm": 1.6666666666666667,
+        "relative_volume_cell_density": 0.001953125
+      }
+    },
+    "nozzle_near_field": "L3 within 10 mm and an L2 parent envelope within 12 mm of each discrete nozzle axis for -20 <= x <= throat+5 mm",
+    "plume_extension": "L2 within 12 mm of each discrete nozzle axis for -80 <= x < -20 mm",
+    "meridional_figure_note": "The x-r panel is an azimuthal projection for visualization only; it must not be implemented as an axisymmetric annulus or torus.",
+    "bow_shock": "geometry-anchored L1 startup envelope plus density-gradient tracking capped at L2",
+    "aft_cap_option": "keep only the outer 8-10 mm annulus at L1 if rim/wake sensitivity requires it",
+    "implementation_blocker": "Current ib.amr_support_buffer=1 seeds every IBM interface on every level, so user_tagging alone cannot impose the proposed axial level cap.",
+    "required_change": "Use one body-frame local_max_level policy for all user/flow tags and the baseline support seed; allow support-closure promotion wherever another tag creates a child grid near IBM, retain runtime halo dilation and strict support audits, and evaluate gradient tags only on valid-fluid stencils."
+  },
+  "files": {
+    "interactive_surface_vtp": "outputs/visualization/test1853_run262_263_tri_n3at120_surface_mesh_metrics.vtp",
+    "surface_overview_png": "outputs/figures/tri_surface_mesh_density_overview.png",
+    "surface_axial_png": "outputs/figures/tri_surface_mesh_density_axial.png",
+    "surface_forebody_nozzles_png": "outputs/figures/tri_surface_mesh_density_forebody_nozzles.png",
+    "surface_local_details_png": "outputs/figures/tri_surface_mesh_density_local_details.png",
+    "single_tri_surface_comparison_png": "outputs/figures/single_tri_surface_mesh_density_comparison.png",
+    "ibm_dx_proposal_png": "outputs/figures/proposed_ibm_dx_distribution.png"
+  }
+}

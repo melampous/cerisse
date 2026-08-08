@@ -24,8 +24,16 @@ else ifeq ($(SOD_EULER_SCHEME),llf-teno5)
   SOD_EULER_SCHEME_ID := 3
 else ifeq ($(SOD_EULER_SCHEME),llf-wenoz5)
   SOD_EULER_SCHEME_ID := 4
+else ifeq ($(SOD_EULER_SCHEME),llf-teno6)
+  SOD_EULER_SCHEME_ID := 5
+else ifeq ($(SOD_EULER_SCHEME),llf-teno5-old)
+  SOD_EULER_SCHEME_ID := 6
+else ifeq ($(SOD_EULER_SCHEME),llf-wenoz5-old)
+  SOD_EULER_SCHEME_ID := 7
+else ifeq ($(SOD_EULER_SCHEME),llf-teno6-old)
+  SOD_EULER_SCHEME_ID := 8
 else
-  $(error SOD_EULER_SCHEME must be one of: riemann, afd-hllc-teno5, afd-hllc-wenoz5, llf-teno5, llf-wenoz5)
+  $(error SOD_EULER_SCHEME must be one of: riemann, afd-hllc-teno5, afd-hllc-wenoz5, llf-teno5, llf-wenoz5, llf-teno6, llf-teno5-old, llf-wenoz5-old, llf-teno6-old)
 endif
 DEFINES += -DSOD_EULER_SCHEME_ID=$(SOD_EULER_SCHEME_ID)
 USERSuffix := $(USERSuffix).sod_$(SOD_EULER_SCHEME)

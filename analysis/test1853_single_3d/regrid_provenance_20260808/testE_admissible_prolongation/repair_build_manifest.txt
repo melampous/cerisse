@@ -1,0 +1,10 @@
+built_utc=2026-08-08T01:57:03Z
+host=ip-10-0-141-49.us-east-2.compute.internal
+cuda_release=12.6
+cuda_arch=90
+method=pure_shared_gp_full_cartesian
+cut_control=disabled
+664460c1f062c5a329d6a15ce523333881d86eadb70acc847e48e2fb7b99838c  /shared/cerisse_local_0808_admissible_prolongation/src/set/EulerAdmissibleProlongation.H
+37573b40930ba557c0ce07decb18a81c71b79e450f7b6fbe926eac8aa540ff03  /shared/cerisse_local_0808_admissible_prolongation/src/set/CNS_setup.cpp
+997dfc3dfbfa6ef61f30f51dabf7d9e10d72067b7000296197b3d6250309f321  /shared/cerisse_local_0808_admissible_prolongation/src/CNS.cpp
+04965bd1d27da24ab025a16628a6840bba5fd7be4cb211daf6f559cbdf9efd97  main3d.gnu.TPROF.MPI.CUDA.ex

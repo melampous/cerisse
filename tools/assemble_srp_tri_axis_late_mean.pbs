@@ -1,0 +1,34 @@
+#!/bin/bash
+#PBS -N srp_axismean
+#PBS -q cx
+#PBS -l walltime=00:30:00
+#PBS -l select=1:ncpus=1:mem=4gb
+#PBS -j oe
+
+set -euo pipefail
+
+source /etc/profile.d/modules.sh
+source /etc/profile.d/z00_lmod.sh
+module purge
+module load tools/prod yt/4.3.0-foss-2022a
+
+CASE=/rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2
+OUT=${CASE}/post_latest_plt09000/bowshock_safe_mean/axis_profiles
+SNAPSHOTS=${OUT}/late_snapshots
+export MPLCONFIGDIR=${TMPDIR:-/tmp}/mpl-axis-mean-${PBS_JOBID}
+export OMP_NUM_THREADS=1
+mkdir -p "${MPLCONFIGDIR}" "${OUT}/logs"
+
+date -u
+hostname
+python3 "${CASE}/assemble_srp_tri_axis_late_mean.py" \
+  --snapshot-root "${SNAPSHOTS}" \
+  --output-dir "${OUT}" \
+  --steps 6000 6500 7000 7500 8000 8500 9000 \
+  --p-inf 574.56 \
+  --body-diameter 0.127 \
+  --body-centre-x 0.300 \
+  --nozzle-plane-x 0.299 \
+  --dpi 600 \
+  2>&1 | tee "${OUT}/logs/late_mean_${PBS_JOBID}.log"
+date -u

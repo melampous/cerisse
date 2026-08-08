@@ -79,6 +79,42 @@ uint32_t morton_code (const Point& p, const AABB& scene_box) {
 // 2. PROXIMITY PRIMITIVES
 // ============================================================================
 
+/// Roundoff-scaled equality tolerance for squared closest-point distances.
+/// Two facets sharing an edge/vertex can be exactly equidistant from a query;
+/// their owner must not depend on CPU/GPU traversal order or the last bit of a
+/// dot product.  Scaling with the local squared distance keeps this test
+/// translation-independent and avoids merging geometrically distinct hits.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real closest_distance_tolerance (Real first, Real second) noexcept
+{
+    const Real scale = amrex::max(
+        amrex::max(first, second), IBM_EPS::GEOM * IBM_EPS::GEOM);
+    return Real(128.0) * std::numeric_limits<Real>::epsilon() * scale;
+}
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+bool closest_candidate_precedes (Real candidate_distance2, int candidate_id,
+                                 Real best_distance2, int best_id) noexcept
+{
+    if (best_id < 0) return true;
+    const Real tolerance = closest_distance_tolerance(
+        candidate_distance2, best_distance2);
+    if (candidate_distance2 < best_distance2 - tolerance) return true;
+    return amrex::Math::abs(candidate_distance2 - best_distance2) <=
+               tolerance &&
+           candidate_id < best_id;
+}
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+bool closest_bound_can_improve (Real lower_bound2, Real best_distance2,
+                                int best_id) noexcept
+{
+    if (best_id < 0) return true;
+    return lower_bound2 <=
+           best_distance2 +
+               closest_distance_tolerance(lower_bound2, best_distance2);
+}
+
 /// Closest point on a line segment (a, b) to query point p
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Point closest_point_on_segment (const Point& p, const Point& a, const Point& b) {
@@ -178,6 +214,323 @@ Real point_aabb_distance_sq (const Point& p, const AABB& box) {
     return d2;
 }
 
+/// Intersect a finite segment with an AABB.  The returned interval is in the
+/// segment parameter t in [0,1].
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+bool segment_aabb_interval (const Point& start, const Point& end,
+                            const AABB& box, Real& t_near, Real& t_far)
+{
+    t_near = Real(0.0);
+    t_far = Real(1.0);
+    for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+        const Real direction = end[d] - start[d];
+        if (amrex::Math::abs(direction) <= IBM_EPS::GEOM) {
+            if (start[d] < box.lo[d] || start[d] > box.hi[d]) return false;
+            continue;
+        }
+        const Real inverse = Real(1.0) / direction;
+        Real t0 = (box.lo[d] - start[d]) * inverse;
+        Real t1 = (box.hi[d] - start[d]) * inverse;
+        if (t0 > t1) {
+            const Real temporary = t0;
+            t0 = t1;
+            t1 = temporary;
+        }
+        t_near = amrex::max(t_near, t0);
+        t_far = amrex::min(t_far, t1);
+        if (t_near > t_far) return false;
+    }
+    return true;
+}
+
+#if (AMREX_SPACEDIM == 2)
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real cross_2d (const Vec& a, const Vec& b)
+{
+    return a[0] * b[1] - a[1] * b[0];
+}
+
+/// Return the first open-segment intersection with edge [a,b].  Endpoint hits
+/// are excluded so a support point lying on a surface within roundoff does not
+/// make every adjacent segment self-occluded.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+bool segment_edge_first_fraction (const Point& start, const Point& end,
+                                  const Point& a, const Point& b,
+                                  Real endpoint_tol, Real& fraction)
+{
+    const Vec r{end[0] - start[0], end[1] - start[1]};
+    const Vec s{b[0] - a[0], b[1] - a[1]};
+    const Vec q{a[0] - start[0], a[1] - start[1]};
+    const Real rr = r[0] * r[0] + r[1] * r[1];
+    const Real ss = s[0] * s[0] + s[1] * s[1];
+    if (!(rr > IBM_EPS::GEOM * IBM_EPS::GEOM) ||
+        !(ss > IBM_EPS::GEOM * IBM_EPS::GEOM)) {
+        return false;
+    }
+
+    const Real denominator = cross_2d(r, s);
+    const Real parallel_tol = Real(64.0) *
+        std::numeric_limits<Real>::epsilon() * std::sqrt(rr * ss);
+    if (amrex::Math::abs(denominator) > parallel_tol) {
+        const Real t = cross_2d(q, s) / denominator;
+        const Real u = cross_2d(q, r) / denominator;
+        const Real side_tol = Real(32.0) *
+            std::numeric_limits<Real>::epsilon();
+        if (t > endpoint_tol && t < Real(1.0) - endpoint_tol &&
+            u >= -side_tol && u <= Real(1.0) + side_tol) {
+            fraction = t;
+            return true;
+        }
+        return false;
+    }
+
+    // Collinear overlap is also an obstruction.  Use the dominant segment
+    // direction to avoid dividing by a near-zero component.
+    if (amrex::Math::abs(cross_2d(q, r)) > parallel_tol) return false;
+    const int axis = amrex::Math::abs(r[0]) >= amrex::Math::abs(r[1]) ? 0 : 1;
+    Real t0 = (a[axis] - start[axis]) / r[axis];
+    Real t1 = (b[axis] - start[axis]) / r[axis];
+    if (t0 > t1) {
+        const Real temporary = t0;
+        t0 = t1;
+        t1 = temporary;
+    }
+    const Real overlap_begin = amrex::max(t0, endpoint_tol);
+    const Real overlap_end = amrex::min(t1, Real(1.0) - endpoint_tol);
+    if (overlap_begin < overlap_end) {
+        fraction = overlap_begin;
+        return true;
+    }
+    return false;
+}
+#else
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real cross_projected_2d (Real ax, Real ay, Real bx, Real by)
+{
+    return ax * by - ay * bx;
+}
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+bool point_in_projected_triangle (
+    Real px, Real py, const Real triangle[3][2])
+{
+    Real signed_area[3];
+    Real scale = Real(0.0);
+    for (int edge = 0; edge < 3; ++edge) {
+        const int next = (edge + 1) % 3;
+        const Real ex = triangle[next][0] - triangle[edge][0];
+        const Real ey = triangle[next][1] - triangle[edge][1];
+        const Real qx = px - triangle[edge][0];
+        const Real qy = py - triangle[edge][1];
+        signed_area[edge] = cross_projected_2d(ex, ey, qx, qy);
+        scale = amrex::max(scale, amrex::Math::abs(signed_area[edge]));
+    }
+    constexpr Real minimum_area_scale = Real(1.0e-28);
+    const Real bounded_scale =
+        scale > minimum_area_scale ? scale : minimum_area_scale;
+    const Real tolerance = Real(64.0) *
+        std::numeric_limits<Real>::epsilon() * bounded_scale;
+    bool negative = false;
+    bool positive = false;
+    for (int edge = 0; edge < 3; ++edge) {
+        negative = negative || signed_area[edge] < -tolerance;
+        positive = positive || signed_area[edge] > tolerance;
+    }
+    return !(negative && positive);
+}
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+bool projected_segment_edge_first_fraction (
+    const Real start[2], const Real end[2], const Real a[2], const Real b[2],
+    Real endpoint_tol, Real& fraction)
+{
+    const Real rx = end[0] - start[0];
+    const Real ry = end[1] - start[1];
+    const Real sx = b[0] - a[0];
+    const Real sy = b[1] - a[1];
+    const Real qx = a[0] - start[0];
+    const Real qy = a[1] - start[1];
+    const Real rr = rx * rx + ry * ry;
+    const Real ss = sx * sx + sy * sy;
+    if (!(rr > IBM_EPS::GEOM * IBM_EPS::GEOM) ||
+        !(ss > IBM_EPS::GEOM * IBM_EPS::GEOM)) {
+        return false;
+    }
+
+    const Real denominator = cross_projected_2d(rx, ry, sx, sy);
+    const Real parallel_tol = Real(64.0) *
+        std::numeric_limits<Real>::epsilon() * std::sqrt(rr * ss);
+    if (amrex::Math::abs(denominator) > parallel_tol) {
+        const Real t = cross_projected_2d(qx, qy, sx, sy) / denominator;
+        const Real u = cross_projected_2d(qx, qy, rx, ry) / denominator;
+        const Real side_tol = Real(32.0) *
+            std::numeric_limits<Real>::epsilon();
+        if (t > endpoint_tol && t < Real(1.0) - endpoint_tol &&
+            u >= -side_tol && u <= Real(1.0) + side_tol) {
+            fraction = t;
+            return true;
+        }
+        return false;
+    }
+
+    if (amrex::Math::abs(cross_projected_2d(qx, qy, rx, ry)) >
+        parallel_tol) {
+        return false;
+    }
+    const int axis = amrex::Math::abs(rx) >= amrex::Math::abs(ry) ? 0 : 1;
+    const Real direction = axis == 0 ? rx : ry;
+    Real t0 = ((axis == 0 ? a[0] : a[1]) -
+               (axis == 0 ? start[0] : start[1])) / direction;
+    Real t1 = ((axis == 0 ? b[0] : b[1]) -
+               (axis == 0 ? start[0] : start[1])) / direction;
+    if (t0 > t1) {
+        const Real temporary = t0;
+        t0 = t1;
+        t1 = temporary;
+    }
+    const Real overlap_begin = amrex::max(t0, endpoint_tol);
+    const Real overlap_end = amrex::min(t1, Real(1.0) - endpoint_tol);
+    if (overlap_begin < overlap_end) {
+        fraction = overlap_begin;
+        return true;
+    }
+    return false;
+}
+
+/// Handle the measure-zero but important case where a Cartesian support
+/// segment lies in an STL triangle plane (for example on an extruded feature).
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+bool coplanar_segment_triangle_first_fraction (
+    const Point& start, const Point& end, const Point& v0, const Point& v1,
+    const Point& v2, const Vec& normal, Real endpoint_tol, Real& fraction)
+{
+    int drop = 0;
+    if (amrex::Math::abs(normal[1]) > amrex::Math::abs(normal[drop])) drop = 1;
+    if (amrex::Math::abs(normal[2]) > amrex::Math::abs(normal[drop])) drop = 2;
+    const int axis0 = (drop + 1) % 3;
+    const int axis1 = (drop + 2) % 3;
+    const Real projected_start[2] = {start[axis0], start[axis1]};
+    const Real projected_end[2] = {end[axis0], end[axis1]};
+    const Real triangle[3][2] = {
+        {v0[axis0], v0[axis1]},
+        {v1[axis0], v1[axis1]},
+        {v2[axis0], v2[axis1]}};
+
+    Real first = std::numeric_limits<Real>::max();
+    for (int edge = 0; edge < 3; ++edge) {
+        Real candidate = Real(0.0);
+        if (projected_segment_edge_first_fraction(
+                projected_start, projected_end, triangle[edge],
+                triangle[(edge + 1) % 3], endpoint_tol, candidate)) {
+            first = amrex::min(first, candidate);
+        }
+    }
+
+    // A segment may begin inside the triangle and never cross an edge.  Probe
+    // just beyond the excluded endpoint rather than treating the endpoint
+    // itself as an obstruction.
+    const Real probe = amrex::max(
+        Real(2.0) * endpoint_tol,
+        Real(128.0) * std::numeric_limits<Real>::epsilon());
+    if (probe < Real(1.0) - endpoint_tol) {
+        const Real px = projected_start[0] +
+            probe * (projected_end[0] - projected_start[0]);
+        const Real py = projected_start[1] +
+            probe * (projected_end[1] - projected_start[1]);
+        if (point_in_projected_triangle(px, py, triangle)) {
+            first = amrex::min(first, probe);
+        }
+    }
+
+    if (first < std::numeric_limits<Real>::max()) {
+        fraction = first;
+        return true;
+    }
+    return false;
+}
+
+/// Moller-Trumbore intersection of an open finite segment and one triangle.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+bool segment_triangle_first_fraction (const Point& start, const Point& end,
+                                      const Point& v0, const Point& v1,
+                                      const Point& v2, Real endpoint_tol,
+                                      Real& fraction)
+{
+    const Vec direction{end[0] - start[0], end[1] - start[1],
+                        end[2] - start[2]};
+    const Vec edge1{v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]};
+    const Vec edge2{v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]};
+    const Vec pvec{direction[1] * edge2[2] - direction[2] * edge2[1],
+                   direction[2] * edge2[0] - direction[0] * edge2[2],
+                   direction[0] * edge2[1] - direction[1] * edge2[0]};
+    const Real determinant = edge1[0] * pvec[0] + edge1[1] * pvec[1] +
+                             edge1[2] * pvec[2];
+    const Real direction_norm = std::sqrt(
+        direction[0] * direction[0] + direction[1] * direction[1] +
+        direction[2] * direction[2]);
+    const Real edge1_norm = std::sqrt(
+        edge1[0] * edge1[0] + edge1[1] * edge1[1] + edge1[2] * edge1[2]);
+    const Real edge2_norm = std::sqrt(
+        edge2[0] * edge2[0] + edge2[1] * edge2[1] + edge2[2] * edge2[2]);
+    const Vec normal{edge1[1] * edge2[2] - edge1[2] * edge2[1],
+                     edge1[2] * edge2[0] - edge1[0] * edge2[2],
+                     edge1[0] * edge2[1] - edge1[1] * edge2[0]};
+    const Real normal_norm = std::sqrt(
+        normal[0] * normal[0] + normal[1] * normal[1] +
+        normal[2] * normal[2]);
+    if (!(normal_norm > IBM_EPS::GEOM *
+          amrex::max(edge1_norm, edge2_norm))) {
+        return false;
+    }
+    const Real determinant_tol = Real(64.0) *
+        std::numeric_limits<Real>::epsilon() * direction_norm *
+        edge1_norm * edge2_norm;
+    if (amrex::Math::abs(determinant) <= determinant_tol) {
+        const Vec from_plane{start[0] - v0[0], start[1] - v0[1],
+                             start[2] - v0[2]};
+        const Real signed_distance_numerator =
+            from_plane[0] * normal[0] + from_plane[1] * normal[1] +
+            from_plane[2] * normal[2];
+        const Real length_scale = amrex::max(
+            direction_norm, amrex::max(edge1_norm, edge2_norm));
+        constexpr Real minimum_length_scale = Real(1.0e-14);
+        const Real bounded_length_scale = length_scale > minimum_length_scale
+            ? length_scale
+            : minimum_length_scale;
+        const Real plane_tol = Real(128.0) *
+            std::numeric_limits<Real>::epsilon() * normal_norm *
+            bounded_length_scale;
+        if (amrex::Math::abs(signed_distance_numerator) > plane_tol) {
+            return false;
+        }
+        return coplanar_segment_triangle_first_fraction(
+            start, end, v0, v1, v2, normal, endpoint_tol, fraction);
+    }
+
+    const Real inverse = Real(1.0) / determinant;
+    const Vec tvec{start[0] - v0[0], start[1] - v0[1], start[2] - v0[2]};
+    const Real u = (tvec[0] * pvec[0] + tvec[1] * pvec[1] +
+                    tvec[2] * pvec[2]) * inverse;
+    const Real side_tol = Real(32.0) * std::numeric_limits<Real>::epsilon();
+    if (u < -side_tol || u > Real(1.0) + side_tol) return false;
+
+    const Vec qvec{tvec[1] * edge1[2] - tvec[2] * edge1[1],
+                   tvec[2] * edge1[0] - tvec[0] * edge1[2],
+                   tvec[0] * edge1[1] - tvec[1] * edge1[0]};
+    const Real v = (direction[0] * qvec[0] + direction[1] * qvec[1] +
+                    direction[2] * qvec[2]) * inverse;
+    if (v < -side_tol || u + v > Real(1.0) + side_tol) return false;
+
+    const Real t = (edge2[0] * qvec[0] + edge2[1] * qvec[1] +
+                    edge2[2] * qvec[2]) * inverse;
+    if (t > endpoint_tol && t < Real(1.0) - endpoint_tol) {
+        fraction = t;
+        return true;
+    }
+    return false;
+}
+#endif
+
 // ============================================================================
 // 3. LBVH — GPU-parallel BVH construction (Karras 2012)
 // ============================================================================
@@ -226,8 +579,12 @@ int delta (const uint32_t* codes, int n, int i, int j) {
 /// up to 4 child AABBs, sorts by distance, processes leaves inline, and
 /// pushes internal children far-to-near (LIFO → near popped first).
 struct BVH4QueryView {
+    static constexpr int QUERY_STACK_CAPACITY = 64;
+
     const BVH4Node* node4_arr = nullptr;
     int root4 = -1;
+    int n_prims = 0;
+    int required_stack = 0;
 
 #if (AMREX_SPACEDIM == 3)
     const Point*            verts     = nullptr;
@@ -244,9 +601,34 @@ struct BVH4QueryView {
         best.distance = std::numeric_limits<Real>::max();
         if (root4 < 0 || node4_arr == nullptr || verts == nullptr) return best;
 
-        // BVH4 halves tree depth → smaller stack suffices
-        constexpr int MAX_STACK = 64;
-        int stack[MAX_STACK];
+        // A pathological LBVH can be much deeper than a balanced tree.  The
+        // build records the exact worst-case DFS frontier; use a linear scan
+        // instead of silently dropping nodes if the fixed device stack is too
+        // small.  This fallback is initialization-only for IBM use.
+        if (required_stack > QUERY_STACK_CAPACITY) {
+            Real best_dist2 = std::numeric_limits<Real>::max();
+            for (int pid = 0; pid < n_prims; ++pid) {
+#if (AMREX_SPACEDIM == 3)
+                const auto& face = faces_arr[pid];
+                const Point candidate = closest_point_on_triangle(
+                    query, verts[face[0]], verts[face[1]], verts[face[2]]);
+#else
+                const Point candidate = closest_point_on_segment(
+                    query, verts[pid], verts[(pid + 1) % n_verts]);
+#endif
+                const Real distance2 = point_distance_sq(query, candidate);
+                if (closest_candidate_precedes(
+                        distance2, pid, best_dist2, best.prim_id)) {
+                    best_dist2 = distance2;
+                    best.point = candidate;
+                    best.prim_id = pid;
+                    best.distance = std::sqrt(distance2);
+                }
+            }
+            return best;
+        }
+
+        int stack[QUERY_STACK_CAPACITY];
         int top = 0;
         stack[top++] = root4;
         Real best_dist2 = std::numeric_limits<Real>::max();
@@ -276,7 +658,8 @@ struct BVH4QueryView {
             // Pass 1: process leaf children near-to-far (tightens bound early)
             for (int c = 0; c < nd.n_children; ++c) {
                 int ci = order[c];
-                if (dist[ci] >= best_dist2) break;
+                if (!closest_bound_can_improve(
+                        dist[ci], best_dist2, best.prim_id)) break;
                 if (!nd.child_is_leaf(ci)) continue;
                 int pid = nd.child_prim(ci);
 #if (AMREX_SPACEDIM == 3)
@@ -288,7 +671,8 @@ struct BVH4QueryView {
                     query, verts[pid], verts[(pid + 1) % n_verts]);
 #endif
                 Real d2 = point_distance_sq(query, cp);
-                if (d2 < best_dist2) {
+                if (closest_candidate_precedes(
+                        d2, pid, best_dist2, best.prim_id)) {
                     best_dist2    = d2;
                     best.point    = cp;
                     best.prim_id  = pid;
@@ -299,9 +683,117 @@ struct BVH4QueryView {
             // Pass 2: push internal children far-to-near (LIFO → near popped first)
             for (int c = nd.n_children - 1; c >= 0; --c) {
                 int ci = order[c];
-                if (dist[ci] >= best_dist2) continue;
+                if (!closest_bound_can_improve(
+                        dist[ci], best_dist2, best.prim_id)) continue;
                 if (nd.child_is_leaf(ci)) continue;
-                if (top < MAX_STACK) stack[top++] = nd.child_idx[ci];
+                stack[top++] = nd.child_idx[ci];
+            }
+        }
+        return best;
+    }
+
+    /// Find the first surface crossing on the open finite segment (start,end).
+    /// This is used by IBM interpolation visibility checks; unlike an
+    /// inside/outside ray cast it returns the owning primitive and cannot count
+    /// intersections beyond the candidate support point.
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    SegmentHitResult first_segment_hit (
+        const Point& start, const Point& end,
+        Real endpoint_tol = Real(1.0e-10)) const
+    {
+        SegmentHitResult best;
+        if (root4 < 0 || node4_arr == nullptr || verts == nullptr) return best;
+
+        Real segment_length2 = Real(0.0);
+        for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+            const Real delta = end[d] - start[d];
+            segment_length2 += delta * delta;
+        }
+        if (!(segment_length2 > IBM_EPS::GEOM * IBM_EPS::GEOM)) return best;
+
+        if (required_stack > QUERY_STACK_CAPACITY) {
+            for (int primitive = 0; primitive < n_prims; ++primitive) {
+                Real fraction = Real(0.0);
+#if (AMREX_SPACEDIM == 3)
+                const auto& face = faces_arr[primitive];
+                const bool intersects = segment_triangle_first_fraction(
+                    start, end, verts[face[0]], verts[face[1]],
+                    verts[face[2]], endpoint_tol, fraction);
+#else
+                const bool intersects = segment_edge_first_fraction(
+                    start, end, verts[primitive],
+                    verts[(primitive + 1) % n_verts], endpoint_tol, fraction);
+#endif
+                if (!intersects) continue;
+                const Real tie_tol = Real(64.0) *
+                    std::numeric_limits<Real>::epsilon();
+                const bool first = best.prim_id < 0;
+                const bool earlier = fraction < best.fraction - tie_tol;
+                const bool tied =
+                    amrex::Math::abs(fraction - best.fraction) <= tie_tol &&
+                    primitive < best.prim_id;
+                if (!(first || earlier || tied)) continue;
+                best.prim_id = primitive;
+                best.fraction = fraction;
+                for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+                    best.point[d] =
+                        start[d] + fraction * (end[d] - start[d]);
+                }
+            }
+            return best;
+        }
+
+        int stack[QUERY_STACK_CAPACITY];
+        int top = 0;
+        stack[top++] = root4;
+
+        while (top > 0) {
+            const int index = stack[--top];
+            const BVH4Node& node = node4_arr[index];
+            for (int child = 0; child < node.n_children; ++child) {
+                Real t_near = Real(0.0);
+                Real t_far = Real(1.0);
+                if (!segment_aabb_interval(
+                        start, end, node.child_box[child], t_near, t_far) ||
+                    t_near >= best.fraction) {
+                    continue;
+                }
+
+                if (!node.child_is_leaf(child)) {
+                    stack[top++] = node.child_idx[child];
+                    continue;
+                }
+
+                const int primitive = node.child_prim(child);
+                Real fraction = Real(0.0);
+#if (AMREX_SPACEDIM == 3)
+                const auto& face = faces_arr[primitive];
+                const bool intersects = segment_triangle_first_fraction(
+                    start, end, verts[face[0]], verts[face[1]], verts[face[2]],
+                    endpoint_tol, fraction);
+#else
+                const bool intersects = segment_edge_first_fraction(
+                    start, end, verts[primitive],
+                    verts[(primitive + 1) % n_verts], endpoint_tol, fraction);
+#endif
+                if (!intersects) continue;
+                // A ray through a polygon vertex or STL edge can hit two
+                // adjacent primitives at the same fraction.  Make the owner
+                // deterministic instead of depending on BVH traversal order.
+                const Real tie_tol = Real(64.0) *
+                    std::numeric_limits<Real>::epsilon();
+                const bool first = best.prim_id < 0;
+                const bool earlier = fraction < best.fraction - tie_tol;
+                const bool tied =
+                    amrex::Math::abs(fraction - best.fraction) <= tie_tol &&
+                    primitive < best.prim_id;
+                if (!(first || earlier || tied)) continue;
+                best.prim_id = primitive;
+                best.fraction = fraction;
+                for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+                    best.point[d] =
+                        start[d] + fraction * (end[d] - start[d]);
+                }
             }
         }
         return best;
@@ -339,7 +831,8 @@ struct BVHQueryView {
             int idx = stack[--top];
             const BVHNode& nd = node_arr[idx];
             Real box_dist2 = point_aabb_distance_sq(query, nd.box);
-            if (box_dist2 >= best_dist2) continue;
+            if (!closest_bound_can_improve(
+                    box_dist2, best_dist2, best.prim_id)) continue;
             if (nd.is_leaf()) {
 #if (AMREX_SPACEDIM == 3)
                 int fid = nd.prim_id;
@@ -352,7 +845,8 @@ struct BVHQueryView {
                     verts[eid], verts[(eid + 1) % n_verts]);
 #endif
                 Real d2 = point_distance_sq(query, cp);
-                if (d2 < best_dist2) {
+                if (closest_candidate_precedes(
+                        d2, nd.prim_id, best_dist2, best.prim_id)) {
                     best_dist2    = d2;
                     best.point    = cp;
                     best.prim_id  = nd.prim_id;
@@ -365,11 +859,19 @@ struct BVHQueryView {
                     Real d_left  = point_aabb_distance_sq(query, node_arr[left].box);
                     Real d_right = point_aabb_distance_sq(query, node_arr[right].box);
                     if (d_left < d_right) {
-                        if (d_right < best_dist2 && top < MAX_STACK) stack[top++] = right;
-                        if (d_left  < best_dist2 && top < MAX_STACK) stack[top++] = left;
+                        if (closest_bound_can_improve(
+                                d_right, best_dist2, best.prim_id) &&
+                            top < MAX_STACK) stack[top++] = right;
+                        if (closest_bound_can_improve(
+                                d_left, best_dist2, best.prim_id) &&
+                            top < MAX_STACK) stack[top++] = left;
                     } else {
-                        if (d_left  < best_dist2 && top < MAX_STACK) stack[top++] = left;
-                        if (d_right < best_dist2 && top < MAX_STACK) stack[top++] = right;
+                        if (closest_bound_can_improve(
+                                d_left, best_dist2, best.prim_id) &&
+                            top < MAX_STACK) stack[top++] = left;
+                        if (closest_bound_can_improve(
+                                d_right, best_dist2, best.prim_id) &&
+                            top < MAX_STACK) stack[top++] = right;
                     }
                 }
             }
@@ -393,6 +895,7 @@ struct BVH {
     int root      = -1;   ///< Root index in nodes[]
     int root4     = -1;   ///< Root index in nodes4[]
     int num_prims = 0;    ///< Number of leaf primitives
+    int required_query_stack = 0; ///< Exact unpruned BVH4 DFS frontier
 
     bool empty () const { return nodes.empty(); }
 
@@ -404,7 +907,12 @@ struct BVH {
     void build (const std::vector<AABB>& prim_boxes) {
         int n = static_cast<int>(prim_boxes.size());
         num_prims = n;
-        if (n == 0) { root = -1; root4 = -1; return; }
+        if (n == 0) {
+            root = -1;
+            root4 = -1;
+            required_query_stack = 0;
+            return;
+        }
         if (n == 1) {
             nodes.resize(1);
             nodes[0].box     = prim_boxes[0];
@@ -447,6 +955,8 @@ struct BVH {
         BVH4QueryView v;
         v.node4_arr = nodes4.data();
         v.root4     = root4;
+        v.n_prims   = num_prims;
+        v.required_stack = required_query_stack;
         v.verts     = mesh.vertices.data();
         v.faces_arr = mesh.faces.data();
         return v;
@@ -456,6 +966,8 @@ struct BVH {
         BVH4QueryView v;
         v.node4_arr = nodes4.data();
         v.root4     = root4;
+        v.n_prims   = num_prims;
+        v.required_stack = required_query_stack;
         v.verts     = poly.verts.data();
         v.n_verts   = static_cast<int>(poly.verts.size());
         return v;
@@ -702,7 +1214,11 @@ struct BVH {
     // of a binary node).  This halves tree depth and reduces stack usage.
 
     void collapse_to_bvh4 () {
-        if (nodes.empty()) { root4 = -1; return; }
+        if (nodes.empty()) {
+            root4 = -1;
+            required_query_stack = 0;
+            return;
+        }
 
         // Copy binary nodes to host vector — avoids managed-memory page
         // faults during the recursive traversal on CPU.
@@ -710,7 +1226,41 @@ struct BVH {
 
         std::vector<BVH4Node> tmp;
         tmp.reserve(num_prims);
-        root4 = collapse_node(root, tmp, h_nodes);
+        if (h_nodes[root].is_leaf()) {
+            tmp.push_back(BVH4Node{});
+            tmp[0].n_children = 1;
+            tmp[0].child_box[0] = h_nodes[root].box;
+            tmp[0].child_idx[0] =
+                BVH4Node::LEAF_FLAG | h_nodes[root].prim_id;
+            root4 = 0;
+        } else {
+            root4 = collapse_node(root, tmp, h_nodes);
+        }
+
+        // Exact worst-case frontier over every possible child-distance order.
+        // collapse_node allocates parents before children, so reverse index
+        // order is a post-order traversal.  For m internal children, one may
+        // be visited while the other m-1 remain pending.
+        std::vector<int> subtree_frontier(tmp.size(), 0);
+        for (int index = static_cast<int>(tmp.size()) - 1;
+             index >= 0; --index) {
+            const BVH4Node& node = tmp[index];
+            int internal_children = 0;
+            int largest_child_frontier = 0;
+            for (int child = 0; child < node.n_children; ++child) {
+                if (node.child_is_leaf(child)) continue;
+                ++internal_children;
+                largest_child_frontier = amrex::max(
+                    largest_child_frontier,
+                    subtree_frontier[node.child_idx[child]]);
+            }
+            subtree_frontier[index] = amrex::max(
+                internal_children,
+                internal_children > 0
+                    ? internal_children - 1 + largest_child_frontier
+                    : 0);
+        }
+        required_query_stack = amrex::max(1, subtree_frontier[root4]);
 
         nodes4.resize(tmp.size());
         std::copy(tmp.begin(), tmp.end(), nodes4.begin());

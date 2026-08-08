@@ -1,0 +1,43 @@
+# Smooth, time-dependent Cartesian MMS on a periodic square.
+max_step = 8
+stop_time = 1.0e-2
+time_step = 1.25e-3
+
+cns.order_rk = 3
+cns.stages_rk = 3
+cns.lo_bc = -1 -1
+cns.hi_bc = -1 -1
+cns.nstep_screen_output = 1000
+cns.verbose = 0
+cns.do_reflux = 0
+
+geometry.is_periodic = 1 1
+geometry.coord_sys = 0
+geometry.prob_lo = 0.0 0.0
+geometry.prob_hi = 1.0 1.0
+
+amr.n_cell = 16 16
+amr.max_level = 0
+amr.max_grid_size = 128
+amr.blocking_factor = 8
+amr.plot_files_output = 1
+amr.plot_file = output/plt
+amr.plot_int = 8
+amr.checkpoint_files_output = 0
+amr.v = 0
+
+prob.rho0 = 1.0
+prob.p0 = 1.0
+prob.u0 = 0.45
+prob.v0 = 0.30
+prob.rho_x_amp = 0.08
+prob.rho_y_amp = 0.05
+prob.u_x_amp = 0.07
+prob.u_y_amp = 0.06
+prob.v_x_amp = 0.05
+prob.v_y_amp = 0.04
+prob.p_x_amp = 0.07
+prob.p_y_amp = 0.06
+prob.omega = 1.0
+
+amrex.the_arena_is_managed = 0

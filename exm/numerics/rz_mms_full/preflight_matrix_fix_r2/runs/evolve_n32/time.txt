@@ -1,0 +1,23 @@
+	Command being timed: "/usr/bin/timeout --signal=TERM --kill-after=10s 600 /usr/bin/taskset --cpu-list 0 /usr/bin/orterun --mca pml ob1 --mca btl self,vader --mca mca_base_component_show_load_errors 0 --bind-to none -np 1 /home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/main2d.gnu.MPI.ex /home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/inputs amr.n_cell=32 32 cns.order_rk=3 cns.stages_rk=3 max_step=10000 stop_time=2.0e-2 amr.plot_int=100000 amr.plot_file=output/plt amr.checkpoint_files_output=0 cns.rz_euler_annular_average=1 cns.rz_euler_point_flux=1 cns.rz_euler_annular_pressure_consistency=1 cns.rz_pressure_split=0 cns.rz_wb_axis_ncell=0 cns.rz_wb_pressure_ncell=0 cns.rz_pressure_quad_ncell=0 cns.rz_axis_diss=0 cns.rz_euler_consistent_shock_hybrid=0 cns.rz_euler_consistent_shock_hybrid_v2=0 cns.rz_euler_point_flux_shock_gate=0 cns.rz_grid_aligned_shock_filter=0 cns.rz_grid_aligned_shock_transverse_only=0 cns.rz_grid_aligned_shock_flow_sign=0"
+	User time (seconds): 0.08
+	System time (seconds): 0.16
+	Percent of CPU this job got: 71%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.35
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 46336
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 31
+	Minor (reclaiming a frame) page faults: 5782
+	Voluntary context switches: 377
+	Involuntary context switches: 108
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 416
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

@@ -89,9 +89,30 @@ struct ibmparm_t {
 
 typedef closures_dt<indicies_t, transport_const_t<methodparm_t>,
                     calorifically_perfect_gas_t<indicies_t>> ProbClosures;
-// inviscid Euler (no_diffusive) + WENO-Z5 shock capture
+
+#ifndef NPR3_EULER_SCHEME_ID
+#define NPR3_EULER_SCHEME_ID 1
+#endif
+
+#if (NPR3_EULER_SCHEME_ID == 1)
 typedef rhs_dt<weno_t<ReconScheme::WenoZ5, ProbClosures>, no_diffusive_t,
                no_source_t> ProbRHS;
+inline constexpr const char* npr3_euler_scheme_name = "LLF-WENO-Z5";
+#elif (NPR3_EULER_SCHEME_ID == 2)
+typedef rhs_dt<weno_t<ReconScheme::Teno5, ProbClosures>, no_diffusive_t,
+               no_source_t> ProbRHS;
+inline constexpr const char* npr3_euler_scheme_name = "LLF-TENO5";
+#elif (NPR3_EULER_SCHEME_ID == 3)
+typedef rhs_dt<afd_hllc_wenoz5_t<ProbClosures>, no_diffusive_t,
+               no_source_t> ProbRHS;
+inline constexpr const char* npr3_euler_scheme_name = "AFD-HLLC-WENO-Z5";
+#elif (NPR3_EULER_SCHEME_ID == 4)
+typedef rhs_dt<afd_hllc_teno5_t<ProbClosures>, no_diffusive_t,
+               no_source_t> ProbRHS;
+inline constexpr const char* npr3_euler_scheme_name = "AFD-HLLC-TENO5";
+#else
+#error "Unsupported NPR3_EULER_SCHEME_ID"
+#endif
 
 template < typename param, typename cls_t > class ibm_user_t;
 typedef ibm_user_t<ProbParm, ProbClosures>             TypeWall;
@@ -102,7 +123,8 @@ inline void update_geometry(Real, Vector<GeomType>&, int) {}
 void inline inputs() {
   const Real NPR0 = (p_jet / p_amb) * std::pow(1.0 + 0.2 * 1.0, 3.5);
   const Real x_MD = 0.67 * std::sqrt(NPR0) * 2.0 * r_jet;
-  amrex::Print() << " ****** IBM-solid underexpanded jet (RZ), NPR0=" << NPR0 << " ******\n";
+  amrex::Print() << " ****** IBM-solid underexpanded jet (RZ), NPR0=" << NPR0
+                 << ", scheme=" << npr3_euler_scheme_name << " ******\n";
   amrex::Print() << "  jet(M=1): p_e=" << p_jet << " T_e=" << T_jet << " V=" << V_jet
                  << "  pe/pa=" << p_jet/p_amb << "  De=" << 2*r_jet*1000 << "mm\n";
   amrex::Print() << "  Ashkenas-Sherman x_MD = " << x_MD*1000 << " mm (x_MD/De="

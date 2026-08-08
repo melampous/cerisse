@@ -1,0 +1,200 @@
+{
+  "test1853_single_peripheral_surface_normal": {
+    "status": "PASS",
+    "description": "Parametric single peripheral nozzle with a forebody-tangent exit plane and local surface-normal axis",
+    "run_ids": [],
+    "mapping": "Q1 at theta=0 (+z), R=31.75 mm; jet points 20 deg outward from -x",
+    "quick_mesh": false,
+    "nozzles": [
+      {
+        "number": 1,
+        "geometry_key": "peripheral_nominal",
+        "placement_kind": "peripheral",
+        "orientation_kind": "surface_normal",
+        "theta_deg": 0.0,
+        "axis_radius_mm": 31.75,
+        "axis_y_mm": 0.0,
+        "axis_z_mm": 31.75,
+        "virtual_exit_center_mm": [
+          11.556054937951927,
+          0.0,
+          31.75
+        ],
+        "throat_center_mm": [
+          22.690718356510967,
+          0.0,
+          27.697313947071752
+        ],
+        "cutter_start_center_mm": [
+          -7.2377974777662395,
+          0.0,
+          38.59040286651338
+        ],
+        "axis_inward_unit": [
+          0.9396926207859083,
+          0.0,
+          -0.3420201433256688
+        ],
+        "jet_direction_unit": [
+          -0.9396926207859083,
+          -0.0,
+          0.3420201433256688
+        ],
+        "throat_plane_normal_solid_to_fluid": [
+          -0.9396926207859083,
+          -0.0,
+          0.3420201433256688
+        ],
+        "throat_radius_mm": 3.175,
+        "virtual_exit_radius_mm": 6.35,
+        "divergent_half_angle_deg": 15.0,
+        "virtual_exit_x_mm": 11.556054937951927,
+        "virtual_exit_y_mm": 0.0,
+        "virtual_exit_z_mm": 31.75,
+        "throat_x_mm": 22.690718356510967,
+        "throat_y_mm": 0.0,
+        "throat_z_mm": 27.697313947071752,
+        "upstream_extension_x_mm": -7.2377974777662395,
+        "upstream_extension_y_mm": 0.0,
+        "upstream_extension_z_mm": 38.59040286651338,
+        "upstream_extension_radius_mm": 11.708983848622454,
+        "divergent_length_mm": 11.849261314031185,
+        "expected_throat_area_mm2": 31.669217443593606,
+        "placement_status": "local_cone_tangent_exit_plane_surface_normal_axis"
+      }
+    ],
+    "occ": {
+      "solid_count": 1,
+      "surface_count": 7,
+      "volume_mm3": 3200335.1045017713,
+      "bounds_mm": [
+        [
+          1.63011542088817,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "expected_bounds_mm": [
+        [
+          1.6301154208881705,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_error_mm": 0.0,
+      "throat_surface_tags": {
+        "1": 6
+      }
+    },
+    "cad_file_bytes": {
+      "brep": 655286,
+      "step": 66166
+    },
+    "mesh": {
+      "closed_solid": {
+        "path": "geometry/test1853/outputs/single_peripheral_surface_normal_build/stl/test1853_single_peripheral_surface_normal.stl",
+        "bytes": 17654084,
+        "triangles": 353080,
+        "area_mm2": 123980.97422924242
+      },
+      "body_wall_open": {
+        "path": "geometry/test1853/outputs/single_peripheral_surface_normal_build/patches/test1853_single_peripheral_surface_normal/body_wall_excluding_throat_caps.stl",
+        "bytes": 17629784,
+        "triangles": 352594,
+        "area_mm2": 123949.38829605244
+      },
+      "throat_caps": {
+        "1": {
+          "path": "geometry/test1853/outputs/single_peripheral_surface_normal_build/patches/test1853_single_peripheral_surface_normal/nozzle_1_throat_cap.stl",
+          "bytes": 24384,
+          "triangles": 486,
+          "area_mm2": 31.585933189979094,
+          "occ_surface_tag": 6,
+          "cad_area_mm2": 31.669217443593652,
+          "expected_as_built_area_mm2": 31.669217443593606,
+          "cad_area_relative_error": 1.4583649850732063e-15,
+          "mesh_area_relative_error": 0.0026298172274970178
+        }
+      },
+      "chord_error": {
+        "sample_count": 1412320,
+        "max_mm": 0.014863964659947037,
+        "rms_mm": 0.002206387966439075,
+        "sample_scheme": "all triangle edge midpoints and centroids projected to source OCC surface"
+      }
+    },
+    "reference_outputs": {
+      "virtual_exit_disks": [
+        "geometry/test1853/outputs/single_peripheral_surface_normal_build/reference/test1853_single_peripheral_surface_normal/nozzle_1_virtual_exit_REFERENCE_ONLY.stl"
+      ],
+      "lip_csv": "geometry/test1853/outputs/single_peripheral_surface_normal_build/reference/test1853_single_peripheral_surface_normal/physical_lip_reconstruction.csv",
+      "lip_rows": 360,
+      "warning": "virtual-exit disks are reference planes, not peripheral physical openings; surface-normal physical lips remain Boolean passage/OML intersections"
+    },
+    "stl_validation": {
+      "vertices": 176542,
+      "triangles": 353080,
+      "watertight": true,
+      "winding_consistent": true,
+      "is_volume": true,
+      "body_count": 1,
+      "volume_mm3": 3199986.0540539417,
+      "bounds_mm": [
+        [
+          1.6301153898239136,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13763427734375,
+          63.5,
+          63.5
+        ]
+      ]
+    },
+    "step_reimport": {
+      "solid_count": 1,
+      "bounds_mm": [
+        [
+          1.630115420888,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_difference_mm": 1.7008616737257398e-13
+    },
+    "brep_reimport": {
+      "solid_count": 1,
+      "bounds_mm": [
+        [
+          1.63011542088817,
+          -63.5,
+          -63.5
+        ],
+        [
+          268.13764,
+          63.5,
+          63.5
+        ]
+      ],
+      "max_bounds_difference_mm": 0.0
+    },
+    "parameter_file_sha256": "2ebfe29a914a5b97dcc15749460e306a9d221793774659f6b905bdea1b6c8f9d",
+    "builder_sha256": "d29898bbed852d75de049881025983fdb51e34e64718c7f720fc35cefd50e32e"
+  }
+}

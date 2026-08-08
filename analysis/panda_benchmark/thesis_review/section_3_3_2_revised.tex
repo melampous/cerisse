@@ -1,0 +1,182 @@
+% ============================================================================
+% §3.3.2 "Nozzle exit profiles" — REVISED v2 (2026-07-22, after user review).
+% Drop-in replacement for 04_cases_and_diagnostics.tex lines 170–322.
+% Scope tightened to what De/256 supports: sensitivity study, not mechanism
+% separation; no local-gradient/instability claims; velocity-based measures
+% qualified; C_M = convective momentum-flux coefficient; discrete audit now
+% quoted ON the comparison grid De/256 (convention validated against the
+% logged D/8 and D/512 hole audits). Change log: section_3_3_2_review_notes.md
+% ============================================================================
+\subsection{Nozzle exit profiles}
+\label{subsec:uej-inlet-profiles}
+
+A finite-thickness velocity profile is prescribed at the nozzle exit as the
+primary inlet condition. Within the nozzle orifice, the axial velocity
+is defined by the shifted hyperbolic tangent function
+\begin{equation}
+    f(r)=\frac{1}{2}
+    \left[1-\tanh\left(\frac{r-r_0}{\delta}\right)\right],
+    \qquad r_0=R_e-3\delta,
+    \label{eq:uej-tanh-profile}
+\end{equation}
+where \(R_e=D_e/2\) and \(\delta=0.01D_e=\SI{254}{\micro\meter}\). The
+velocity is prescribed as \(u_x(r)=u_e f(r)\), with zero transverse
+components. Locating the centre of the transition at \(R_e-3\delta\) reduces
+the axial velocity to approximately \(0.0025u_e\) at the orifice edge.
+
+The static pressure is uniform across the orifice, and the temperature and
+density follow from a constant total temperature:
+\[
+    p(r)=p_e,
+    \qquad
+    T(r)=T_0-\frac{u_x^2(r)}{2c_p},
+    \qquad
+    \rho(r)=\frac{p_e}{R\,T(r)},
+\]
+so the radial variations in temperature and density are determined by
+\(f(r)\), while the static pressure remains uniform. The resulting effective
+discharge coefficient,
+\(C_{d,\mathrm{eff}}=\dot m/(\rho_e u_e\pi R_e^2)\simeq0.879\), is a
+property of the prescribed profile, not an experimentally measured discharge
+coefficient. The profile is applied only for \(r<R_e\); the remainder of the
+upstream boundary is specified in \S\ref{subsec:uej-computational-setup}.
+
+The sensitivity of the computed near field to the prescribed nozzle-exit
+velocity profile is assessed using the baseline profile and three additional
+cases. The comparison examines how the mean shock-cell structure varies with
+the prescribed profile shape, nominal shear-layer thickness, and integral
+mass and convective momentum fluxes. Since several profile properties vary
+simultaneously, the cases are treated as a sensitivity study rather than as a
+strict separation of the underlying mechanisms.
+
+The first additional case uses a top-hat profile, \(f_{\mathrm{TH}}=1\) for
+\(r<R_e\) and zero otherwise, representing the idealised limit of an abrupt
+velocity change at the nozzle lip; its continuous analytic
+\(C_{d,\mathrm{eff}}\) is unity. The second case belongs to the shifted-tanh
+family of Eq.~\eqref{eq:uej-tanh-profile} with
+\(\delta=\SI{100}{\micro\meter}\) (\(\delta/D_e\simeq0.004\)). The third
+case places the maximum velocity gradient at the nozzle lip:
+\begin{equation}
+    f_{\mathrm{WT}}(r)
+    =\tanh\left(\frac{R_e-r}{a}\right),
+    \qquad a=\SI{200}{\micro\meter}.
+    \label{eq:uej-wall-tanh-profile}
+\end{equation}
+
+The prescribed profiles are characterised by their vorticity thickness,
+half-velocity location, \SI{99}{\percent} thickness, velocity-profile
+integral measures, and flux coefficients. Here,
+\(\Delta U=u_e-u_\infty=u_e\) for the nominally quiescent ambient, while
+\(y_{50}\) and \(\delta_{99}\) are measured inward from the nozzle lip.
+The profile measures used here are defined by
+\begin{subequations}
+\label{eq:uej-profile-measures}
+\begin{gather}
+    \delta_\omega
+    =\frac{\Delta U}{\max\lvert\partial u_x/\partial r\rvert},
+    \\[0.25em]
+    \begin{aligned}
+    f(R_e-y_{50})&=\frac{1}{2},
+    &\qquad
+    f(R_e-\delta_{99})&=0.99,
+    \end{aligned}
+    \\[0.25em]
+    \begin{aligned}
+    \delta^*
+    &=\int_0^{R_e}\left[1-f(r)\right]\,\mathrm{d}r,
+    &\qquad
+    \theta_0
+    &=\int_0^{R_e}f(r)\left[1-f(r)\right]\,\mathrm{d}r,
+    \end{aligned}
+    \\[0.25em]
+    H=\frac{\delta^*}{\theta_0},
+    \\[0.25em]
+    C_M=\frac{\displaystyle\int_{A_e}\rho u_x^2\,\mathrm{d}A}
+             {\rho_e u_e^2\pi R_e^2}.
+\end{gather}
+\end{subequations}
+The quantities \(\delta^*\), \(\theta_0\), and \(H\) are
+velocity-profile measures evaluated using locally planar definitions. They
+include neither density weighting nor the cylindrical area factor \(2\pi r\)
+and are used only to characterise the imposed profile shapes. The coefficient
+\(C_M\) is the normalised axial convective momentum-flux coefficient. It
+excludes the exit-pressure and viscous contributions to thrust. Since the
+same exit pressure is imposed in all four cases, it provides a consistent
+measure of their profile-dependent convective momentum flux. Analytically,
+\(\theta_0\simeq\delta/2\) for the shifted-tanh family and
+\(\theta_0=a(1-\ln 2)\simeq0.31a\) for the wall-tanh profile.
+
+The thin shifted-tanh and wall-tanh profiles are matched in their nominal
+analytic vorticity thickness,
+\(\delta_\omega=\SI{200}{\micro\meter}\), and have nearly identical
+\(\delta_{99}\simeq\SI{530}{\micro\meter}\). Their gradient locations,
+integral thicknesses, shape factors, and flux coefficients nevertheless
+differ. Similar mean shock-cell measures for the pair would be consistent
+with sensitivity to their common nominal thickness scale, whereas trends
+ordered by \(C_{d,\mathrm{eff}}\) or \(C_M\) across the four profiles would
+be consistent with sensitivity to the integral flux deficit. Neither
+comparison identifies a unique causal mechanism because the complete profile
+shapes remain different. The tabulated quantities are analytic properties of
+the imposed profiles; the evolved shear layer is not assumed to retain them.
+
+\begin{table}[H]
+\centering
+\caption{Velocity-profile measures and integrated flux coefficients of the
+four nozzle exit profiles used in the sensitivity study. Values are analytic
+properties of the imposed profiles; \(C_M\) is the normalised axial
+convective momentum-flux coefficient.}
+\label{tab:uej-exit-profile-integrals}
+\small
+\setlength{\tabcolsep}{4.2pt}
+\renewcommand{\arraystretch}{1.16}
+\begin{tabular}{@{}ccccccccc@{}}
+\toprule
+\multirow[c]{2}{*}{Profile} &
+\multirow[c]{2}{*}{\shortstack{Scale\\(\si{\micro\meter})}} &
+\multicolumn{4}{c}{Thickness measures (\si{\micro\meter})} &
+\multirow[c]{2}{*}{\(H\)} &
+\multicolumn{2}{c}{Integrated flux coefficients} \\
+\cmidrule(lr){3-6}\cmidrule(lr){8-9}
+& & \(\delta_\omega\) & \(y_{50}\) & \(\delta^*\) & \(\theta_0\) &
+& \(C_{d,\mathrm{eff}}\) & \(C_M\) \\
+\midrule
+Top hat & -- & -- & -- & 0 & 0 & -- & 1.0000 & 1.0000 \\
+Wall tanh & \(a=200\) & 200 & 110 & 139 & 61 & 2.26 & 0.9755 & 0.9669 \\
+Shifted tanh (thin) & \(\delta=100\) & 200 & 300 & 300 & 50 & 6.02 & 0.9513 & 0.9445 \\
+Shifted tanh (baseline) & \(\delta=254\) & 508 & 762 & 762 & 127 & 6.02 & 0.8789 & 0.8623 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Figure~\ref{fig:uej-profiles-overview} compares the
+four profiles in Table~\ref{tab:uej-exit-profile-integrals} with two additional
+profile shapes used in the separate shear-layer comparisons of
+\S\ref{sec:uej-profile-sensitivity}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{profiles_overview.pdf}
+    \caption[Nozzle exit velocity profiles]{Nozzle exit velocity profiles used
+    for the inlet sensitivity calculations. The first two panels show all six
+    profiles over the full radius and near the nozzle lip; the third shows the
+    finite radial gradients of the four smooth profiles with nonsingular lip
+    gradients. The Pohlhausen--Blasius and one-seventh-power profiles are used
+    only in the separate profile-shape comparisons of
+    \S\ref{sec:uej-profile-sensitivity}.}
+    \label{fig:uej-profiles-overview}
+\end{figure}
+
+The four-profile calculations use
+\(\Delta x=D_e/256=\SI{99.2}{\micro\meter}\). At this spacing, the nominal
+\(\delta_\omega=\SI{200}{\micro\meter}\) spans only about two cells and
+\(\delta_{99}\) about five cells. Cell-centred quadrature on the comparison
+grid reproduces the orifice area and the analytic
+\(C_{d,\mathrm{eff}}\) and \(C_M\) values of all four profiles to within
+\SI{0.008}{\percent}. For the three finite-thickness profiles, both flux
+coefficients agree with their analytic values to within
+\SI{0.001}{\percent}; on a \(D_e/512\) grid, the corresponding errors do not
+exceed \SI{0.003}{\percent}. Although the integrated fluxes are accurately
+represented, the local velocity gradients and their instability development
+are not sufficiently resolved for quantitative assessment. Conclusions are
+therefore restricted to the sensitivity of the mean shock-cell system to the
+discretely imposed exit profiles.

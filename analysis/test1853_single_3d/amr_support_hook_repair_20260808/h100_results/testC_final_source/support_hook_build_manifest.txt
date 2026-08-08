@@ -1,0 +1,14 @@
+built_utc=2026-08-08T11:53:50Z
+host=ip-10-0-135-55.us-east-2.compute.internal
+cuda_release=V12.6.77
+cuda_arch=90
+amr_solver=/shared/cerisse_local_0808_support_hook
+method=pure_shared_gp_full_cartesian
+cut_control=disabled
+support_hook_dispatch=automatic
+legacy_support_cap_macro=absent
+5c23101ec5ab55f175c827f67b883dd3214831ad7728987820c1785b24d1cd3d  /shared/cerisse_local_0808_support_hook/src/CNS.cpp
+4b4ab70c089297a4296b865b0d330957fd10266921620979ca64d9eb1b313e8b  GNUmakefile
+e7d0dbf2aa6613f2877af587531ff4eec8389602d5f89b763fe5ffd43c9d6864  prob.h
+9659136e1277bcaf6d7da08fdcbb55881b6f4f2000045b95dca5f5e9c185b5b0  inputs.run165
+f433b965e52436654e973fc69eb5bb07290512743e9cb6ed61fc52d825dceec1  main3d.gnu.TPROF.MPI.CUDA.ex

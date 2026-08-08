@@ -1,0 +1,45 @@
+{
+  "test": "testF_thermodynamic_prolongation",
+  "started_utc": "2026-08-08T02:36:59Z",
+  "finished_utc": "2026-08-08T02:38:01Z",
+  "exit_status": 0,
+  "restart": "testB_normal_regrid/chk03059",
+  "target_max_step": 3061,
+  "executable_sha256": "90a733b431a9a27782862877ee29f3aa8025910c8571032ff0c4cc077f131a5d",
+  "build": {
+    "host": "ip-10-0-141-49.us-east-2.compute.internal",
+    "cuda_release": "12.6",
+    "cuda_arch": 90,
+    "amr_solver": "/shared/cerisse_local_0808_thermodynamic_prolongation"
+  },
+  "method": "pure_shared_gp_full_cartesian",
+  "cut_control": "disabled",
+  "prolongation_floors": {
+    "density_kg_m3": 1e-19,
+    "internal_energy_density_J_m3": 2.5e-08,
+    "specific_internal_energy_J_kg": 7177.540244
+  },
+  "regrid": {
+    "coarse_step": 3059,
+    "level_1_valid_cells": 7326208,
+    "level_1_old_overlap_cells": 7263744,
+    "level_1_new_from_coarse_cells": 62464,
+    "level_2_valid_cells": 22436864,
+    "level_2_new_from_coarse_cells": 22436864
+  },
+  "advance": {
+    "coarse_steps_completed": [3060, 3061],
+    "level_0_updates_completed": 2,
+    "level_1_updates_completed": 4,
+    "level_2_updates_completed": 8,
+    "first_coarse_dt_s": 2.232957255e-08,
+    "second_coarse_dt_s": 2.232986985e-08
+  },
+  "strict_positivity": true,
+  "preflux_euler_failure": false,
+  "poststep_closure_floor_failure": false,
+  "nonfinite_or_signal_failure": false,
+  "verdict": "frozen_regrid_and_two_normal_cfl_steps_passed_with_thermodynamic_floor",
+  "scope_limit": "This closes the deterministic chk03059 regrid failure gate only; no long continuation was run.",
+  "preflight_note": "An initial compile referenced the stale admissible-prolongation tree through a hard-coded GNUmakefile path. It was rejected before any CFD run; the final build was cleaned, rebuilt from the thermodynamic-prolongation tree, and guarded against stale-path references."
+}

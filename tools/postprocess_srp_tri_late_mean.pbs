@@ -1,0 +1,36 @@
+#!/bin/bash
+#PBS -N srp_tri_mean
+#PBS -q cx
+#PBS -l walltime=02:00:00
+#PBS -l select=1:ncpus=1:mem=16gb
+#PBS -j oe
+
+set -euo pipefail
+
+CASE=/rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2
+ROOT=${CASE}/post_latest_plt09000/bowshock_safe_mean
+OUT=${ROOT}/late_mean
+MODE=${MODE:-all}
+WORKER_INDEX=${WORKER_INDEX:-${PBS_ARRAY_INDEX:-0}}
+WORKER_COUNT=${WORKER_COUNT:-1}
+
+export MPLCONFIGDIR=${TMPDIR:-/tmp}/mpl-srp-mean-${PBS_JOBID}
+mkdir -p "${MPLCONFIGDIR}" "${OUT}" "${OUT}/logs"
+
+date -u
+hostname
+module load tools/prod yt/4.3.0-foss-2022a
+python3 "${CASE}/postprocess_srp_tri_late_mean.py" \
+  --mode "${MODE}" \
+  --plot-root "${CASE}/plot" \
+  --output-dir "${OUT}" \
+  --worker-index "${WORKER_INDEX}" \
+  --worker-count "${WORKER_COUNT}" \
+  --steps 6000 6500 7000 7500 8000 8500 9000 \
+  --axial-crop 0.01 0.60 \
+  --transverse-crop -0.02 0.57 \
+  --schlieren-gref 72.18947715759369 \
+  --schlieren-k 4.0 \
+  --paper-dpi 600 \
+  2>&1 | tee "${OUT}/logs/${MODE}_${WORKER_INDEX}_${PBS_JOBID}.log"
+date -u

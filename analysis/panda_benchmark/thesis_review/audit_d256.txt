@@ -1,0 +1,10 @@
+Discrete inflow quadrature audit (cell-centred, solver convention validated
+against logged hole audits: D/8 A/piR2=1.034507[log 1.03450713], D/512
+A/piR2=1.000022[log 1.000022264]; Cd at D/512 matches logs to all printed digits).
+Constants: De=25.4mm, ue=315.485, T0=297.15, pe=172548.5 Pa, R=287.08, cp=1004.8.
+
+grid    A/piR2 err   Cd err (th/wt/thin/base)          CM err (th/wt/thin/base)
+D/8     +3.4507%     +3.45/+5.94/+8.70/+2.99 %         +3.45/+6.81/+9.45/+2.11 %
+D/256   -0.0075%     -0.0075/+0.0007/-0.0000/-0.0000 % -0.0075/-0.0001/+0.0000/-0.0000 %
+D/512   +0.0022%     +0.0023/+0.0001/+0.0000/+0.0000 % +0.0023/-0.0000/+0.0000/+0.0000 %
+Analytic: Cd = 1.0000/0.9755/0.9513/0.8789 ; CM = 1.0000/0.9669/0.9445/0.8623

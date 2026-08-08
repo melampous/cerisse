@@ -1,0 +1,16 @@
+{
+  "created_utc": "2026-07-30T23:02:30.816724+00:00",
+  "binary": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/main2d.gnu.ex",
+  "binary_sha256": "dc1f35f4d04d77820c3e4ec74d9c24b6cb21018f5a0e95a0e295cc0e6c0aa157",
+  "inputs": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_mms_full/inputs",
+  "inputs_sha256": "84ce286d2a8c1ae67c2a8355934d62487c40277f307ab59f4512c11c7925ea5d",
+  "analysis_sha256": "6324857464453b6dc7b5a35a7448b2a8d1f550d86e02a360e20ffeb54b7d7351",
+  "grids": [
+    16,
+    32,
+    64,
+    128
+  ],
+  "execution": "serial, OMP_NUM_THREADS=1",
+  "method": "current production R-Z source/flux pair"
+}

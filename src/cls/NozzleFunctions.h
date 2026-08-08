@@ -2,8 +2,6 @@
 #define NOZZLEFUNCTIONS_H
 
 #include <cmath>
-#include <array>
-#include <numbers>
 
 using namespace amrex;
 
@@ -83,32 +81,6 @@ namespace nozzle_functions {
     if (Mach < 0.0) return 0.0;
     const Real factor = 1.0 + 0.5 * (gamma - 1.0) * Mach * Mach;
     return P0 * std::pow(factor, -gamma / (gamma - 1.0));
-  }
-
-  // Nozzle-exit location on a sphere-cone geometry.
-  // Returns {x, y, z} in the body-fixed frame given:
-  //   factor_y        : fractional radial position on cone surface
-  //   theta_nz_deg    : azimuthal nozzle angle [degrees]
-  //   radius_cone     : base radius of the cone
-  //   theta_cone_deg  : half-angle of the cone [degrees]
-  //   R_nozzle_exit   : non-dimensional nozzle-exit radius (relative to radius_cone)
-  static inline std::array<Real, 3> compute_srp_xyz(
-      Real factor_y, Real theta_nz_deg,
-      Real radius_cone, Real theta_cone_deg, Real R_nozzle_exit)
-  {
-    const Real pi = std::numbers::pi;
-    const Real theta_cone = theta_cone_deg * (pi / 180.0);
-    const Real theta_nz   = theta_nz_deg   * (pi / 180.0);
-
-    const Real h_cone = radius_cone / std::tan(theta_cone);
-    const Real x0     = h_cone * R_nozzle_exit / radius_cone - h_cone;
-    const Real y0     = factor_y * radius_cone;
-
-    const Real x = x0 + y0 / std::tan(theta_cone);
-    const Real y = y0 * std::cos(theta_nz);
-    const Real z = y0 * std::sin(theta_nz);
-
-    return {x, y, z};
   }
 
 } // namespace nozzle_functions

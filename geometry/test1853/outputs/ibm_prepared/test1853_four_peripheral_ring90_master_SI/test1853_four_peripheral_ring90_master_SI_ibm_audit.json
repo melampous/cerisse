@@ -1,0 +1,55 @@
+{
+  "file": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_four_peripheral_ring90_master_SI/test1853_four_peripheral_ring90_master_SI.stl",
+  "kind": "stl",
+  "sha256": "3617d8bf1a5cda41139ccc6624915be5f7bbb216bdd6ded31b4858111601d941",
+  "triangles": 365008,
+  "unique_vertices": 182506,
+  "bounds_lo": [
+    0.00163011543918401,
+    -0.06350000202655792,
+    -0.06350000202655792
+  ],
+  "bounds_hi": [
+    0.2681376338005066,
+    0.06350000202655792,
+    0.06350000202655792
+  ],
+  "weld_tolerance": 1e-07,
+  "edge_length": {
+    "min": 0.00024887414739481847,
+    "mean": 0.0006738612825282953,
+    "max": 0.0028636496872555834
+  },
+  "area": 0.12477397280138067,
+  "signed_volume": 0.003197327130578048,
+  "normal_closure": [
+    -1.6230506522108001e-16,
+    -1.9989977555201488e-19,
+    -7.809643773684649e-19
+  ],
+  "normal_closure_relative": 1.300808682706238e-15,
+  "degenerate_facets": 0,
+  "weld_collapsed_facets": 0,
+  "boundary_edges": 0,
+  "nonmanifold_edges": 0,
+  "inconsistent_edges": 0,
+  "duplicate_facets": 0,
+  "connected_components": 1,
+  "zero_stored_normals": 0,
+  "mismatched_stored_normals": 0,
+  "reversed_stored_normals": 0,
+  "fluid_spacing_ratios": [
+    {
+      "dx": 0.0010909090909,
+      "max_edge_over_dx": 2.6250122133394935
+    },
+    {
+      "dx": 0.00054545454545,
+      "max_edge_over_dx": 5.250024426678987
+    }
+  ],
+  "self_intersection_checked": false,
+  "warnings": [],
+  "failures": [],
+  "passed": true
+}

@@ -1,0 +1,17 @@
+started_utc=2026-08-08T10:00:39Z
+host=ip-10-0-141-49.us-east-2.compute.internal
+run_class=deterministic_pre_failure_energy_history
+restart=/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_llfdiag_3way_20260808/testG_thermodynamic_continuation/output/run165/chk03300
+target_max_step=3366
+plot_interval=10
+checkpoint_interval=60
+strict_positivity=1
+soft_positivity=0
+method=pure_shared_gp_full_cartesian
+cut_control=disabled
+90a733b431a9a27782862877ee29f3aa8025910c8571032ff0c4cc077f131a5d  main3d.gnu.TPROF.MPI.CUDA.ex
+9659136e1277bcaf6d7da08fdcbb55881b6f4f2000045b95dca5f5e9c185b5b0  inputs.run165
+e7d0dbf2aa6613f2877af587531ff4eec8389602d5f89b763fe5ffd43c9d6864  prob.h
+09c1625881e34cffd0b14a9800cab24fe783d4eb697f37bfa00289e953c25890  /shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_llfdiag_3way_20260808/testG_thermodynamic_continuation/output/run165/chk03300/Header
+final_step=3366
+finished_utc=2026-08-08T10:31:20Z

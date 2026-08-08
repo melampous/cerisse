@@ -1,0 +1,130 @@
+{
+  "status": "PASS",
+  "units": "m",
+  "configuration": "single_surface_normal",
+  "source_model": "test1853_single_peripheral_surface_normal",
+  "parameter_file_sha256": "2ebfe29a914a5b97dcc15749460e306a9d221793774659f6b905bdea1b6c8f9d",
+  "preparer_sha256": "13ea82be5c10d9009c1aa6c0ea0686ffb586fcab6ce9bc3957b8e964f97ae2a5",
+  "source_input_stl": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/single_peripheral_surface_normal_build/stl/test1853_single_peripheral_surface_normal.stl",
+  "source_input_units_and_frame": "mm in the NASA TSP body frame",
+  "run": null,
+  "run_conditions": null,
+  "roll_deg": 0.0,
+  "tsp_world_m": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "body_to_world_matrix_mm_input_to_m_world": [
+    [
+      0.001,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.001,
+      -0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.001,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "closed_ibm_stl": {
+    "source": "outputs/single_peripheral_surface_normal_build/stl/test1853_single_peripheral_surface_normal.stl",
+    "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_single_peripheral_surface_normal_master_SI/test1853_single_peripheral_surface_normal_master_SI.stl",
+    "source_sha256": "d471de5c53c3d645266e040b6aec2ac23c88e05ad8950b14c3b7eeb0aec41bd5",
+    "destination_sha256": "27721e3dc66794d990834878beee2b1967291f243b60b2cbb0090aad1e0ee24e",
+    "triangles": 353080,
+    "bounds_m": [
+      [
+        0.00163011543918401,
+        -0.06350000202655792,
+        -0.06350000202655792
+      ],
+      [
+        0.2681376338005066,
+        0.06350000202655792,
+        0.06350000202655792
+      ]
+    ],
+    "watertight": true,
+    "winding_consistent": true,
+    "is_volume": true
+  },
+  "patches": {
+    "body_wall_excluding_throat_caps.stl": {
+      "source": "outputs/single_peripheral_surface_normal_build/patches/test1853_single_peripheral_surface_normal/body_wall_excluding_throat_caps.stl",
+      "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_single_peripheral_surface_normal_master_SI/patches/body_wall_excluding_throat_caps.stl",
+      "source_sha256": "daffc6e8c7789c04faab5c619d0e7661fd1d24ec0fd3a999b083a1e9078292c7",
+      "destination_sha256": "97319045c750f5dc6a7d390bc865d1080ce5468749fec6c4c699232ece7ea076",
+      "triangles": 352594,
+      "bounds_m": [
+        [
+          0.00163011543918401,
+          -0.06350000202655792,
+          -0.06350000202655792
+        ],
+        [
+          0.2681376338005066,
+          0.06350000202655792,
+          0.06350000202655792
+        ]
+      ],
+      "watertight": false,
+      "winding_consistent": true,
+      "is_volume": false
+    },
+    "nozzle_1_throat_cap.stl": {
+      "source": "outputs/single_peripheral_surface_normal_build/patches/test1853_single_peripheral_surface_normal/nozzle_1_throat_cap.stl",
+      "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_single_peripheral_surface_normal_master_SI/patches/nozzle_1_throat_cap.stl",
+      "source_sha256": "6d0d420c9e10a738de666d9b995ae734b0801657d3dd75c8a391f24d8b4a0051",
+      "destination_sha256": "3547cebb73db10eb0977c8b4e5023d478e64413d26f646e006561df3da49f6a1",
+      "triangles": 486,
+      "bounds_m": [
+        [
+          0.021604804322123528,
+          -0.003168734721839428,
+          0.02471378818154335
+        ],
+        [
+          0.02377663180232048,
+          0.003168734721839428,
+          0.030680837109684944
+        ]
+      ],
+      "watertight": false,
+      "winding_consistent": true,
+      "is_volume": false
+    }
+  },
+  "active_nozzle_throats": [
+    {
+      "number": 1,
+      "throat_center_world_m": [
+        0.02269071835651097,
+        0.0,
+        0.027697313947071752
+      ],
+      "throat_radius_m": 0.003175,
+      "throat_plane_normal_solid_to_fluid_world": [
+        -0.9396926207859084,
+        0.0,
+        0.3420201433256689
+      ],
+      "selection_rule": "abs(dot(x-center,normal))<=epsilon AND norm((x-center)-dot(x-center,normal)*normal)<=Rt+epsilon; do not use a 3-D sphere alone"
+    }
+  ],
+  "important": "Cerisse static IBM reads raw STL coordinates with identity transform; use this prepared file, not the millimetre master, in an SI-metre domain. For a custom high-resolution STL, pass it explicitly with --input-stl and verify closed_ibm_stl.source_sha256."
+}

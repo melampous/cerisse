@@ -1,0 +1,11 @@
+{
+  "all_metrics_finite": true,
+  "initial_cell_averages_match_oracle": true,
+  "all_evolution_runs_reach_target_time": true,
+  "density_and_pressure_remain_positive": true,
+  "azimuthal_momentum_remains_zero": true,
+  "rhs_errors_decrease": true,
+  "rhs_asymptotic_order_is_at_least_1p7": true,
+  "evolution_errors_decrease": true,
+  "evolution_asymptotic_order_is_at_least_1p7": true
+}

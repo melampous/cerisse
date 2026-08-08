@@ -7,10 +7,10 @@
 #include <AMReX_Math.H>
 #include <AMReX_REAL.H>
 
-// Time-evolved ghost-cell NSCBC/LODI kernel.  The formulation follows the
-// persistent ghost-state architecture on Salvador's nscbc branch, with a
-// corrected entropy characteristic and an explicit projected transverse term
-// in the incoming acoustic amplitude.
+// Characteristic-boundary helpers shared by two opt-in implementations: the
+// historical time-evolved ghost-state NSCBC/LODI model and the stage-local
+// Giles/GC-NSCBC outflow model.  The latter is restricted and validated
+// independently; selecting it does not alter the historical model.
 namespace nscbc {
 
 static constexpr int LMINUS = 0;
@@ -19,6 +19,21 @@ static constexpr int LTAN1  = 2;
 static constexpr int LTAN2  = 3;
 static constexpr int LPLUS  = 4;
 static constexpr int LSP    = 5;
+
+// The historical projected-NSCBC closure is retained for reproducibility.
+// Giles' second-order two-dimensional outflow is a separate opt-in model;
+// unlike an empirical transverse relaxation, it follows Eq. (174) of
+// CFDL-TR-88-1 and is restricted to subsonic outflow.
+static constexpr int OUTFLOW_TRANSVERSE_PROJECTED_NSCBC = 0;
+static constexpr int OUTFLOW_TRANSVERSE_GILES2 = 1;
+
+// Persistent ODE ghosts are retained as the historical implementation.  The
+// stage-local GC mode instead evaluates one characteristic normal derivative
+// at the last interior cell and constructs every normal ghost layer from that
+// derivative (Motheau, Almgren & Bell, AIAA J. 2017, Eqs. 27--33). Cerisse's
+// WENO-Z5 operator requires three physical ghost layers.
+static constexpr int GHOST_UPDATE_PERSISTENT_ODE = 0;
+static constexpr int GHOST_UPDATE_STAGE_LOCAL_GC = 1;
 
 struct Parm {
   amrex::Real Lchar = amrex::Real(1.0);
@@ -31,17 +46,16 @@ struct Parm {
   amrex::Real Ttarget = amrex::Real(1.0);
   amrex::Real eta = amrex::Real(0.0);
 
-  // beta=1 applies the multidimensional characteristic compatibility term;
-  // beta=0 recovers a strictly local one-dimensional LODI boundary.
-  // The native oblique-acoustic sweep shows that the full unweighted
-  // transverse cancellation over-forces the incoming mode.  0.25 is the
-  // current generic default; retain this as a runtime-tunable model constant.
+  // Legacy projected-NSCBC relaxation. This coefficient is not used by the
+  // Giles second-order model.
   amrex::Real transverse_relax = amrex::Real(0.25);
   amrex::Real min_rho = amrex::Real(1.e-12);
   amrex::Real min_T = amrex::Real(1.e-12);
   amrex::Real min_p = amrex::Real(1.e-12);
   int derivative_order = 2;
   int use_transverse = 1;
+  int outflow_transverse_model = OUTFLOW_TRANSVERSE_PROJECTED_NSCBC;
+  int ghost_update_model = GHOST_UPDATE_PERSISTENT_ODE;
 };
 
 template <typename cls_t>
@@ -64,6 +78,78 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE void tangent_dirs(
   t1 = (dir + 1) % 3;
   t2 = (dir + 2) % 3;
 #endif
+}
+
+// Giles' dimensional characteristic variables at a right-facing outflow are
+//   c2 = rho*c*delta(u_t),  c4 = delta(p) - rho*c*delta(u_n).
+// Equation (174),
+//   d_t c4 + u_n d_tangent c2 + u_t d_tangent c4 = 0,
+// differs from the full transverse Euler contribution only through the
+// tangential velocity divergence. In the density/time normalization used by
+// LMINUS/LPLUS below, the required incoming normal amplitude is
+//   L_in = -rho/2 * (1 - M_n) * div_t(u_t).
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE amrex::Real
+giles_second_order_incoming_amplitude(
+  amrex::Real rho, amrex::Real c, amrex::Real un_out,
+  amrex::Real tangent_velocity_divergence)
+{
+  const amrex::Real normal_mach = un_out / c;
+  return -amrex::Real(0.5) * rho *
+         (amrex::Real(1.0) - normal_mach) *
+         tangent_velocity_divergence;
+}
+
+// Primitive normal derivatives implied by the second-order Giles outflow.
+// All quantities use an outward-normal coordinate.  The outgoing acoustic,
+// entropy and tangential characteristics come from the interior one-sided
+// derivative; only the incoming acoustic characteristic is replaced.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE void
+giles_second_order_normal_derivatives(
+  amrex::Real rho, amrex::Real c, amrex::Real un_out,
+  amrex::Real rho_n_interior, amrex::Real un_n_interior,
+  amrex::Real ut_n_interior, amrex::Real p_n_interior,
+  amrex::Real tangent_velocity_divergence,
+  amrex::Real pressure_relaxation_amplitude,
+  amrex::Real& rho_n, amrex::Real& un_n, amrex::Real& ut_n,
+  amrex::Real& p_n)
+{
+  using amrex::Real;
+  const Real outgoing = (un_out + c) *
+    (p_n_interior + rho * c * un_n_interior);
+  const Real incoming = pressure_relaxation_amplitude +
+    rho * c * (un_out - c) * tangent_velocity_divergence;
+
+  const Real a_minus = incoming / (un_out - c);
+  const Real a_plus = outgoing / (un_out + c);
+  p_n = Real(0.5) * (a_minus + a_plus);
+  un_n = (a_plus - a_minus) / (Real(2.0) * rho * c);
+
+  // Preserve the outgoing entropy and tangential characteristics.  This form
+  // avoids dividing by a small convective eigenvalue near zero outflow.
+  rho_n = rho_n_interior + (p_n - p_n_interior) / (c * c);
+  ut_n = ut_n_interior;
+}
+
+// Stage-local ghost value generated from one normal derivative evaluated at
+// the boundary-adjacent interior cell. `q_boundary` is that cell value,
+// `q_in` is its next inward neighbour, and `hqn = h*dq/dn`, with n directed
+// out of the domain. Cerisse requires three ghost cells, so only Eqs.
+// (31)--(33) of the GC-NSCBC paper are implemented. Eqs. (27)--(29) are
+// identical after reflection.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE amrex::Real gc_nscbc_value(
+  int layer, amrex::Real q_boundary, amrex::Real q_in, amrex::Real hqn,
+  amrex::Real q_g1 = amrex::Real(0.0),
+  amrex::Real q_g2 = amrex::Real(0.0))
+{
+  using amrex::Real;
+  if (layer == 1) return q_in + Real(2.0) * hqn;
+  if (layer == 2) {
+    return -Real(2.0) * q_in - Real(3.0) * q_boundary
+           + Real(6.0) * q_g1 - Real(6.0) * hqn;
+  }
+  return Real(3.0) * q_in + Real(10.0) * q_boundary
+         - Real(18.0) * q_g1 + Real(6.0) * q_g2
+         + Real(12.0) * hqn;
 }
 
 template <typename cls_t>
@@ -149,7 +235,8 @@ AMREX_GPU_DEVICE AMREX_FORCE_INLINE void transverse_rhs(
   amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dxinv,
   amrex::Array4<const amrex::Real> const& q, amrex::Real& drhodt,
   amrex::Real& dudt, amrex::Real& dvdt, amrex::Real& dwdt,
-  amrex::Real& dTdt, amrex::Real* dYdt, Parm const& parm)
+  amrex::Real& dTdt, amrex::Real* dYdt,
+  amrex::Real& tangent_velocity_divergence, Parm const& parm)
 {
   using amrex::Real;
   drhodt = Real(0.0);
@@ -157,6 +244,7 @@ AMREX_GPU_DEVICE AMREX_FORCE_INLINE void transverse_rhs(
   dvdt = Real(0.0);
   dwdt = Real(0.0);
   dTdt = Real(0.0);
+  tangent_velocity_divergence = Real(0.0);
 #if (NUM_SPECIES > 1)
   for (int n = 0; n < NUM_SPECIES; ++n) dYdt[n] = Real(0.0);
 #else
@@ -179,6 +267,7 @@ AMREX_GPU_DEVICE AMREX_FORCE_INLINE void transverse_rhs(
     if (tdir == dir) continue;
     const Real ut = vel[tdir];
     const Real div_t = dc(tdir, qvel<cls_t>(tdir));
+    tangent_velocity_divergence += div_t;
 
     drhodt -= ut * dc(tdir, cls_t::QRHO) + rho * div_t;
     dTdt -= ut * dc(tdir, cls_t::QT)
@@ -225,7 +314,8 @@ template <typename cls_t>
 AMREX_GPU_DEVICE AMREX_FORCE_INLINE void apply_outflow(
   amrex::IntVect const& iv, int dir, int side_sign,
   amrex::Array4<const amrex::Real> const& q, amrex::Real* L,
-  amrex::Real Ltminus, amrex::Real Ltplus, int type, Parm const& parm)
+  amrex::Real Ltminus, amrex::Real Ltplus,
+  amrex::Real tangent_velocity_divergence, int type, Parm const& parm)
 {
   using amrex::Real;
   const Real c = amrex::max(q(iv, cls_t::QC), Real(1.e-14));
@@ -235,7 +325,6 @@ AMREX_GPU_DEVICE AMREX_FORCE_INLINE void apply_outflow(
   // All characteristics leave at a supersonic outflow.
   if (un_out >= c) return;
 
-  const Real beta = parm.use_transverse ? parm.transverse_relax : Real(0.0);
   Real target = Real(0.0);
   if (type == 3) {
     const Real p = q(iv, cls_t::QPRES);
@@ -244,10 +333,22 @@ AMREX_GPU_DEVICE AMREX_FORCE_INLINE void apply_outflow(
              * (p - parm.Ptarget) / (Real(2.0) * c * parm.Lchar);
   }
 
+  Real incoming = target;
+  if (parm.use_transverse) {
+    if (parm.outflow_transverse_model == OUTFLOW_TRANSVERSE_GILES2) {
+      const Real rho = amrex::max(q(iv, cls_t::QRHO), parm.min_rho);
+      incoming += giles_second_order_incoming_amplitude(
+        rho, c, un_out, tangent_velocity_divergence);
+    } else {
+      const Real projected = (side_sign > 0) ? Ltplus : Ltminus;
+      incoming -= parm.transverse_relax * projected;
+    }
+  }
+
   if (side_sign > 0) {
-    L[LPLUS] = target - beta * Ltplus;
+    L[LPLUS] = incoming;
   } else {
-    L[LMINUS] = target - beta * Ltminus;
+    L[LMINUS] = incoming;
   }
 }
 
@@ -344,10 +445,10 @@ AMREX_GPU_DEVICE AMREX_FORCE_INLINE void add_lodi_rhs_to_cons(
   amrex::IntVect transverse_iv = iv;
   transverse_iv[dir] = boundary_index;
 
-  Real trho, tu, tv, tw, tT;
+  Real trho, tu, tv, tw, tT, tangent_velocity_divergence;
   Real tY[NUM_SPECIES] = {Real(0.0)};
   transverse_rhs<cls_t>(transverse_iv, dir, dxinv, q, trho, tu, tv, tw, tT,
-                        tY, parm);
+                        tY, tangent_velocity_divergence, parm);
   Real Ltminus = Real(0.0);
   Real Ltplus = Real(0.0);
   transverse_acoustic_amplitudes<cls_t>(iv, dir, q, trho, tu, tv, tw, tT,
@@ -358,7 +459,7 @@ AMREX_GPU_DEVICE AMREX_FORCE_INLINE void add_lodi_rhs_to_cons(
     apply_inflow<cls_t>(iv, dir, side_sign, q, L, Ltminus, Ltplus, parm);
   } else {
     apply_outflow<cls_t>(iv, dir, side_sign, q, L, Ltminus, Ltplus,
-                         type, parm);
+                         tangent_velocity_divergence, type, parm);
   }
 
   Real rho_t, u_t, v_t, w_t, T_t;

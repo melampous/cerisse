@@ -1,0 +1,109 @@
+{
+  "status": "GEOMETRY_AB_QA_PASS",
+  "purpose": "Run165 RZ resolved-N1 versus sealed no-nozzle geometry control",
+  "method_scope": {
+    "family": "pure_shared_gp_full_cartesian",
+    "impact": "case geometry and visualization only",
+    "production_rhs_changed": false,
+    "cut_cell_or_eb_enabled": false,
+    "aggregate_or_cut_control_enabled": false
+  },
+  "coordinate_convention": {
+    "dat_columns": [
+      "r_m",
+      "x_from_TSP_m"
+    ],
+    "axis": "r=0",
+    "winding": "CCW",
+    "closure": "implicit last vertex to first vertex",
+    "freestream": "+x",
+    "retropropulsive_jet_when_present": "-x"
+  },
+  "geometry_parameters": {
+    "cone_half_angle_deg": 70.0,
+    "nozzle_divergent_half_angle_deg": 14.981,
+    "nose_radius_mm": 25.4,
+    "sphere_center_x_mm": 27.03011542088817,
+    "nominal_nose_tip_x_mm": 1.6301154208881705,
+    "sphere_cone_x_mm": 3.161922852926097,
+    "sphere_cone_r_mm": 8.687311640471988,
+    "cone_shoulder_x_mm": 22.50381776616031,
+    "cone_shoulder_r_mm": 61.8287311640472,
+    "shoulder_radius_mm": 2.54,
+    "shoulder_center_x_mm": 24.89063702295652,
+    "shoulder_center_r_mm": 60.96,
+    "body_radius_mm": 63.5,
+    "aft_x_mm": 268.13764,
+    "virtual_exit_x_mm": 2.441268805570889,
+    "virtual_exit_r_mm": 6.36778,
+    "throat_x_mm": 14.415425035402048,
+    "throat_r_mm": 3.16357
+  },
+  "with_nozzle": {
+    "hardware_semantics": "Run165 public-data reconstruction",
+    "jet_semantics": "M=1 choked state at N1 throat when enabled by the case",
+    "audited_case_T_coordinate_max_error_mm": 5.684341886080802e-14,
+    "qa": {
+      "vertices": 304,
+      "ccw": true,
+      "simple_polygon": true,
+      "signed_area_mm2": 16227.02674952569,
+      "centroid_r_mm": 31.388255490995597,
+      "polyline_revolution_volume_mm3": 3200265.4242365733,
+      "minimum_edge_mm": 0.014152117729524233,
+      "maximum_edge_mm": 253.72221496459792,
+      "minimum_r_mm": 0.0,
+      "maximum_r_mm": 63.5,
+      "minimum_x_mm": 2.441268805570889,
+      "maximum_x_mm": 268.13764,
+      "analytic_revolution_volume_mm3": 3200265.4474298833,
+      "polyline_volume_relative_error": 7.247308198615203e-09
+    }
+  },
+  "without_nozzle": {
+    "hardware_semantics": "derived sealed numerical control, not a NASA run claim",
+    "jet_semantics": "no injection patch and jet must be disabled",
+    "sealed_tip_x_mm": 1.6301154208881705,
+    "qa": {
+      "vertices": 332,
+      "ccw": true,
+      "simple_polygon": true,
+      "signed_area_mm2": 16287.545179582508,
+      "centroid_r_mm": 31.280798998217882,
+      "polyline_revolution_volume_mm3": 3201203.9151227446,
+      "minimum_edge_mm": 0.01601900082997552,
+      "maximum_edge_mm": 266.5075245791118,
+      "minimum_r_mm": 0.0,
+      "maximum_r_mm": 63.5,
+      "minimum_x_mm": 1.6301154208881705,
+      "maximum_x_mm": 268.13764,
+      "analytic_revolution_volume_mm3": 3201203.942699164,
+      "polyline_volume_relative_error": 8.614390091496892e-09
+    }
+  },
+  "semantic_guards": [
+    "The no-nozzle geometry is not Case E virtual-exit injection.",
+    "Jet-OFF with the N1 geometry retains the nozzle cavity and is not the sealed control.",
+    "The with-nozzle geometry resolves only the divergent passage; no convergent passage or plenum is invented.",
+    "Artificial axis and aft-cap closures are excluded from physical loads.",
+    "RZ force integration requires 2*pi*r weighting."
+  ],
+  "source_sha256": {
+    "geometry_parameters.yaml": "d2d388e330ecd7123a227c1f446f474c844d7aa03bc291600b3f2cc89da3fabe",
+    "build_audit.json": "34703eaebfb3b5e75342c1b3fa7c0e8a92f784ce3f345f15ded2673a191983fe",
+    "audited_case_T.dat": "ed90c6b238152055fd209d090259399fb2866f65f84352e6eb365b5319c440ef",
+    "generator": "d63b678f8634b644c9ddaf029b89c69f0ad7690cd3c93e630efbd16d3ffb90ee"
+  },
+  "outputs_sha256": {
+    "run165_rz_with_nozzle_profile.dat": "ed90c6b238152055fd209d090259399fb2866f65f84352e6eb365b5319c440ef",
+    "run165_rz_with_nozzle_profile.csv": "008f1a9260007e67d0b4f4e1cfdfddf4e1b730257af5f48e45b5fa4b781c4197",
+    "run165_rz_without_nozzle_profile.dat": "228e55395d7701699ebc6bc2268baf6fe53d077f7e13e475d91b329f7247ad6a",
+    "run165_rz_without_nozzle_profile.csv": "657bc7ef38caf987c2fca9483343e87a4a1f55e4606dc1cbacef56428435a3a6",
+    "run165_rz_with_nozzle_side_view.png": "850d99dec99f64925e5c784bb17c6c1b3ad9b536631395a3a8a1e045dc9a1a2e",
+    "run165_rz_with_nozzle_side_view.svg": "9c45194f49b319cd23a54e20dc14bb468cbadd4c152bf9242d716e322a77dbe0",
+    "run165_rz_without_nozzle_side_view.png": "5374d6600a0b4a692c394e522605b5403d2a72c26148052a5a65061d16481199",
+    "run165_rz_without_nozzle_side_view.svg": "4a6914a20568ca0a37101373dcb78417e7c11fbd048cfc3b8b927839a3b2762b",
+    "run165_rz_nozzle_geometry_side_view_comparison.png": "b551524bd88eb67528a0a630fc5c14742030ef1f1e327446076d3738ad0908bc",
+    "run165_rz_nozzle_geometry_side_view_comparison.svg": "2cc3c9c5ea16caef8fbef65297ecf28d71ae542453e9a7d5eb8e1a7762018177"
+  }
+}

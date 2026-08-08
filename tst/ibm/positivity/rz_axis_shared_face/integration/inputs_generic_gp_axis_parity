@@ -1,0 +1,52 @@
+# One-step CPU micro-gate for generic (non-annular) point-state GP publication
+# next to the physical R-Z axis.  The executable is built with
+# TEST_RZ_GP_PARITY_PROBE=TRUE; the case-local derived ProbIB records exact
+# primitive snapshots immediately before and after Base::computeAllGPs.
+max_step = 1
+stop_time = 1.0
+cfl = 0.02
+
+cns.order_rk = 0
+cns.stages_rk = 1
+cns.lo_bc = 3 2
+cns.hi_bc = 2 2
+cns.nstep_screen_output = 1
+cns.verbose = 0
+cns.strict_positivity = 1
+cns.soft_positivity = 0
+cns.ibm_positivity_flux_limiter = 0
+cns.do_reflux = 0
+
+# Select the generic point-state R-Z GP path consistently at runtime.
+cns.rz_euler_cell_average_deconvolution = 0
+cns.rz_gp_annular_bic = 0
+cns.rz_gp_support_centre_recovery = 0
+cns.rz_gp_axis_regular_entropy_jet = 0
+
+# Test-local A/B switch.  With 1, the derived ProbIB applies the existing
+# parity helper after generic GP publication and reports the repaired errors.
+prob.apply_post_gp_axis_parity = 0
+# The production parity refresh is an exact copy/sign operation.  Keep a small
+# floating-point allowance so the same test can later be ported to MPI/GPU.
+prob.parity_tolerance = 1.0e-12
+
+# A closed positive-r semicircle; its implicit closing segment lies on r=0.
+ib.filename = axis_semicircle.dat
+ib.move = 0
+ib.plot_surf = 0
+
+geometry.is_periodic = 0 0
+geometry.coord_sys = 1
+geometry.prob_lo = 0.0 0.0
+geometry.prob_hi = 1.0 1.0
+
+amr.n_cell = 32 32
+amr.max_level = 0
+amr.max_grid_size = 32
+amr.blocking_factor = 8
+amr.grid_eff = 0.8
+amr.plot_files_output = 0
+amr.checkpoint_files_output = 0
+amr.v = 0
+
+amrex.the_arena_is_managed = 0

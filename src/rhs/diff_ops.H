@@ -296,7 +296,7 @@ tangent_diff<4>(amrex::IntVect iv, int idir, int tdir, int comp,
   const Real d0 = ccw4_3 * q(iv - 2 * ivn + 2 * ivt, comp) + ccw4_2 * q(iv - 2 * ivn + ivt, comp) +
             ccw4_1 * q(iv - 2 * ivn - ivt, comp)     + ccw4_0 * q(iv - 2 * ivn - 2 * ivt, comp);
 
-  // Interpolate derivatives using face-centred weights 
+  // Interpolate derivatives using face-centred weights
   return (d3 * int_fcw4_3 + d2 *int_fcw4_2 + d1*int_fcw4_1 + d0*int_fcw4_0) * dxinv[tdir];
 }
 //---------------------------------------------------------------------------------------

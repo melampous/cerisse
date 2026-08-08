@@ -6,6 +6,7 @@
 #include <AMReX_ParmParse.H>
 #include <Closures.h>
 #include <RHS.h>
+#include <Weno_old.h>
 
 using namespace amrex;
 
@@ -40,6 +41,14 @@ using ProbEuler = afd_hllc_wenoz5_t<ProbClosures>;
 using ProbEuler = weno_t<ReconScheme::Teno5, ProbClosures>;
 #elif (SOD_EULER_SCHEME_ID == 4)
 using ProbEuler = weno_t<ReconScheme::WenoZ5, ProbClosures>;
+#elif (SOD_EULER_SCHEME_ID == 5)
+using ProbEuler = weno_t<ReconScheme::Teno6, ProbClosures>;
+#elif (SOD_EULER_SCHEME_ID == 6)
+using ProbEuler = weno_old_t<OldReconScheme::Teno5, ProbClosures>;
+#elif (SOD_EULER_SCHEME_ID == 7)
+using ProbEuler = weno_old_t<OldReconScheme::WenoZ5, ProbClosures>;
+#elif (SOD_EULER_SCHEME_ID == 8)
+using ProbEuler = weno_old_t<OldReconScheme::Teno6, ProbClosures>;
 #else
 #error "Unknown SOD_EULER_SCHEME_ID"
 #endif

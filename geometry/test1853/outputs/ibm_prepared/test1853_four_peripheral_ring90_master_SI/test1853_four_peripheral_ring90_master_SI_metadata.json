@@ -1,0 +1,241 @@
+{
+  "status": "PASS",
+  "units": "m",
+  "configuration": "ring4",
+  "source_model": "test1853_four_peripheral_ring90",
+  "parameter_file_sha256": "af0b3f8640e68c50eb04dc436f84cf17cc938c8f06cf679c988b22ae4ad71c27",
+  "preparer_sha256": "8215a9263b29dd99909053c0546391b12651a0978da089ad9c97811c5b42640a",
+  "source_input_stl": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/four_peripheral_ring90_build/stl/test1853_four_peripheral_ring90.stl",
+  "source_input_units_and_frame": "mm in the NASA TSP body frame",
+  "run": null,
+  "run_conditions": null,
+  "roll_deg": 0.0,
+  "tsp_world_m": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "body_to_world_matrix_mm_input_to_m_world": [
+    [
+      0.001,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.001,
+      -0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.001,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "closed_ibm_stl": {
+    "source": "outputs/four_peripheral_ring90_build/stl/test1853_four_peripheral_ring90.stl",
+    "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_four_peripheral_ring90_master_SI/test1853_four_peripheral_ring90_master_SI.stl",
+    "source_sha256": "11171e362b0c495353f435f79f071edd12b267147ec0719a71df5cb83f43fa9a",
+    "destination_sha256": "3617d8bf1a5cda41139ccc6624915be5f7bbb216bdd6ded31b4858111601d941",
+    "triangles": 365008,
+    "bounds_m": [
+      [
+        0.00163011543918401,
+        -0.06350000202655792,
+        -0.06350000202655792
+      ],
+      [
+        0.2681376338005066,
+        0.06350000202655792,
+        0.06350000202655792
+      ]
+    ],
+    "watertight": true,
+    "winding_consistent": true,
+    "is_volume": true
+  },
+  "patches": {
+    "body_wall_excluding_throat_caps.stl": {
+      "source": "outputs/four_peripheral_ring90_build/patches/test1853_four_peripheral_ring90/body_wall_excluding_throat_caps.stl",
+      "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_four_peripheral_ring90_master_SI/patches/body_wall_excluding_throat_caps.stl",
+      "source_sha256": "9b446efa11a40df364f4e5608addf22d0b45ea95e8a4fb814a87c89e5b53f0b3",
+      "destination_sha256": "11db44a553643a9a985129f176b35824699baeceb4b39f8358fdb09ee378ab68",
+      "triangles": 363076,
+      "bounds_m": [
+        [
+          0.00163011543918401,
+          -0.06350000202655792,
+          -0.06350000202655792
+        ],
+        [
+          0.2681376338005066,
+          0.06350000202655792,
+          0.06350000202655792
+        ]
+      ],
+      "watertight": false,
+      "winding_consistent": true,
+      "is_volume": false
+    },
+    "nozzle_1_throat_cap.stl": {
+      "source": "outputs/four_peripheral_ring90_build/patches/test1853_four_peripheral_ring90/nozzle_1_throat_cap.stl",
+      "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_four_peripheral_ring90_master_SI/patches/nozzle_1_throat_cap.stl",
+      "source_sha256": "70461580ba2da2439594dfad0feb1e9f6fd20bb9a35875f48884113186517ca4",
+      "destination_sha256": "1f72d296088be25bf6b329ea7904e6ba6bdf651af416ca694e8cd943ce0df1da",
+      "triangles": 484,
+      "bounds_m": [
+        [
+          0.02340531535446644,
+          -0.003168734721839428,
+          0.028575001284480095
+        ],
+        [
+          0.02340531535446644,
+          0.003168734721839428,
+          0.03492499887943268
+        ]
+      ],
+      "watertight": false,
+      "winding_consistent": true,
+      "is_volume": false
+    },
+    "nozzle_2_throat_cap.stl": {
+      "source": "outputs/four_peripheral_ring90_build/patches/test1853_four_peripheral_ring90/nozzle_2_throat_cap.stl",
+      "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_four_peripheral_ring90_master_SI/patches/nozzle_2_throat_cap.stl",
+      "source_sha256": "2532ff1cf9873b3780c64f4cf0a19c3152b27dbd2b1849ef721baf3357f49afd",
+      "destination_sha256": "82f0be4f9d687b1269cc7ec21bd983ae298b4687de0fae4007154e9c393a6ebb",
+      "triangles": 480,
+      "bounds_m": [
+        [
+          0.02340531535446644,
+          0.02858126536011696,
+          -0.00317499996162951
+        ],
+        [
+          0.02340531535446644,
+          0.034918736666440964,
+          0.00317499996162951
+        ]
+      ],
+      "watertight": false,
+      "winding_consistent": true,
+      "is_volume": false
+    },
+    "nozzle_3_throat_cap.stl": {
+      "source": "outputs/four_peripheral_ring90_build/patches/test1853_four_peripheral_ring90/nozzle_3_throat_cap.stl",
+      "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_four_peripheral_ring90_master_SI/patches/nozzle_3_throat_cap.stl",
+      "source_sha256": "cf21cdba990bf4733d91a6cc2e32b83b883f176e58b8698b698e258bd6db49f0",
+      "destination_sha256": "fe09ebcfa13c3aadb26287f8387a49e4c8e6df4babda1e62d55ad9da0379f170",
+      "triangles": 486,
+      "bounds_m": [
+        [
+          0.02340531535446644,
+          -0.003168734721839428,
+          -0.03492499887943268
+        ],
+        [
+          0.02340531535446644,
+          0.003168734721839428,
+          -0.028575001284480095
+        ]
+      ],
+      "watertight": false,
+      "winding_consistent": true,
+      "is_volume": false
+    },
+    "nozzle_4_throat_cap.stl": {
+      "source": "outputs/four_peripheral_ring90_build/patches/test1853_four_peripheral_ring90/nozzle_4_throat_cap.stl",
+      "destination": "/home/qiaoj/testcerisse/cerisse/geometry/test1853/outputs/ibm_prepared/test1853_four_peripheral_ring90_master_SI/patches/nozzle_4_throat_cap.stl",
+      "source_sha256": "3ed0458d6b3d520bb5f500d0a8075a45d30b67f76b5bf741ea8aa8e393939e6a",
+      "destination_sha256": "1b95595f9859a74a256965dae9cbc3a03d566be574c9a96c49c03912ec7175cf",
+      "triangles": 482,
+      "bounds_m": [
+        [
+          0.02340531535446644,
+          -0.034918736666440964,
+          -0.00317499996162951
+        ],
+        [
+          0.02340531535446644,
+          -0.02858126536011696,
+          0.00317499996162951
+        ]
+      ],
+      "watertight": false,
+      "winding_consistent": true,
+      "is_volume": false
+    }
+  },
+  "active_nozzle_throats": [
+    {
+      "number": 1,
+      "throat_center_world_m": [
+        0.023405316251983114,
+        0.0,
+        0.03175
+      ],
+      "throat_radius_m": 0.003175,
+      "throat_plane_normal_solid_to_fluid_world": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "selection_rule": "abs(x-x_throat)<=epsilon AND transverse_radius<=Rt+epsilon; do not use a 3-D sphere alone"
+    },
+    {
+      "number": 2,
+      "throat_center_world_m": [
+        0.023405316251983114,
+        0.03175,
+        1.944126793646423e-18
+      ],
+      "throat_radius_m": 0.003175,
+      "throat_plane_normal_solid_to_fluid_world": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "selection_rule": "abs(x-x_throat)<=epsilon AND transverse_radius<=Rt+epsilon; do not use a 3-D sphere alone"
+    },
+    {
+      "number": 3,
+      "throat_center_world_m": [
+        0.023405316251983114,
+        3.888253587292846e-18,
+        -0.03175
+      ],
+      "throat_radius_m": 0.003175,
+      "throat_plane_normal_solid_to_fluid_world": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "selection_rule": "abs(x-x_throat)<=epsilon AND transverse_radius<=Rt+epsilon; do not use a 3-D sphere alone"
+    },
+    {
+      "number": 4,
+      "throat_center_world_m": [
+        0.023405316251983114,
+        -0.03175,
+        -5.832380380939269e-18
+      ],
+      "throat_radius_m": 0.003175,
+      "throat_plane_normal_solid_to_fluid_world": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "selection_rule": "abs(x-x_throat)<=epsilon AND transverse_radius<=Rt+epsilon; do not use a 3-D sphere alone"
+    }
+  ],
+  "important": "Cerisse static IBM reads raw STL coordinates with identity transform; use this prepared file, not the millimetre master, in an SI-metre domain. For a custom high-resolution STL, pass it explicitly with --input-stl and verify closed_ibm_stl.source_sha256."
+}

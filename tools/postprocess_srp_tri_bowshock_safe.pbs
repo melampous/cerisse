@@ -1,0 +1,30 @@
+#!/bin/bash
+#PBS -N srp_tri_bowsafe
+#PBS -q cx
+#PBS -l walltime=01:00:00
+#PBS -l select=1:ncpus=1:mem=12gb
+#PBS -j oe
+
+set -euo pipefail
+
+CASE=/rds/general/ephemeral/user/jq319/ephemeral/aws_offload_ibm/srp_tri_L2
+OUT=${CASE}/post_latest_plt09000/bowshock_safe_mean
+
+export MPLCONFIGDIR=${TMPDIR:-/tmp}/mpl-bowsafe-${PBS_JOBID}
+mkdir -p "${MPLCONFIGDIR}" "${OUT}" "${OUT}/logs"
+
+date -u
+hostname
+module load tools/prod yt/4.3.0-foss-2022a
+python3 "${CASE}/postprocess_srp_tri_paper_series.py" \
+  --mode calibrate \
+  --plot-root "${CASE}/plot" \
+  --reader /rds/general/user/jq319/home/schlieren.py \
+  --output-dir "${OUT}" \
+  --axial-crop 0.01 0.58 \
+  --transverse-crop -0.01 0.56 \
+  --fixed-gref 72.18947715759369 \
+  --paper-dpi 600 \
+  --frame-dpi 400 \
+  2>&1 | tee "${OUT}/logs/latest_${PBS_JOBID}.log"
+date -u

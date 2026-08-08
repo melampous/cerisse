@@ -1,0 +1,14 @@
+--- a/src/ibm/ibm_solver.h
++++ b/src/ibm/ibm_solver.h
+@@
+     prims_mf.FillBoundary(amr_p->Geom(lev).periodicity());
++    // FillBoundary publishes the unique shared GP across FAB/MPI ownership,
++    // but it does not impose a physical boundary condition.  In the generic
++    // point-GP path, refresh negative-radius coordinate ghosts only after the
++    // positive-radius GP has reached its final value.  Annular quadrature
++    // target passes are closed by computeAllGPsRZAnnular after all targets are
++    // accumulated, so do not alter their intermediate state here.
++    if (rz_point_target < 0) {
++      fillRZAxisPrimitiveParity(prims_mf, lev);
++    }
+   }

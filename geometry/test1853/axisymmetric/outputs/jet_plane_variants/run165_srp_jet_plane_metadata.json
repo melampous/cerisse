@@ -1,0 +1,124 @@
+{
+  "status": "GEOMETRY_VISUALIZATION_QA_PASS",
+  "purpose": "Run165 RZ comparison of a resolved divergent nozzle with choked-throat injection and an unresolved nozzle with direct virtual-exit injection",
+  "method_scope": {
+    "family": "pure_shared_gp_full_cartesian",
+    "impact": "case geometry and jet-patch thermodynamic target only",
+    "production_rhs_changed": false,
+    "cut_cell_or_eb_enabled": false,
+    "aggregate_or_cut_control_enabled": false
+  },
+  "coordinate_convention": {
+    "dat_columns": [
+      "r_m",
+      "x_from_TSP_m"
+    ],
+    "axis": "r=0",
+    "winding": "CCW",
+    "closure": "implicit last vertex to first vertex",
+    "freestream": "+x",
+    "retropropulsive_jet": "-x"
+  },
+  "geometry_parameters": {
+    "cone_half_angle_deg": 70.0,
+    "nozzle_divergent_half_angle_deg": 14.981,
+    "nose_radius_mm": 25.4,
+    "sphere_center_x_mm": 27.03011542088817,
+    "nominal_nose_tip_x_mm": 1.6301154208881705,
+    "sphere_cone_x_mm": 3.161922852926097,
+    "sphere_cone_r_mm": 8.687311640471988,
+    "cone_shoulder_x_mm": 22.50381776616031,
+    "cone_shoulder_r_mm": 61.8287311640472,
+    "shoulder_radius_mm": 2.54,
+    "shoulder_center_x_mm": 24.89063702295652,
+    "shoulder_center_r_mm": 60.96,
+    "body_radius_mm": 63.5,
+    "aft_x_mm": 268.13764,
+    "virtual_exit_x_mm": 2.441268805570889,
+    "virtual_exit_r_mm": 6.36778,
+    "throat_x_mm": 14.415425035402048,
+    "throat_r_mm": 3.16357
+  },
+  "shared_external_oml": {
+    "segment_names": [
+      "sphere_oml",
+      "cone_oml",
+      "shoulder_oml",
+      "cylinder_oml",
+      "aft_cap"
+    ],
+    "coordinate_max_error_mm": 0.0,
+    "identical": true
+  },
+  "case_T_throat_choked": {
+    "description": "Audited Run165 axisymmetric geometry with the divergent passage resolved and a jet patch on the throat disk",
+    "jet_patch_x_mm": 14.415425035402048,
+    "jet_patch_radius_mm": 3.16357,
+    "divergent_wall_half_angle_deg": 14.981,
+    "reference_dat_sha256": "ed90c6b238152055fd209d090259399fb2866f65f84352e6eb365b5319c440ef",
+    "reference_coordinate_max_error_mm": 5.684341886080802e-14,
+    "qa": {
+      "vertices": 304,
+      "signed_area_mm2": 16227.02674952569,
+      "centroid_r_mm": 31.388255490995597,
+      "polyline_revolution_volume_mm3": 3200265.4242365733,
+      "minimum_edge_mm": 0.014152117729524233,
+      "minimum_r_mm": 0.0,
+      "maximum_r_mm": 63.5,
+      "minimum_x_mm": 2.441268805570889,
+      "maximum_x_mm": 268.13764,
+      "ccw": true,
+      "simple_polygon": true,
+      "analytic_revolution_volume_mm3": 3200265.4474298833,
+      "polyline_volume_relative_error": 7.247308198615203e-09
+    }
+  },
+  "case_E_virtual_exit": {
+    "description": "Same external OML, with the internal divergent passage removed from the fluid domain and a jet patch on the virtual-exit disk",
+    "jet_patch_x_mm": 2.441268805570889,
+    "jet_patch_radius_mm": 6.36778,
+    "filled_divergent_cavity_volume_mm3": 886.5505161760724,
+    "qa": {
+      "vertices": 303,
+      "signed_area_mm2": 16284.09168651629,
+      "centroid_r_mm": 31.286925312029897,
+      "polyline_revolution_volume_mm3": 3201151.974752749,
+      "minimum_edge_mm": 0.014152117729524233,
+      "minimum_r_mm": 0.0,
+      "maximum_r_mm": 63.5,
+      "minimum_x_mm": 2.441268805570889,
+      "maximum_x_mm": 268.13764,
+      "ccw": true,
+      "simple_polygon": true,
+      "analytic_revolution_volume_mm3": 3201151.9979460593,
+      "polyline_volume_relative_error": 7.245301221387254e-09
+    },
+    "rz_axis_safe_dat": "run165_srp_virtual_exit_profile_rz_axis_safe.dat",
+    "rz_axis_safe_semantics": "full mirrored meridional polygon; identical r>=0 solid region with no artificial r=0 IBM surface edge"
+  },
+  "semantic_guards": [
+    "Case E is a virtual-exit boundary representation of Run165, not a claim that the NASA model lacked a nozzle.",
+    "Jet-OFF is different from Case E: jet-OFF retains whichever geometry is selected and changes the jet patch to a wall.",
+    "The throat profile resolves only the reconstructed divergent passage and throat face; no convergent passage or plenum is invented.",
+    "Artificial axis and aft-cap closures are excluded from physical surface loads."
+  ],
+  "source_sha256": {
+    "geometry_parameters.yaml": "d2d388e330ecd7123a227c1f446f474c844d7aa03bc291600b3f2cc89da3fabe",
+    "build_audit.json": "34703eaebfb3b5e75342c1b3fa7c0e8a92f784ce3f345f15ded2673a191983fe",
+    "audited_throat_profile.dat": "ed90c6b238152055fd209d090259399fb2866f65f84352e6eb365b5319c440ef",
+    "generator": "5e4df854969065b86320c9d6b2a7c73a81b3e08f3387d4d21408a07f6d44c64e"
+  },
+  "outputs_sha256": {
+    "run165_srp_throat_choked_profile.dat": "ed90c6b238152055fd209d090259399fb2866f65f84352e6eb365b5319c440ef",
+    "run165_srp_throat_choked_profile.csv": "008f1a9260007e67d0b4f4e1cfdfddf4e1b730257af5f48e45b5fa4b781c4197",
+    "run165_srp_virtual_exit_profile.dat": "608a6e728add3bdc29738747e797f14d463643670cc6e0a12cbf1fa2759712ff",
+    "run165_srp_virtual_exit_profile.csv": "c29ea35e57bcda8ed5b41fce1d2f526860a49e50b972e28ab747b74d20cfa645",
+    "run165_srp_virtual_exit_profile_rz_axis_safe.dat": "fce305e8dfd44dd5859470bb74d43219dcc7fd17c77685f1646226142ee1eab4",
+    "run165_srp_throat_choked.png": "f18c21e8db62e0ca9d97b951fd7555bf79b204b7fc3ad60d2cf6593232e6390d",
+    "run165_srp_throat_choked.svg": "8b398d3b31e6e833b0f30026262a894d218be74b4e9fbae8a0e7300325d0656a",
+    "run165_srp_virtual_exit.png": "227e2435f92dbc82de397b6360cda64f90aa394711fae8bca7615938a6170ebc",
+    "run165_srp_virtual_exit.svg": "eaa6b1e4f175a7c1064fbab24d1edb4a40cd5f0e6c354b04327a8e8c07d00d73",
+    "run165_srp_jet_plane_comparison.png": "da2a49db501fb45a3b1338c85a47a06fa5c374f1aecfa6b279d228db51be5962",
+    "run165_srp_jet_plane_comparison.svg": "0003de8d78cb2285bd1f69e392aa966da616b7bfc0f17dae68ce1dc89ac0e878"
+  }
+}

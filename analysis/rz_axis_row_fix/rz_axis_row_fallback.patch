@@ -1,0 +1,112 @@
+--- a/src/rhs/Weno.h	2026-08-07 15:20:57.000000000 +0000
++++ b/src/rhs/Weno.h	2026-08-08 11:55:40.005378096 +0000
+@@ -1653,6 +1653,11 @@
+     int enabled;
+     amrex::Real density_jump_threshold;
+     amrex::Real density_curvature_threshold;
++    /// Curvature threshold used only on the axial faces of the axis-adjacent
++    /// cell row in RZ.  The discrete RZ divergence amplifies the outer radial
++    /// flux there by 2/dr, so the protection has to tighten as dr shrinks
++    /// while every other face keeps density_curvature_threshold.
++    amrex::Real axis_row_curvature_threshold;
+   };
+ 
+   /// Read and validate the face-local fallback controls once per executable.
+@@ -1660,7 +1665,7 @@
+   {
+     static const LocalLlfFallbackOptions options = [] {
+       LocalLlfFallbackOptions value{
+-          1, amrex::Real(3.0e-3), amrex::Real(8.0e-2)};
++          1, amrex::Real(3.0e-3), amrex::Real(8.0e-2), amrex::Real(1.0e-2)};
+       amrex::ParmParse parameters("cns");
+       parameters.query("llf_first_order_fallback", value.enabled);
+       parameters.query(
+@@ -1668,6 +1673,9 @@
+       parameters.query(
+           "llf_fallback_density_curvature",
+           value.density_curvature_threshold);
++      parameters.query(
++          "llf_fallback_axis_row_curvature",
++          value.axis_row_curvature_threshold);
+ 
+       if (value.enabled != 0 && value.enabled != 1) {
+         amrex::Abort("cns.llf_first_order_fallback must be 0 or 1");
+@@ -1683,6 +1691,12 @@
+         amrex::Abort(
+             "cns.llf_fallback_density_curvature must be in [0,1]");
+       }
++      if (!std::isfinite(value.axis_row_curvature_threshold) ||
++          value.axis_row_curvature_threshold < amrex::Real(0.0) ||
++          value.axis_row_curvature_threshold > amrex::Real(1.0)) {
++        amrex::Abort(
++            "cns.llf_fallback_axis_row_curvature must be in [0,1]");
++      }
+       return value;
+     }();
+     return options;
+@@ -1737,8 +1751,10 @@
+         << (options.enabled != 0 ? "enabled" : "disabled")
+         << " density_jump=" << options.density_jump_threshold
+         << " density_curvature=" << options.density_curvature_threshold
++        << " axis_row_curvature=" << options.axis_row_curvature_threshold
+         << " scope=cartesian_rz_all_fluid_shared_gp"
+         << " first_interior_rz_gate=density_jump_only"
++        << " rz_axis_row_axial_faces=tightened_curvature"
+         << " axis_face=excluded\n";
+   }
+ 
+@@ -2090,6 +2106,8 @@
+         fallback_options.density_jump_threshold;
+     const Real fallback_density_curvature_threshold =
+         fallback_options.density_curvature_threshold;
++    const Real fallback_axis_row_curvature_threshold =
++        fallback_options.axis_row_curvature_threshold;
+ 
+     // Each direction owns an independent face-centred flux array.
+     for (int direction_index = 0;
+@@ -2119,7 +2137,8 @@
+                 rz_weno_epsilon_relative_v, radial_pressure_face_flux,
+                 local_llf_fallback_enabled,
+                 fallback_density_jump_threshold,
+-                fallback_density_curvature_threshold, fallback_mask,
++                fallback_density_curvature_threshold,
++                fallback_axis_row_curvature_threshold, fallback_mask,
+                 pressure_reconstruction_states,
+                 pressure_reconstruction_component,
+                 radial_domain_high_index);
+@@ -2330,6 +2349,26 @@
+                           stencil_cell_index, Closure::QRHO)));
+                 }
+ 
++                /*
++                 * Axial faces of the axis-adjacent cell row in RZ.  The
++                 * discrete divergence there is
++                 *   (r_{i+1/2} F_{i+1/2} - r_{i-1/2} F_{i-1/2}) / (r_i dr)
++                 * with r_{i-1/2} = 0 and r_i = dr/2, so the outer radial flux
++                 * is amplified by 2/dr.  That amplification doubles when dr is
++                 * halved, while the generic curvature threshold is a
++                 * grid-independent constant; a shock sweeping axially through
++                 * this row therefore escapes the fallback on fine grids.  The
++                 * existing collar only covers the first interior RADIAL face,
++                 * so tighten the curvature test here and only here.
++                 */
++                const bool axis_row_axial_face =
++                    is_rz && direction_index != 0 &&
++                    face_index[0] == radial_axis_face_index;
++                const Real effective_curvature_threshold =
++                    axis_row_axial_face
++                        ? fallback_axis_row_curvature_threshold
++                        : fallback_density_curvature_threshold;
++
+                 bool density_is_nonsmooth = false;
+                 // Only these two groups contain both face-adjacent cells.
+                 // A remote discontinuity must not create a broad first-order
+@@ -2369,7 +2408,7 @@
+                   density_is_nonsmooth =
+                       density_is_nonsmooth ||
+                       normalized_density_curvature >
+-                          fallback_density_curvature_threshold;
++                          effective_curvature_threshold;
+                 }
+ 
+                 const bool first_interior_rz_radial_face =

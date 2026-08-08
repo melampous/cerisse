@@ -1,1 +1,5 @@
-CEXE_headers += RHS.h Afd.h CentralKEEP.h Riemann.h react.h Rusanov.h Skew.h CentralDif.h Diffusion.h DiffusionCD.h IbmFluxUtils.h viscous.h
+CEXE_headers += RHS.h Afd.h AfdIBM.h AfdIBMDrivers.h CentralKEEP.h
+CEXE_headers += Riemann.h react.h Rusanov.h Skew.h CentralDif.h Diffusion.h
+CEXE_headers += DiffusionCD.h IBMSharedGPFluxUtils.h
+CEXE_headers += viscous.h Weno.h Weno_old.h
+CEXE_headers += RZFiniteVolume.h

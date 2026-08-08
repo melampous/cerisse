@@ -78,11 +78,13 @@ void CNS::setupTimeProbe() {
   if (ParallelDescriptor::IOProcessor()) {
     const int log_index = 0;  // TODO: make this configurable?
     std::ostream &data_log = parent->DataLog(log_index);
+    // Quote header fields: index boxes contain commas, which breaks naive
+    // CSV parsers (97 apparent header columns vs 33 data columns).
     data_log << "time";
     for (int cnt = 0; cnt < num_probes; ++cnt) {
-      data_log << ", " << time_probe_names[cnt] << "("
+      data_log << ", \"" << time_probe_names[cnt] << "("
                << time_probe_boxes[cnt].smallEnd()
-               << time_probe_boxes[cnt].bigEnd() << ")";
+               << time_probe_boxes[cnt].bigEnd() << ")\"";
     }
     data_log << std::endl;
   }
@@ -178,10 +180,11 @@ void CNS::recordTimeProbe() {
   if (ParallelDescriptor::IOProcessor()) {
     const int log_index = 0;
     std::ostream &data_log = parent->DataLog(log_index);
-    const int datprecision = 6;
-    data_log << std::setprecision(datprecision) << curtime;
+    // Timestamps need full double precision: 6 significant digits quantize
+    // t~1e-2 s to ~1e-7 s (comparable to dt) and corrupt inferred-dt spectra.
+    data_log << std::scientific << std::setprecision(17) << curtime;
     for (int cnt = 0; cnt < num_probes; ++cnt) {
-      data_log << ", " << std::setprecision(datprecision)
+      data_log << ", " << std::setprecision(12)
                << probe[cnt] / time_probe_boxes[cnt].numPts();
     }
     data_log << std::endl;

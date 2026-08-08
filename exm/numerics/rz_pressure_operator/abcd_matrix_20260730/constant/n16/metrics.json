@@ -1,0 +1,45 @@
+{
+  "amplitude": 0.0,
+  "bookkeeping_linf": 0.0,
+  "case": "constant",
+  "current_advective_remainder_linf": 1.0658141036401503e-14,
+  "diagnostic_csv": "/home/qiaoj/testcerisse/cerisse/exm/numerics/rz_pressure_operator/abcd_matrix_20260730/constant/n16/axis_L0_R0.csv",
+  "dr": 0.0625,
+  "nr": 16,
+  "p0": 2.0,
+  "quartic": 0.0,
+  "routes": {
+    "A": {
+      "all_l2": 0.0,
+      "all_linf": 0.0,
+      "axis_l2": 0.0,
+      "axis_linf": 0.0,
+      "first4_l2": 0.0,
+      "first4_linf": 0.0
+    },
+    "B": {
+      "all_l2": 1.1749496091904413e-15,
+      "all_linf": 1.7763568394002505e-15,
+      "axis_l2": 0.0,
+      "axis_linf": 0.0,
+      "first4_l2": 1.1749496091904413e-15,
+      "first4_linf": 1.7763568394002505e-15
+    },
+    "C": {
+      "all_l2": 8.36728183691483e-15,
+      "all_linf": 1.0658141036401503e-14,
+      "axis_l2": 0.0,
+      "axis_linf": 0.0,
+      "first4_l2": 8.36728183691483e-15,
+      "first4_linf": 1.0658141036401503e-14
+    },
+    "D": {
+      "all_l2": 7.588599744428075e-15,
+      "all_linf": 1.0658141036401503e-14,
+      "axis_l2": 0.0,
+      "axis_linf": 0.0,
+      "first4_l2": 7.588599744428075e-15,
+      "first4_linf": 1.0658141036401503e-14
+    }
+  }
+}

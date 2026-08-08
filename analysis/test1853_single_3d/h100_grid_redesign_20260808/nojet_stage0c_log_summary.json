@@ -1,0 +1,70 @@
+{
+  "log": "/shared/cerisse_test1853_3d_20260807/runs/test1853_single_h100/run165_h100_largebox_nojet_20260808/stage0c_external_l0/run.log",
+  "last_state": {
+    "step": 1339,
+    "time_s": 0.0005,
+    "dt_s": 7.187592239e-08
+  },
+  "failure_counts": {
+    "state_check_failed": 0,
+    "inadmissible_before": 0,
+    "soft_positivity": 0,
+    "nan_token": 0,
+    "inf_token": 0
+  },
+  "hierarchy_last_seen": {
+    "0": {
+      "grids": 8,
+      "cells": 9437184
+    }
+  },
+  "valid_cells_last_seen": 9437184,
+  "subcycled_cell_updates_per_coarse_step": 9437184,
+  "ssprk43_cell_stages_per_coarse_step": 37748736,
+  "support_last_seen": {},
+  "timing_all": {
+    "count": 1339,
+    "mean_s": 0.48476909244660193,
+    "median_s": 0.448073522,
+    "min_s": 0.422110748,
+    "max_s": 2.57899405
+  },
+  "timing_tail": {
+    "count": 400,
+    "mean_s": 0.5281216636425,
+    "median_s": 0.535384518,
+    "min_s": 0.442956765,
+    "max_s": 2.029018477
+  },
+  "timing_tail_regular": {
+    "count": 400,
+    "mean_s": 0.5281216636425,
+    "median_s": 0.535384518,
+    "min_s": 0.442956765,
+    "max_s": 2.029018477
+  },
+  "timing_tail_any_regrid": {
+    "count": 0,
+    "mean_s": null,
+    "median_s": null,
+    "min_s": null,
+    "max_s": null
+  },
+  "timing_tail_by_regrid_lbase": {
+    "0": {
+      "count": 0,
+      "mean_s": null,
+      "median_s": null,
+      "min_s": null,
+      "max_s": null
+    },
+    "1": {
+      "count": 0,
+      "mean_s": null,
+      "median_s": null,
+      "min_s": null,
+      "max_s": null
+    }
+  },
+  "tail_step_count": 400
+}
